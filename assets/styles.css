@@ -1,0 +1,231 @@
+/* Books Explorer — warm literary library system */
+:root {
+  /* paper & ink */
+  --paper:    #f4efe4;
+  --paper-2:  #ece5d6;
+  --surface:  #fbf8f1;
+  --card:     #fffdf7;
+  --ink:      #2a2620;
+  --ink-2:    #564e42;
+  --muted:    #8b8273;
+  --faint:    #b6ad9c;
+  --line:     #e2d9c6;
+  --line-2:   #d3c8b1;
+
+  /* accents — warm, low chroma, varied hue */
+  --rust:     #9c5b34;
+  --rust-deep:#7e4626;
+  --gold:     #b08a3e;
+  --sage:     #6f7a55;
+  --slate:    #5c6b72;
+  --plum:     #815065;
+
+  /* chart palette (warm spectrum) */
+  --c1: #9c5b34; --c2: #b08a3e; --c3: #6f7a55; --c4: #5c6b72;
+  --c5: #815065; --c6: #c2774a; --c7: #8a8273; --c8: #4a5a4d;
+
+  --serif: "Spectral", Georgia, "Times New Roman", serif;
+  --sans:  "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --r-sm: 4px; --r-md: 8px; --r-lg: 14px; --r-xl: 22px;
+  --shadow-1: 0 1px 2px rgba(42,38,32,.06), 0 1px 3px rgba(42,38,32,.05);
+  --shadow-2: 0 4px 14px rgba(42,38,32,.10), 0 2px 6px rgba(42,38,32,.06);
+  --shadow-3: 0 18px 48px rgba(42,38,32,.20), 0 6px 18px rgba(42,38,32,.12);
+  --maxw: 1180px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: rgba(156,91,52,.22); }
+
+h1,h2,h3,h4 { font-family: var(--serif); font-weight: 600; color: var(--ink); margin: 0; line-height: 1.12; letter-spacing: -0.01em; }
+p { margin: 0; }
+button { font-family: inherit; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+input, textarea, select { font-family: inherit; }
+
+/* subtle paper grain via layered gradients */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(176,138,62,.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(111,122,85,.05), transparent 60%);
+}
+
+#root { position: relative; z-index: 1; }
+
+/* ---------- utility ---------- */
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 120px; }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--muted); font-weight: 500;
+}
+.serif { font-family: var(--serif); }
+.muted { color: var(--muted); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-2);
+  background: var(--card); color: var(--ink); padding: 9px 16px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 500; transition: all .16s ease; white-space: nowrap;
+}
+.btn:hover { border-color: var(--rust); color: var(--rust); }
+.btn-primary { background: var(--rust); border-color: var(--rust); color: #fff; }
+.btn-primary:hover { background: var(--rust-deep); border-color: var(--rust-deep); color: #fff; }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--paper-2); border-color: transparent; color: var(--ink); }
+.btn-sm { padding: 6px 12px; font-size: 12.5px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; background: var(--paper-2); color: var(--ink-2);
+  border: 1px solid var(--line); white-space: nowrap;
+}
+.pill.active { background: var(--rust); color: #fff; border-color: var(--rust); }
+.pill.click { cursor: pointer; transition: all .14s ease; }
+.pill.click:hover { border-color: var(--rust); color: var(--rust); }
+.pill.click.active:hover { color: #fff; }
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 999px; border: 3px solid var(--paper); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--line-2); border-top-color: var(--rust);
+  animation: spin .7s linear infinite; display: inline-block;
+}
+@keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+.skeleton {
+  background: linear-gradient(90deg, var(--paper-2) 25%, #f1ebde 50%, var(--paper-2) 75%);
+  background-size: 800px 100%; animation: shimmer 1.4s linear infinite; border-radius: 6px;
+}
+@keyframes scanline { 0%{ top: 4%; } 100%{ top: 96%; } }
+@keyframes fadeUp { from { transform: translateY(9px); } to { transform: none; } }
+.fade-up { animation: fadeUp .4s cubic-bezier(.2,.7,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .fade-up { animation: none; } }
+
+/* book cover (procedural) */
+.cover {
+  position: relative; border-radius: 3px 5px 5px 3px; overflow: hidden;
+  box-shadow: var(--shadow-2);
+  background: var(--cover-bg, #6f7a55);
+  display: flex; flex-direction: column; justify-content: space-between;
+  flex: none;
+}
+.cover::after { /* spine shading */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(0,0,0,.28) 0%, rgba(0,0,0,.05) 7%, rgba(255,255,255,.10) 12%, transparent 22%),
+              linear-gradient(180deg, rgba(255,255,255,.08), transparent 30%);
+}
+.cover-title { font-family: var(--serif); color: #fff; font-weight: 600; line-height: 1.08; }
+.cover-author { font-family: var(--mono); color: rgba(255,255,255,.78); text-transform: uppercase; letter-spacing: .08em; }
+.cover-rule { height: 1px; background: rgba(255,255,255,.5); margin: 7px 0; }
+
+/* image placeholder */
+.ph {
+  background-image: repeating-linear-gradient(45deg, var(--paper-2), var(--paper-2) 9px, #e7e0d0 9px, #e7e0d0 18px);
+  border: 1px dashed var(--line-2); border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
+  font-family: var(--mono); font-size: 11px; text-align: center; padding: 10px;
+}
+
+/* ===================================================================
+   DENSITY — "Airy" mode: more whitespace + hairline separators
+   Toggled via data-density="airy" on <html> (set by applyTweaks).
+   =================================================================== */
+[data-density="airy"] body { line-height: 1.64; }
+main.wrap { zoom: var(--tscale, 1); }
+[data-density="airy"] main.wrap { padding-bottom: 132px !important; }
+
+/* breathing + separators between top-level screen sections */
+[data-density="airy"] main.wrap > .fade-up > section:not(.card) {
+  margin-top: 60px !important;
+  margin-bottom: 0 !important;
+  padding-top: 52px;
+  border-top: 1px solid var(--line);
+}
+[data-density="airy"] main.wrap > .fade-up > section.card {
+  margin-top: 60px !important;
+  margin-bottom: 0 !important;
+}
+/* roomier section headers */
+[data-density="airy"] .section-head { margin-bottom: 26px !important; }
+/* a little more side air on wide screens */
+@media (min-width: 1000px) {
+  [data-density="airy"] .wrap { padding-left: 148px; padding-right: 148px; }
+}
+
+/* ===================================================================
+   RESPONSIVE — phones & tablets
+   The base layout is inline-styled, so these overrides use class hooks
+   (.results-grid / .detail-hero / .detail-body / .author-hero / .topnav
+   / .header-search) + !important to beat the inline grid/flex values.
+   Content grids already use auto-fill minmax(), so they reflow on their own.
+   =================================================================== */
+
+/* ---- tablet & below: collapse the fixed two-column screens ---- */
+@media (max-width: 860px) {
+  /* search results: drop the sticky filter rail above the results */
+  .results-grid { grid-template-columns: 1fr !important; gap: 26px !important; }
+  .results-grid > aside { position: static !important; top: auto !important; }
+
+  /* book detail: cover/meta stack, summary/sidebar stack */
+  .detail-hero { grid-template-columns: 1fr !important; gap: 26px !important; }
+  .detail-hero > div:first-child { max-width: 300px !important; }
+  .detail-body { grid-template-columns: 1fr !important; gap: 34px !important; }
+}
+
+/* bottom tab bar — hidden on desktop, shown on phones */
+.mobile-nav {
+  display: none;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ---- phones ---- */
+@media (max-width: 640px) {  /* tighten page gutters everywhere (main.wrap sets padding inline) */
+  .wrap { padding-left: 18px !important; padding-right: 18px !important; }
+  main.wrap { padding-left: 18px !important; padding-right: 18px !important; }
+
+  /* header: hide the text nav, let the search field flex down */
+  .topnav { display: none !important; }
+  .header-search { max-width: none !important; }
+
+  /* show the bottom tab bar and keep content clear of it */
+  .mobile-nav { display: flex !important; }
+  body { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)) !important; }
+
+  /* author header: smaller portrait, stays two-up but tighter */
+  .author-hero { grid-template-columns: 92px 1fr !important; gap: 20px !important; }
+  .author-hero .ph { width: 92px !important; height: 92px !important; }
+
+  /* book detail cover column goes full-width and centers */
+  .detail-hero > div:first-child { max-width: none !important; align-items: center; }
+}
+
+/* ---- small phones: reclaim header space ---- */
+@media (max-width: 430px) {
+  .header-wordmark { display: none !important; }
+  .wrap { padding-left: 14px !important; padding-right: 14px !important; }
+  main.wrap { padding-left: 14px !important; padding-right: 14px !important; }
+}
