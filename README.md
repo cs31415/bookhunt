@@ -38,6 +38,24 @@ npm install
 npm run dev
 ```
 
+## Scripts
+
+Dev utility scripts live in `scripts/`. They read config from `scripts/.env`.
+
+```bash
+cd scripts
+cp .env.example .env
+# Fill in your credentials in .env
+```
+
+| Script | Description |
+|---|---|
+| `test-create-user.js` | Creates a test user via the API |
+| `test-photo-import.js` | Imports bookshelf photos for a user |
+| `wipe-user.js` | Deletes a user and all associated data |
+
+Run with `node scripts/<script>.js` from the repo root.
+
 ## API Docs
 
 Swagger UI is available at `/api/docs` when the server is running.
