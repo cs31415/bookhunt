@@ -1,0 +1,72 @@
+import { findUserByEmail, registerUser, setResetToken, resetPassword } from '../../data/auth-data';
+import { pool } from '../../lib/db';
+
+jest.mock('../../lib/db', () => ({
+  pool: { query: jest.fn() },
+}));
+
+const mockQuery = (pool as any).query as jest.Mock;
+
+describe('auth-data', () => {
+  describe('findUserByEmail', () => {
+    it('returns the user row when found', async () => {
+      const row = { id: 1, email: 'a@b.com' };
+      mockQuery.mockResolvedValue({ rows: [row] });
+      const result = await findUserByEmail('a@b.com');
+      expect(mockQuery).toHaveBeenCalledWith(
+        'SELECT * FROM sp_find_user_by_email($1)',
+        ['a@b.com'],
+      );
+      expect(result).toEqual(row);
+    });
+
+    it('returns null when no user is found', async () => {
+      mockQuery.mockResolvedValue({ rows: [] });
+      const result = await findUserByEmail('missing@b.com');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('registerUser', () => {
+    it('calls sp_register_user with correct args and returns the row', async () => {
+      const row = { id: 2, email: 'new@b.com' };
+      mockQuery.mockResolvedValue({ rows: [row] });
+      const result = await registerUser('new@b.com', 'hash', 'Bob');
+      expect(mockQuery).toHaveBeenCalledWith(
+        'SELECT * FROM sp_register_user($1, $2, $3)',
+        ['new@b.com', 'hash', 'Bob'],
+      );
+      expect(result).toEqual(row);
+    });
+  });
+
+  describe('setResetToken', () => {
+    it('calls sp_set_reset_token with email, token, and expiry', async () => {
+      mockQuery.mockResolvedValue({ rows: [] });
+      const expiry = new Date('2026-01-01T12:00:00Z');
+      await setResetToken('a@b.com', 'tok123', expiry);
+      expect(mockQuery).toHaveBeenCalledWith(
+        'SELECT * FROM sp_set_reset_token($1, $2, $3)',
+        ['a@b.com', 'tok123', expiry],
+      );
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('returns true when the stored procedure returns true', async () => {
+      mockQuery.mockResolvedValue({ rows: [{ sp_reset_password: true }] });
+      const result = await resetPassword('tok', 'newHash');
+      expect(mockQuery).toHaveBeenCalledWith(
+        'SELECT * FROM sp_reset_password($1, $2)',
+        ['tok', 'newHash'],
+      );
+      expect(result).toBe(true);
+    });
+
+    it('returns false when the stored procedure returns false', async () => {
+      mockQuery.mockResolvedValue({ rows: [{ sp_reset_password: false }] });
+      const result = await resetPassword('expired', 'hash');
+      expect(result).toBe(false);
+    });
+  });
+});
