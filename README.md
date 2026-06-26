@@ -14,14 +14,13 @@ Personal book explorer app — search, curate a library, get AI-powered summarie
 ## Project Structure
 
 ```
-api/                    Node.js + Express API
-  src/
-    routes/             Slim wiring (Swagger docs + middleware + controller refs)
-    controllers/        HTTP handling (req/res parsing, status codes)
-    models/             Orchestration (coordinates data + external APIs)
-    data/               Database access (pool.query wrappers)
-    lib/                Shared clients (db, anthropic, s3)
-    middleware/         Auth + rate limiting
+src/
+  routes/             Slim wiring (Swagger docs + middleware + controller refs)
+  controllers/        HTTP handling (req/res parsing, status codes)
+  models/             Orchestration (coordinates data + external APIs)
+  data/               Database access (pool.query wrappers)
+  lib/                Shared clients (db, anthropic, s3)
+  middleware/         Auth + rate limiting
 database/              PostgreSQL schema + stored procedures
 docs/                  API design, database design, implementation plan
 scripts/               Dev utility scripts
@@ -31,7 +30,6 @@ assets/                Static prototype/design files
 ## Setup
 
 ```bash
-cd api
 cp .env.example .env
 # Fill in your credentials in .env
 npm install
