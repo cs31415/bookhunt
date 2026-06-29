@@ -54,6 +54,26 @@ cp .env.example .env
 
 Run with `node scripts/<script>.js` from the repo root.
 
+## Testing
+
+```bash
+npm test              # run all tests once
+npm run test:watch    # re-run on file changes
+```
+
+Tests live in `src/tests/` mirroring the source structure:
+
+| Suite | Coverage |
+|---|---|
+| `middleware/auth` | `authRequired`, `authOptional` — valid token, missing/invalid header |
+| `controllers/auth` | `login`, `register`, `forgot-password` — happy path, error cases |
+| `controllers/library` | `get-library` |
+| `controllers/ai` | `search` — validation, sorting, `inLibraryOnly`, unauthenticated |
+| `models/library` | `get-library`, `add-to-library` |
+| `models/ai` | `search` — Google Books mapping, limit clamping, library matching |
+| `data/auth-data` | All four functions — stored procedure args |
+| `data/library-data` | All six functions — stored procedure args |
+
 ## API Docs
 
 Swagger UI is available at `/api/docs` when the server is running.
