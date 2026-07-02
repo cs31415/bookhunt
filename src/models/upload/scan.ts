@@ -1,12 +1,16 @@
-import { anthropic } from '../../lib/anthropic';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getAnthropic } from '../../lib/anthropic';
+import { getS3 } from '../../lib/s3';
 import { findBookByTitle } from '../../data/upload-data';
 import { searchBooks } from '../ai/search';
 
 export async function detectBooksFromImage(imageKey: string) {
-  const imageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${imageKey}`;
+  const command = new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME!, Key: imageKey });
+  const imageUrl = await getSignedUrl(getS3(), command, { expiresIn: 60 });
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const response = await getAnthropic().messages.create({
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     messages: [{
       role: 'user',
@@ -22,7 +26,9 @@ export async function detectBooksFromImage(imageKey: string) {
 
   const textBlock = response.content.find((block) => block.type === 'text');
   const rawText = textBlock && 'text' in textBlock ? textBlock.text : '[]';
-  const books: { title: string; author: string | null }[] = JSON.parse(rawText);
+  const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const jsonText = fenceMatch ? fenceMatch[1] : rawText;
+  const books: { title: string; author: string | null }[] = JSON.parse(jsonText.trim());
 
   const detectedBooks = [];
   for (const book of books) {
