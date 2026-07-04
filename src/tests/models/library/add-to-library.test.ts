@@ -1,10 +1,13 @@
 import { addToLibrary } from '../../../models/library/add-to-library';
 import * as libraryData from '../../../data/library-data';
+import { resolveOpenLibraryFields } from '../../../models/library/resolve-open-library-fields';
 
 jest.mock('../../../data/library-data');
+jest.mock('../../../models/library/resolve-open-library-fields');
 
 const mockUpsertBook = libraryData.upsertBook as jest.Mock;
 const mockAddToLibrary = libraryData.addToLibrary as jest.Mock;
+const mockResolveOpenLibraryFields = resolveOpenLibraryFields as jest.Mock;
 
 const baseParams = {
   googleBooksId: 'gid',
@@ -14,6 +17,13 @@ const baseParams = {
 };
 
 describe('addToLibrary model', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockResolveOpenLibraryFields.mockImplementation((params) =>
+      Promise.resolve({ blurb: params.blurb, publisher: params.publisher, pages: params.pages }),
+    );
+  });
+
   it('upserts book then adds to library with default status queued', async () => {
     mockUpsertBook.mockResolvedValue({ id: 10 });
     mockAddToLibrary.mockResolvedValue({ id: 10, status: 'queued' });
@@ -49,5 +59,32 @@ describe('addToLibrary model', () => {
 
     expect(mockUpsertBook).toHaveBeenCalledWith(olParams);
     expect(result).toEqual({ id: 20, status: 'queued' });
+  });
+
+  it('merges resolved OpenLibrary fields into the upserted book params', async () => {
+    mockUpsertBook.mockResolvedValue({ id: 21 });
+    mockAddToLibrary.mockResolvedValue({ id: 21, status: 'queued' });
+    mockResolveOpenLibraryFields.mockResolvedValue({
+      blurb: 'Fetched from OpenLibrary',
+      publisher: 'OL Press',
+      pages: 321,
+    });
+
+    const olParams = {
+      openLibraryId: 'OL7170815M',
+      source: 'open_library' as const,
+      slug: 'ol-book',
+      title: 'OL Book',
+      authorName: 'OL Author',
+    };
+    await addToLibrary(1, olParams);
+
+    expect(mockResolveOpenLibraryFields).toHaveBeenCalledWith(olParams);
+    expect(mockUpsertBook).toHaveBeenCalledWith({
+      ...olParams,
+      blurb: 'Fetched from OpenLibrary',
+      publisher: 'OL Press',
+      pages: 321,
+    });
   });
 });
