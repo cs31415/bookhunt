@@ -28,33 +28,35 @@ export interface UpsertBookParams {
 }
 
 export async function upsertBookFromGoogle(params: UpsertBookParams) {
-  const result = await pool.query(
-    'SELECT * FROM sp_upsert_book_from_google($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
-    [
-      params.googleBooksId,
-      params.slug,
-      params.title,
-      params.authorName,
-      params.year ?? null,
-      params.publisher ?? null,
-      params.pages ?? null,
-      params.rating ?? null,
-      params.subjects ?? null,
-      params.blurb ?? null,
-      params.coverUrl ?? null,
-      params.isbn13 ?? null,
-      params.language ?? null,
-      params.hue ?? null,
-    ],
-  );
+  const sql = 'SELECT * FROM sp_upsert_book_from_google($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)';
+  const args = [
+    params.googleBooksId,
+    params.slug,
+    params.title,
+    params.authorName,
+    params.year ?? null,
+    params.publisher ?? null,
+    params.pages ?? null,
+    params.rating ?? null,
+    params.subjects ?? null,
+    params.blurb ?? null,
+    params.coverUrl ?? null,
+    params.isbn13 ?? null,
+    params.language ?? null,
+    params.hue ?? null,
+  ];
+  console.log(`[sql] ${sql}`);
+  console.log(`[sql] args:`, JSON.stringify(args));
+  const result = await pool.query(sql, args);
   return result.rows[0];
 }
 
 export async function addToLibrary(userId: number, bookId: number, status: string) {
-  const result = await pool.query(
-    'SELECT * FROM sp_add_to_library($1, $2, $3)',
-    [userId, bookId, status],
-  );
+  const sql = 'SELECT * FROM sp_add_to_library($1, $2, $3)';
+  const args = [userId, bookId, status];
+  console.log(`[sql] ${sql}`);
+  console.log(`[sql] args:`, JSON.stringify(args));
+  const result = await pool.query(sql, args);
   return result.rows[0];
 }
 

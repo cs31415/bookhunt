@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authRequired } from '../middleware/auth';
 import { getLibrary } from '../controllers/library/get-library';
 import { addToLibrary } from '../controllers/library/add-to-library';
+import { bulkAddToLibrary } from '../controllers/library/bulk-add-to-library';
 import { updateEntry } from '../controllers/library/update-entry';
 import { removeEntry } from '../controllers/library/remove-entry';
 import { addRelated } from '../controllers/library/add-related';
@@ -75,6 +76,77 @@ router.get('/', getLibrary);
  *               properties:
  *                 entry: { type: object }
  */
+/**
+ * @swagger
+ * /library/bulk:
+ *   post:
+ *     tags: [Library]
+ *     summary: Bulk add books to the library (upserts from Google Books data)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [books]
+ *             properties:
+ *               books:
+ *                 type: array
+ *                 maxItems: 20
+ *                 items:
+ *                   type: object
+ *                   required: [googleBooksId, slug, title, authorName]
+ *                   properties:
+ *                     googleBooksId: { type: string }
+ *                     slug: { type: string }
+ *                     title: { type: string }
+ *                     authorName: { type: string }
+ *                     status: { type: string, enum: [queued, reading, finished, abandoned] }
+ *                     year: { type: integer }
+ *                     publisher: { type: string }
+ *                     pages: { type: integer }
+ *                     rating: { type: number }
+ *                     subjects: { type: array, items: { type: string } }
+ *                     blurb: { type: string }
+ *                     coverUrl: { type: string }
+ *                     isbn13: { type: string }
+ *                     language: { type: string }
+ *                     hue: { type: string }
+ *     responses:
+ *       201:
+ *         description: All books added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 entries: { type: array, items: { type: object } }
+ *                 errors: { type: array, items: { type: object } }
+ *       207:
+ *         description: Partial success — some books added, some failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 entries: { type: array, items: { type: object } }
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       index: { type: integer }
+ *                       googleBooksId: { type: string }
+ *                       reason: { type: string }
+ *       400:
+ *         description: Invalid request body
+ *       401:
+ *         description: Authentication required
+ */
+router.post('/bulk', bulkAddToLibrary);
+
 router.post('/', addToLibrary);
 
 /**

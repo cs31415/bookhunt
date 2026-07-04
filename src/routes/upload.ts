@@ -11,7 +11,10 @@ const router = Router();
  * /upload/presign:
  *   post:
  *     tags: [Upload]
- *     summary: Get a presigned URL for image upload
+ *     summary: Get presigned S3 URLs for direct image upload
+ *     description: |
+ *       Send `{ files: [{ contentType }, …] }` (1–10 items) and receive `[{ url, key }, …]`.
+ *       PUT each file directly to its returned URL (no auth header required for the S3 PUT).
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -20,21 +23,31 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [contentType]
+ *             required: [files]
  *             properties:
- *               contentType: { type: string, example: "image/jpeg" }
+ *               files:
+ *                 type: array
+ *                 minItems: 1
+ *                 maxItems: 10
+ *                 items:
+ *                   type: object
+ *                   required: [contentType]
+ *                   properties:
+ *                     contentType: { type: string, example: "image/jpeg" }
  *     responses:
  *       200:
- *         description: Presigned upload URL
+ *         description: Presigned upload URLs
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 url: { type: string }
- *                 key: { type: string }
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   url: { type: string }
+ *                   key: { type: string }
  *       400:
- *         description: Invalid content type
+ *         description: Invalid or missing files array
  */
 router.post('/presign', authRequired, presign);
 
@@ -43,7 +56,7 @@ router.post('/presign', authRequired, presign);
  * /upload/scan:
  *   post:
  *     tags: [Upload]
- *     summary: Scan a bookshelf photo and detect books via AI vision
+ *     summary: Scan one or more bookshelf photos and detect books via AI vision
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -52,12 +65,17 @@ router.post('/presign', authRequired, presign);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [imageKey]
+ *             required: [imageKeys]
  *             properties:
- *               imageKey: { type: string, description: Key returned from /upload/presign }
+ *               imageKeys:
+ *                 type: array
+ *                 description: S3 keys returned from /upload/presign (1–10 items)
+ *                 minItems: 1
+ *                 maxItems: 10
+ *                 items: { type: string }
  *     responses:
  *       200:
- *         description: Detected books
+ *         description: Detected books (deduplicated across all photos)
  *         content:
  *           application/json:
  *             schema:
@@ -71,6 +89,8 @@ router.post('/presign', authRequired, presign);
  *                       title: { type: string }
  *                       author: { type: string, nullable: true }
  *                       matchedBookId: { type: integer }
+ *       400:
+ *         description: imageKeys missing, empty, contains non-strings, or exceeds 10 items
  *       429:
  *         description: Rate limited (5/min)
  *       503:
