@@ -1,5 +1,5 @@
 -- Set a password-reset token and expiry for the given email (case-insensitive)
-CREATE OR REPLACE FUNCTION sp_set_reset_token(
+CREATE OR REPLACE FUNCTION fn_set_reset_token(
     p_email      VARCHAR,
     p_token      VARCHAR,
     p_expires_at TIMESTAMPTZ

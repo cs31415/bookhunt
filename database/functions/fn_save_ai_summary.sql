@@ -1,5 +1,5 @@
 -- Upsert an AI-generated summary for a book
-CREATE OR REPLACE FUNCTION sp_save_ai_summary(
+CREATE OR REPLACE FUNCTION fn_save_ai_summary(
     p_book_id  INT,
     p_summary  TEXT
 )

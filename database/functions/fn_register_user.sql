@@ -1,5 +1,5 @@
 -- Register a new user; lets the UNIQUE constraint on email raise on duplicates
-CREATE OR REPLACE FUNCTION sp_register_user(
+CREATE OR REPLACE FUNCTION fn_register_user(
     p_email        VARCHAR,
     p_password_hash VARCHAR,
     p_display_name  VARCHAR

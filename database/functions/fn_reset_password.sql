@@ -1,5 +1,5 @@
 -- Reset password using a valid (non-expired) token; clears the token afterwards
-CREATE OR REPLACE FUNCTION sp_reset_password(
+CREATE OR REPLACE FUNCTION fn_reset_password(
     p_token    VARCHAR,
     p_new_hash VARCHAR
 )

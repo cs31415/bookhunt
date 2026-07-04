@@ -11,7 +11,7 @@ export async function fetchBookContext(bookId: number) {
 }
 
 export async function getCachedSummary(bookId: number) {
-  const result = await pool.query('SELECT * FROM sp_get_ai_summary($1)', [bookId]);
+  const result = await pool.query('SELECT * FROM fn_get_ai_summary($1)', [bookId]);
   if (result.rows.length > 0 && result.rows[0].summary) {
     return {
       bookId,
@@ -23,7 +23,7 @@ export async function getCachedSummary(bookId: number) {
 }
 
 export async function saveSummary(bookId: number, summary: string) {
-  const result = await pool.query('SELECT * FROM sp_save_ai_summary($1, $2)', [bookId, summary]);
+  const result = await pool.query('SELECT * FROM fn_save_ai_summary($1, $2)', [bookId, summary]);
   const row = result.rows[0];
   return {
     bookId: row.book_id,
@@ -51,7 +51,7 @@ export async function getBookGenresThemes(bookId: number) {
 }
 
 export async function updateBookAiMetadata(bookId: number, genres: string[], themes: string[]) {
-  await pool.query('SELECT sp_update_book_ai_metadata($1, $2, $3)', [bookId, genres, themes]);
+  await pool.query('SELECT fn_update_book_ai_metadata($1, $2, $3)', [bookId, genres, themes]);
 }
 
 export async function matchLibraryEntries(userId: number, googleIds: string[], isbns: string[]) {

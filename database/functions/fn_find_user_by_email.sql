@@ -1,5 +1,5 @@
 -- Find a user by email (case-insensitive); returns NULL if not found
-CREATE OR REPLACE FUNCTION sp_find_user_by_email(
+CREATE OR REPLACE FUNCTION fn_find_user_by_email(
     p_email VARCHAR
 )
 RETURNS TABLE(

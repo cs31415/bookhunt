@@ -17,26 +17,26 @@ const mockQuery = (pool as any).query as jest.Mock;
 
 describe('library-data', () => {
   describe('getUserLibrary', () => {
-    it('returns rows from sp_get_user_library', async () => {
+    it('returns rows from fn_get_user_library', async () => {
       const rows = [{ id: 1, title: 'A Book' }];
       mockQuery.mockResolvedValue({ rows });
       const result = await getUserLibrary(5);
-      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM sp_get_user_library($1)', [5]);
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM fn_get_user_library($1)', [5]);
       expect(result).toEqual(rows);
     });
   });
 
   describe('getLibraryStats', () => {
-    it('returns the sp_library_stats JSON object', async () => {
+    it('returns the fn_library_stats JSON object', async () => {
       const stats = { total: 3, read: 1 };
-      mockQuery.mockResolvedValue({ rows: [{ sp_library_stats: stats }] });
+      mockQuery.mockResolvedValue({ rows: [{ fn_library_stats: stats }] });
       const result = await getLibraryStats(5);
       expect(result).toEqual(stats);
     });
   });
 
   describe('upsertBook', () => {
-    it('passes all params to sp_upsert_book', async () => {
+    it('passes all params to fn_upsert_book', async () => {
       const book = { id: 10, title: 'A' };
       mockQuery.mockResolvedValue({ rows: [book] });
       const params = {
@@ -59,7 +59,7 @@ describe('library-data', () => {
       };
       const result = await upsertBook(params);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('sp_upsert_book'),
+        expect.stringContaining('fn_upsert_book'),
         [
           'gid', 'a-book', 'A Book', 'Author',
           2020, 'Press', 300, 4.2, ['Science'], 'desc',
@@ -98,12 +98,12 @@ describe('library-data', () => {
   });
 
   describe('addToLibrary', () => {
-    it('calls sp_add_to_library and returns the row', async () => {
+    it('calls fn_add_to_library and returns the row', async () => {
       const row = { id: 10, status: 'read' };
       mockQuery.mockResolvedValue({ rows: [row] });
       const result = await addToLibrary(1, 10, 'read');
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM sp_add_to_library($1, $2, $3)',
+        'SELECT * FROM fn_add_to_library($1, $2, $3)',
         [1, 10, 'read'],
       );
       expect(result).toEqual(row);
@@ -112,19 +112,19 @@ describe('library-data', () => {
 
   describe('removeFromLibrary', () => {
     it('returns the boolean result from the stored procedure', async () => {
-      mockQuery.mockResolvedValue({ rows: [{ sp_remove_from_library: true }] });
+      mockQuery.mockResolvedValue({ rows: [{ fn_remove_from_library: true }] });
       const result = await removeFromLibrary(1, 5);
       expect(result).toBe(true);
     });
   });
 
   describe('addUserRelated', () => {
-    it('calls sp_add_user_related and returns the relation', async () => {
+    it('calls fn_add_user_related and returns the relation', async () => {
       const relation = { id: 99 };
-      mockQuery.mockResolvedValue({ rows: [{ sp_add_user_related: relation }] });
+      mockQuery.mockResolvedValue({ rows: [{ fn_add_user_related: relation }] });
       const result = await addUserRelated(1, 5, 6);
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM sp_add_user_related($1, $2, $3)',
+        'SELECT * FROM fn_add_user_related($1, $2, $3)',
         [1, 5, 6],
       );
       expect(result).toEqual(relation);
@@ -132,11 +132,11 @@ describe('library-data', () => {
   });
 
   describe('removeUserRelated', () => {
-    it('calls sp_remove_user_related and returns the result', async () => {
-      mockQuery.mockResolvedValue({ rows: [{ sp_remove_user_related: true }] });
+    it('calls fn_remove_user_related and returns the result', async () => {
+      mockQuery.mockResolvedValue({ rows: [{ fn_remove_user_related: true }] });
       const result = await removeUserRelated(1, 5, 6);
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM sp_remove_user_related($1, $2, $3)',
+        'SELECT * FROM fn_remove_user_related($1, $2, $3)',
         [1, 5, 6],
       );
       expect(result).toBe(true);

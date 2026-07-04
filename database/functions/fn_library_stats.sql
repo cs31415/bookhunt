@@ -1,6 +1,6 @@
 -- Return a JSON object with total count, counts by status, top subjects
 -- (with counts), and top authors (with counts).
-CREATE OR REPLACE FUNCTION sp_library_stats(
+CREATE OR REPLACE FUNCTION fn_library_stats(
     p_user_id INT
 ) RETURNS JSON
 LANGUAGE plpgsql AS $$

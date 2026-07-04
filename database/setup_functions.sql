@@ -4,34 +4,34 @@
 BEGIN;
 
 -- auth
-\ir functions/sp_register_user.sql
-\ir functions/sp_find_user_by_email.sql
-\ir functions/sp_set_reset_token.sql
-\ir functions/sp_reset_password.sql
+\ir functions/fn_register_user.sql
+\ir functions/fn_find_user_by_email.sql
+\ir functions/fn_set_reset_token.sql
+\ir functions/fn_reset_password.sql
 
 -- books & authors
-\ir functions/sp_upsert_book.sql
-\ir functions/sp_get_book_by_slug.sql
-\ir functions/sp_get_book_by_google_id.sql
-\ir functions/sp_get_author_by_slug.sql
-\ir functions/sp_get_books_by_author.sql
-\ir functions/sp_get_related_books.sql
-\ir functions/sp_update_book_ai_metadata.sql
+\ir functions/fn_upsert_book.sql
+\ir functions/fn_get_book_by_slug.sql
+\ir functions/fn_get_book_by_google_id.sql
+\ir functions/fn_get_author_by_slug.sql
+\ir functions/fn_get_books_by_author.sql
+\ir functions/fn_get_related_books.sql
+\ir functions/fn_update_book_ai_metadata.sql
 
 -- library
-\ir functions/sp_get_user_library.sql
-\ir functions/sp_add_to_library.sql
-\ir functions/sp_update_library_entry.sql
-\ir functions/sp_remove_from_library.sql
-\ir functions/sp_library_stats.sql
-\ir functions/sp_add_user_related.sql
-\ir functions/sp_remove_user_related.sql
+\ir functions/fn_get_user_library.sql
+\ir functions/fn_add_to_library.sql
+\ir functions/fn_update_library_entry.sql
+\ir functions/fn_remove_from_library.sql
+\ir functions/fn_library_stats.sql
+\ir functions/fn_add_user_related.sql
+\ir functions/fn_remove_user_related.sql
 
 -- recommendations
-\ir functions/sp_recommendations.sql
+\ir functions/fn_recommendations.sql
 
 -- ai summaries
-\ir functions/sp_get_ai_summary.sql
-\ir functions/sp_save_ai_summary.sql
+\ir functions/fn_get_ai_summary.sql
+\ir functions/fn_save_ai_summary.sql
 
 COMMIT;

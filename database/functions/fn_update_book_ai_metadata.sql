@@ -1,5 +1,5 @@
 -- Update genres and themes on a book row.
-CREATE OR REPLACE FUNCTION sp_update_book_ai_metadata(
+CREATE OR REPLACE FUNCTION fn_update_book_ai_metadata(
     p_book_id INT,
     p_genres  TEXT[],
     p_themes  TEXT[]

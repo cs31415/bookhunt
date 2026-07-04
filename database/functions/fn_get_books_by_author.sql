@@ -1,6 +1,6 @@
 -- Return books by author, optionally excluding one book, sorted by rating
 -- DESC NULLS LAST then title ASC, limited to p_limit rows.
-CREATE OR REPLACE FUNCTION sp_get_books_by_author(
+CREATE OR REPLACE FUNCTION fn_get_books_by_author(
     p_author_id      INT,
     p_exclude_book_id INT DEFAULT NULL,
     p_limit          INT DEFAULT 10

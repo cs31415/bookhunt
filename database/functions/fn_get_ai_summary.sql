@@ -1,5 +1,5 @@
 -- Retrieve an AI-generated summary for a book by its ID
-CREATE OR REPLACE FUNCTION sp_get_ai_summary(
+CREATE OR REPLACE FUNCTION fn_get_ai_summary(
     p_book_id INT
 )
 RETURNS TABLE(summary TEXT, generated_at TIMESTAMPTZ)

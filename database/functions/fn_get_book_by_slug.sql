@@ -1,5 +1,5 @@
 -- Return book joined with author name and author slug. NULL if not found.
-CREATE OR REPLACE FUNCTION sp_get_book_by_slug(
+CREATE OR REPLACE FUNCTION fn_get_book_by_slug(
     p_slug VARCHAR
 ) RETURNS TABLE (
     id              INT,

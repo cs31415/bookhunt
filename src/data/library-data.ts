@@ -1,13 +1,13 @@
 import { pool } from '../lib/db';
 
 export async function getUserLibrary(userId: number) {
-  const result = await pool.query('SELECT * FROM sp_get_user_library($1)', [userId]);
+  const result = await pool.query('SELECT * FROM fn_get_user_library($1)', [userId]);
   return result.rows;
 }
 
 export async function getLibraryStats(userId: number) {
-  const result = await pool.query('SELECT * FROM sp_library_stats($1)', [userId]);
-  return result.rows[0].sp_library_stats;
+  const result = await pool.query('SELECT * FROM fn_library_stats($1)', [userId]);
+  return result.rows[0].fn_library_stats;
 }
 
 export interface UpsertBookParams {
@@ -30,7 +30,7 @@ export interface UpsertBookParams {
 }
 
 export async function upsertBook(params: UpsertBookParams) {
-  const sql = 'SELECT * FROM sp_upsert_book($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)';
+  const sql = 'SELECT * FROM fn_upsert_book($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)';
   const args = [
     params.googleBooksId ?? null,
     params.slug,
@@ -56,7 +56,7 @@ export async function upsertBook(params: UpsertBookParams) {
 }
 
 export async function addToLibrary(userId: number, bookId: number, status: string) {
-  const sql = 'SELECT * FROM sp_add_to_library($1, $2, $3)';
+  const sql = 'SELECT * FROM fn_add_to_library($1, $2, $3)';
   const args = [userId, bookId, status];
   console.log(`[sql] ${sql}`);
   console.log(`[sql] args:`, JSON.stringify(args));
@@ -73,7 +73,7 @@ export async function updateLibraryEntry(
   review: string | null,
 ) {
   const result = await pool.query(
-    'SELECT * FROM sp_update_library_entry($1, $2, $3, $4, $5, $6)',
+    'SELECT * FROM fn_update_library_entry($1, $2, $3, $4, $5, $6)',
     [userId, bookId, status, userRating, notes, review],
   );
   return result.rows.length > 0 ? result.rows[0] : null;
@@ -81,24 +81,24 @@ export async function updateLibraryEntry(
 
 export async function removeFromLibrary(userId: number, bookId: number) {
   const result = await pool.query(
-    'SELECT * FROM sp_remove_from_library($1, $2)',
+    'SELECT * FROM fn_remove_from_library($1, $2)',
     [userId, bookId],
   );
-  return result.rows[0]?.sp_remove_from_library as boolean;
+  return result.rows[0]?.fn_remove_from_library as boolean;
 }
 
 export async function addUserRelated(userId: number, bookId: number, relatedBookId: number) {
   const result = await pool.query(
-    'SELECT * FROM sp_add_user_related($1, $2, $3)',
+    'SELECT * FROM fn_add_user_related($1, $2, $3)',
     [userId, bookId, relatedBookId],
   );
-  return result.rows[0].sp_add_user_related;
+  return result.rows[0].fn_add_user_related;
 }
 
 export async function removeUserRelated(userId: number, bookId: number, relatedBookId: number) {
   const result = await pool.query(
-    'SELECT * FROM sp_remove_user_related($1, $2, $3)',
+    'SELECT * FROM fn_remove_user_related($1, $2, $3)',
     [userId, bookId, relatedBookId],
   );
-  return result.rows[0].sp_remove_user_related;
+  return result.rows[0].fn_remove_user_related;
 }
