@@ -17,20 +17,29 @@ export async function detectBooksFromImages(imageKeys: string[]) {
     source: { type: 'url' as const, url },
   }));
 
-  const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    messages: [{
-      role: 'user',
-      content: [
-        ...imageBlocks,
-        {
-          type: 'text',
-          text: 'Look at these bookshelf photos. List every book you can identify from the spines. Return ONLY a JSON array of objects with "title" and "author" fields. If you cannot identify the author, use null. Return ONLY valid JSON, no other text.',
-        },
-      ],
-    }],
-  });
+  const start = Date.now();
+  console.log(`[claude] scanning ${imageKeys.length} bookshelf image(s)`);
+  let response;
+  try {
+    response = await getAnthropic().messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      messages: [{
+        role: 'user',
+        content: [
+          ...imageBlocks,
+          {
+            type: 'text',
+            text: 'Look at these bookshelf photos. List every book you can identify from the spines. Return ONLY a JSON array of objects with "title" and "author" fields. If you cannot identify the author, use null. Return ONLY valid JSON, no other text.',
+          },
+        ],
+      }],
+    });
+    console.log(`[claude] scanned bookshelf images in ${Date.now() - start}ms`);
+  } catch (error) {
+    console.error(`[claude] failed to scan bookshelf images after ${Date.now() - start}ms:`, error);
+    throw error;
+  }
 
   const textBlock = response.content.find((block) => block.type === 'text');
   const rawText = textBlock && 'text' in textBlock ? textBlock.text : '[]';

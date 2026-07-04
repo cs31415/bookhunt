@@ -10,11 +10,20 @@ export async function generateThemes(bookId: number) {
 
   const prompt = `For the book '${book.title}' by ${book.author_name}, generate a JSON object with two arrays: 'genres' (3-5 micro-genre tags like 'Popular Science', 'Paradigm-Shifter') and 'themes' (3-6 deeper thematic tags like 'altruism & selfishness', 'units of selection'). Return ONLY valid JSON, no other text.`;
 
-  const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const start = Date.now();
+  console.log(`[claude] generating themes for book ${bookId} ("${book.title}")`);
+  let response;
+  try {
+    response = await getAnthropic().messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    console.log(`[claude] generated themes for book ${bookId} in ${Date.now() - start}ms`);
+  } catch (error) {
+    console.error(`[claude] failed to generate themes for book ${bookId} after ${Date.now() - start}ms:`, error);
+    throw error;
+  }
 
   const raw = (response.content[0] as { type: 'text'; text: string }).text;
   const parsed: { genres: string[]; themes: string[] } = JSON.parse(raw);

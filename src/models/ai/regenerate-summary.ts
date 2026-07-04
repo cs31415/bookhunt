@@ -18,6 +18,14 @@ export async function regenerateSummary(bookId: number) {
   const book = await fetchBookContext(bookId);
   if (!book) return null;
 
-  const summary = await generateSummary(book.title, book.author_name, book.blurb);
-  return saveSummary(bookId, summary);
+  const start = Date.now();
+  console.log(`[claude] regenerating summary for book ${bookId} ("${book.title}")`);
+  try {
+    const summary = await generateSummary(book.title, book.author_name, book.blurb);
+    console.log(`[claude] regenerated summary for book ${bookId} in ${Date.now() - start}ms`);
+    return saveSummary(bookId, summary);
+  } catch (error) {
+    console.error(`[claude] failed to regenerate summary for book ${bookId} after ${Date.now() - start}ms:`, error);
+    throw error;
+  }
 }

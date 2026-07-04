@@ -25,6 +25,14 @@ export async function getSummary(bookId: number) {
   const cached = await getCachedSummary(bookId);
   if (cached) return cached;
 
-  const summary = await generateSummary(book.title, book.author_name, book.blurb);
-  return saveSummary(bookId, summary);
+  const start = Date.now();
+  console.log(`[claude] generating summary for book ${bookId} ("${book.title}")`);
+  try {
+    const summary = await generateSummary(book.title, book.author_name, book.blurb);
+    console.log(`[claude] generated summary for book ${bookId} in ${Date.now() - start}ms`);
+    return saveSummary(bookId, summary);
+  } catch (error) {
+    console.error(`[claude] failed to generate summary for book ${bookId} after ${Date.now() - start}ms:`, error);
+    throw error;
+  }
 }
