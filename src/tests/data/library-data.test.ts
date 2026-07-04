@@ -5,7 +5,7 @@ import {
   removeFromLibrary,
   addUserRelated,
   removeUserRelated,
-  upsertBookFromGoogle,
+  upsertBook,
 } from '../../data/library-data';
 import { pool } from '../../lib/db';
 
@@ -35,8 +35,8 @@ describe('library-data', () => {
     });
   });
 
-  describe('upsertBookFromGoogle', () => {
-    it('passes all params to sp_upsert_book_from_google', async () => {
+  describe('upsertBook', () => {
+    it('passes all params to sp_upsert_book', async () => {
       const book = { id: 10, title: 'A' };
       mockQuery.mockResolvedValue({ rows: [book] });
       const params = {
@@ -54,14 +54,17 @@ describe('library-data', () => {
         isbn13: '978123',
         language: 'en',
         hue: '#ff0000',
+        openLibraryId: 'OL7170815M',
+        source: 'open_library' as const,
       };
-      const result = await upsertBookFromGoogle(params);
+      const result = await upsertBook(params);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('sp_upsert_book_from_google'),
+        expect.stringContaining('sp_upsert_book'),
         [
           'gid', 'a-book', 'A Book', 'Author',
           2020, 'Press', 300, 4.2, ['Science'], 'desc',
           'https://cover.jpg', '978123', 'en', '#ff0000',
+          'OL7170815M', 'open_library',
         ],
       );
       expect(result).toEqual(book);
@@ -69,7 +72,7 @@ describe('library-data', () => {
 
     it('substitutes null for optional params when omitted', async () => {
       mockQuery.mockResolvedValue({ rows: [{ id: 1 }] });
-      await upsertBookFromGoogle({
+      await upsertBook({
         googleBooksId: 'g',
         slug: 's',
         title: 'T',
@@ -78,6 +81,19 @@ describe('library-data', () => {
       const args = mockQuery.mock.calls[0][1];
       expect(args[4]).toBeNull(); // year
       expect(args[5]).toBeNull(); // publisher
+    });
+
+    it('defaults source to google_books and openLibraryId to null when omitted', async () => {
+      mockQuery.mockResolvedValue({ rows: [{ id: 1 }] });
+      await upsertBook({
+        googleBooksId: 'g',
+        slug: 's',
+        title: 'T',
+        authorName: 'A',
+      });
+      const args = mockQuery.mock.calls[0][1];
+      expect(args[14]).toBeNull(); // openLibraryId
+      expect(args[15]).toBe('google_books'); // source
     });
   });
 

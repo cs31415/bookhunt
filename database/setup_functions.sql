@@ -10,7 +10,7 @@ BEGIN;
 \ir functions/sp_reset_password.sql
 
 -- books & authors
-\ir functions/sp_upsert_book_from_google.sql
+\ir functions/sp_upsert_book.sql
 \ir functions/sp_get_book_by_slug.sql
 \ir functions/sp_get_book_by_google_id.sql
 \ir functions/sp_get_author_by_slug.sql

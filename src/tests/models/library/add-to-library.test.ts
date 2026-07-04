@@ -3,7 +3,7 @@ import * as libraryData from '../../../data/library-data';
 
 jest.mock('../../../data/library-data');
 
-const mockUpsertBook = libraryData.upsertBookFromGoogle as jest.Mock;
+const mockUpsertBook = libraryData.upsertBook as jest.Mock;
 const mockAddToLibrary = libraryData.addToLibrary as jest.Mock;
 
 const baseParams = {
@@ -32,5 +32,22 @@ describe('addToLibrary model', () => {
     await addToLibrary(2, { ...baseParams, status: 'read' });
 
     expect(mockAddToLibrary).toHaveBeenCalledWith(2, 5, 'read');
+  });
+
+  it('adds a book sourced from OpenLibrary (no googleBooksId)', async () => {
+    mockUpsertBook.mockResolvedValue({ id: 20 });
+    mockAddToLibrary.mockResolvedValue({ id: 20, status: 'queued' });
+
+    const olParams = {
+      openLibraryId: 'OL7170815M',
+      source: 'open_library' as const,
+      slug: 'ol-book',
+      title: 'OL Book',
+      authorName: 'OL Author',
+    };
+    const result = await addToLibrary(1, olParams);
+
+    expect(mockUpsertBook).toHaveBeenCalledWith(olParams);
+    expect(result).toEqual({ id: 20, status: 'queued' });
   });
 });

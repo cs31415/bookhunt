@@ -11,7 +11,9 @@ export async function getLibraryStats(userId: number) {
 }
 
 export interface UpsertBookParams {
-  googleBooksId: string;
+  googleBooksId?: string | null;
+  openLibraryId?: string | null;
+  source?: 'google_books' | 'open_library';
   slug: string;
   title: string;
   authorName: string;
@@ -27,10 +29,10 @@ export interface UpsertBookParams {
   hue?: string | null;
 }
 
-export async function upsertBookFromGoogle(params: UpsertBookParams) {
-  const sql = 'SELECT * FROM sp_upsert_book_from_google($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)';
+export async function upsertBook(params: UpsertBookParams) {
+  const sql = 'SELECT * FROM sp_upsert_book($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)';
   const args = [
-    params.googleBooksId,
+    params.googleBooksId ?? null,
     params.slug,
     params.title,
     params.authorName,
@@ -44,6 +46,8 @@ export async function upsertBookFromGoogle(params: UpsertBookParams) {
     params.isbn13 ?? null,
     params.language ?? null,
     params.hue ?? null,
+    params.openLibraryId ?? null,
+    params.source ?? 'google_books',
   ];
   console.log(`[sql] ${sql}`);
   console.log(`[sql] args:`, JSON.stringify(args));

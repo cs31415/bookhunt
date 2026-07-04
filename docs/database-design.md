@@ -50,11 +50,16 @@ Central book catalog. Books are created on-demand when a user adds a Google Book
 | blurb | TEXT DEFAULT '' | Short description/synopsis of the book |
 | cover_url | VARCHAR(1000) | nullable; external cover image URL from Google Books |
 | google_books_id | VARCHAR(255) | nullable; Google Books volume ID for deduplication and linking |
+| openlibrary_id | VARCHAR(255) | nullable; OpenLibrary edition ID (e.g. `OL7170815M`) for deduplication and linking, used when a book has no `google_books_id` |
+| source | VARCHAR(20) | nullable; which API the book was originally sourced from (`google_books` or `open_library`) |
 | isbn13 | VARCHAR(20) | nullable; ISBN-13 identifier |
 | language | VARCHAR(50) DEFAULT 'English' | Language with optional translation note (e.g. "English · trans. Russian") |
 | related | INT[] DEFAULT '{}' | IDs of hand-curated related books (editorial picks, not AI-generated) |
 
-Index: `CREATE INDEX idx_books_author_id ON books(author_id);`
+Indexes:
+- `CREATE INDEX idx_books_author_id ON books(author_id);`
+- `CREATE UNIQUE INDEX idx_books_google_books_id ON books(google_books_id);`
+- `CREATE UNIQUE INDEX idx_books_openlibrary_id ON books(openlibrary_id);`
 
 ### `library_entries`
 Per-user bookshelf. Each row represents a book in a user's personal library, with reading status, rating, notes, and user-curated related books. Composite primary key on (user_id, book_id).

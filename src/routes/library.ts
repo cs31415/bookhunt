@@ -49,9 +49,11 @@ router.get('/', getLibrary);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [googleBooksId, title, authorName, slug]
+ *             required: [title, authorName, slug]
  *             properties:
- *               googleBooksId: { type: string }
+ *               googleBooksId: { type: string, nullable: true, description: "Required if openLibraryId is not provided" }
+ *               openLibraryId: { type: string, nullable: true, description: "OpenLibrary edition ID; required if googleBooksId is not provided" }
+ *               source: { type: string, enum: [google_books, open_library] }
  *               slug: { type: string }
  *               title: { type: string }
  *               authorName: { type: string }
@@ -97,9 +99,11 @@ router.get('/', getLibrary);
  *                 maxItems: 20
  *                 items:
  *                   type: object
- *                   required: [googleBooksId, slug, title, authorName]
+ *                   required: [slug, title, authorName]
  *                   properties:
- *                     googleBooksId: { type: string }
+ *                     googleBooksId: { type: string, nullable: true, description: "Required if openLibraryId is not provided" }
+ *                     openLibraryId: { type: string, nullable: true, description: "OpenLibrary edition ID; required if googleBooksId is not provided" }
+ *                     source: { type: string, enum: [google_books, open_library] }
  *                     slug: { type: string }
  *                     title: { type: string }
  *                     authorName: { type: string }
@@ -138,7 +142,8 @@ router.get('/', getLibrary);
  *                     type: object
  *                     properties:
  *                       index: { type: integer }
- *                       googleBooksId: { type: string }
+ *                       googleBooksId: { type: string, nullable: true }
+ *                       openLibraryId: { type: string, nullable: true }
  *                       reason: { type: string }
  *       400:
  *         description: Invalid request body

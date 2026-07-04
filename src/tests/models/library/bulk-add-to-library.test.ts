@@ -3,7 +3,7 @@ import * as libraryData from '../../../data/library-data';
 
 jest.mock('../../../data/library-data');
 
-const mockUpsertBook = libraryData.upsertBookFromGoogle as jest.Mock;
+const mockUpsertBook = libraryData.upsertBook as jest.Mock;
 const mockAddToLibrary = libraryData.addToLibrary as jest.Mock;
 
 const book1 = { googleBooksId: 'gid1', slug: 'book-one', title: 'Book One', authorName: 'Author A' };
@@ -14,7 +14,7 @@ describe('bulkAddToLibrary model', () => {
     jest.clearAllMocks();
   });
 
-  it('calls upsertBookFromGoogle and addToLibrary for each book', async () => {
+  it('calls upsertBook and addToLibrary for each book', async () => {
     mockUpsertBook.mockResolvedValueOnce({ id: 10 }).mockResolvedValueOnce({ id: 11 });
     mockAddToLibrary.mockResolvedValueOnce({ id: 10 }).mockResolvedValueOnce({ id: 11 });
 
@@ -48,6 +48,18 @@ describe('bulkAddToLibrary model', () => {
     mockAddToLibrary.mockResolvedValue({ id: 10 });
 
     await bulkAddToLibrary(1, [book1, book1, book2]);
+
+    expect(mockUpsertBook).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not collapse distinct OpenLibrary-sourced books (no googleBooksId)', async () => {
+    mockUpsertBook.mockResolvedValueOnce({ id: 30 }).mockResolvedValueOnce({ id: 31 });
+    mockAddToLibrary.mockResolvedValueOnce({ id: 30 }).mockResolvedValueOnce({ id: 31 });
+
+    const olBook1 = { openLibraryId: 'OL1M', slug: 'ol-one', title: 'OL One', authorName: 'Author A' };
+    const olBook2 = { openLibraryId: 'OL2M', slug: 'ol-two', title: 'OL Two', authorName: 'Author B' };
+
+    await bulkAddToLibrary(1, [olBook1, olBook2]);
 
     expect(mockUpsertBook).toHaveBeenCalledTimes(2);
   });
