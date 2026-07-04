@@ -1,4 +1,5 @@
 import { matchLibraryEntries as matchLibraryEntriesData } from '../../data/ai-data';
+import { throttleOpenLibrary } from '../../lib/open-library-rate-limiter';
 
 interface SearchResult {
   googleBooksId: string;
@@ -14,6 +15,57 @@ interface SearchResult {
   blurb: string | null;
   inLibrary: boolean;
   libraryStatus: string | null;
+  source: 'google_books' | 'open_library';
+}
+
+async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
+  await throttleOpenLibrary();
+
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn`;
+
+  let response: globalThis.Response;
+  try {
+    response = await fetch(url);
+  } catch {
+    return [];
+  }
+
+  if (!response.ok) {
+    return [];
+  }
+
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    return [];
+  }
+
+  const docs: any[] = data.docs || [];
+
+  return docs.map((doc: any) => {
+    const isbns: string[] = doc.isbn || [];
+    const isbn13 = isbns.find((id) => id.length === 13) || null;
+    const coverUrl = doc.cover_i
+      ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+      : null;
+    return {
+      googleBooksId: '',
+      title: doc.title || '',
+      authors: doc.author_name || [],
+      year: doc.first_publish_year || null,
+      publisher: null,
+      pages: null,
+      rating: null,
+      coverUrl,
+      isbn13,
+      language: null,
+      blurb: null,
+      inLibrary: false,
+      libraryStatus: null,
+      source: 'open_library' as const,
+    };
+  });
 }
 
 export async function searchBooks(query: string, limit: number): Promise<SearchResult[]> {
@@ -27,15 +79,19 @@ export async function searchBooks(query: string, limit: number): Promise<SearchR
   try {
     gResponse = await fetch(url);
   } catch {
-    return [];
+    return searchOpenLibrary(query, maxResults);
   }
 
   if (!gResponse.ok) {
-    return [];
+    return searchOpenLibrary(query, maxResults);
   }
 
   const data: any = await gResponse.json();
-  const items = data.items || [];
+  const items: any[] = data.items || [];
+
+  if (items.length === 0) {
+    return searchOpenLibrary(query, maxResults);
+  }
 
   return items.map((item: any) => {
     const info = item.volumeInfo || {};
@@ -55,6 +111,7 @@ export async function searchBooks(query: string, limit: number): Promise<SearchR
       blurb: info.description || null,
       inLibrary: false,
       libraryStatus: null,
+      source: 'google_books' as const,
     };
   });
 }
@@ -73,7 +130,9 @@ export async function matchLibraryEntries(userId: number, books: SearchResult[])
   }
 
   for (const book of books) {
-    const status = byGoogleId.get(book.googleBooksId) || (book.isbn13 ? byIsbn.get(book.isbn13) : undefined);
+    const status =
+      byGoogleId.get(book.googleBooksId) ||
+      (book.isbn13 ? byIsbn.get(book.isbn13) : undefined);
     if (status) {
       book.inLibrary = true;
       book.libraryStatus = status;

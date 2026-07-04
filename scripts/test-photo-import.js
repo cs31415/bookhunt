@@ -15,8 +15,42 @@ const email = process.env.TEST_EMAIL;
 const password = process.env.TEST_PASSWORD;
 const displayName = process.env.TEST_DISPLAY_NAME;
 
+async function getToken() {
+  console.log(`Registering ${email} ...`);
+  const registerRes = await fetch(`${API}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, displayName }),
+  });
+  const registerData = await registerRes.json();
+
+  if (registerRes.ok) {
+    console.log('User registered.\n');
+    return registerData.token;
+  }
+
+  if (registerRes.status === 409) {
+    console.log(`Already registered — logging in ...\n`);
+    const loginRes = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const loginData = await loginRes.json();
+    if (!loginRes.ok) {
+      console.error('Login failed:', loginRes.status, loginData);
+      process.exit(1);
+    }
+    console.log('Logged in.\n');
+    return loginData.token;
+  }
+
+  console.error('Register failed:', registerRes.status, registerData);
+  process.exit(1);
+}
+
 async function main() {
-  const photoFile = process.argv[2] || 'IMG_6455.jpeg';
+  const photoFile = process.argv[2] || 'IMG_6473.jpeg';
   const photoPath = path.join(PHOTO_DIR, photoFile);
 
   if (!fs.existsSync(photoPath)) {
@@ -26,33 +60,19 @@ async function main() {
 
   console.log('=== Photo Import Test ===\n');
 
-  // 1. Register a test user
-  console.log(`Registering ${email} ...`);
-  const registerRes = await fetch(`${API}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName }),
-  });
-  const { token } = await registerRes.json();
-
-  if (!registerRes.ok) {
-    console.error('Register failed:', registerRes.status);
-    process.exit(1);
-  }
-
+  // 1. Register or login
+  const token = await getToken();
   const authHeaders = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
-
-  console.log('User registered.\n');
 
   // 2. Get presigned upload URL
   console.log('Requesting presigned URL ...');
   const presignRes = await fetch(`${API}/upload/presign`, {
     method: 'POST',
     headers: authHeaders,
-    body: JSON.stringify({ contentType: 'image/jpeg' }),
+    body: JSON.stringify({ files: [{ contentType: 'image/jpeg' }] }),
   });
   const presignData = await presignRes.json();
 
@@ -61,13 +81,14 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('Image key:', presignData.key);
-  console.log('Presigned URL:', presignData.url.slice(0, 60) + '...\n');
+  const { url: presignUrl, key: imageKey } = presignData[0];
+  console.log('Image key:', imageKey);
+  console.log('Presigned URL:', presignUrl.slice(0, 60) + '...\n');
 
   // 3. Upload photo to presigned URL
   console.log(`Uploading ${photoFile} ...`);
   const imageBytes = fs.readFileSync(photoPath);
-  const uploadRes = await fetch(presignData.url, {
+  const uploadRes = await fetch(presignUrl, {
     method: 'PUT',
     headers: { 'Content-Type': 'image/jpeg' },
     body: imageBytes,
@@ -76,7 +97,6 @@ async function main() {
   if (!uploadRes.ok) {
     const text = await uploadRes.text();
     console.error('Upload failed:', uploadRes.status, text);
-    console.error('(R2 credentials may not be configured — set R2_* env vars in api/.env.local)');
     process.exit(1);
   }
 
@@ -87,7 +107,7 @@ async function main() {
   const scanRes = await fetch(`${API}/upload/scan`, {
     method: 'POST',
     headers: authHeaders,
-    body: JSON.stringify({ imageKey: presignData.key }),
+    body: JSON.stringify({ imageKeys: [imageKey] }),
   });
   const scanData = await scanRes.json();
 
@@ -99,29 +119,56 @@ async function main() {
   const books = scanData.detectedBooks;
   console.log(`Detected ${books.length} book(s):`);
   books.forEach((b, i) => {
-    console.log(`  ${i + 1}. "${b.title}" by ${b.author || 'Unknown'}${b.matchedBookId ? ` (matched ID: ${b.matchedBookId})` : ''}`);
+    const status = b.matchedBookId
+      ? `matched DB id: ${b.matchedBookId}`
+      : b.resolvedBook
+        ? `resolved via ${b.resolvedBook.source}`
+        : 'not found';
+    console.log(`  ${i + 1}. "${b.title}" by ${b.author || 'Unknown'} — ${status}`);
   });
 
-  // 5. Add each matched book to the user's library
-  const matched = books.filter((b) => b.matchedBookId);
-  console.log(`\nAdding ${matched.length} matched book(s) to library ...`);
+  // 5. Add books to library: DB-matched via matchedBookId, search-resolved via resolvedBook
+  const toAdd = books.filter((b) => b.matchedBookId || b.resolvedBook);
+  console.log(`\nAdding ${toAdd.length} book(s) to library ...`);
 
-  for (const book of matched) {
-    const addRes = await fetch(`${API}/library`, {
-      method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify({
+  for (const book of toAdd) {
+    let payload;
+    if (book.matchedBookId) {
+      payload = {
         googleBooksId: `scan-${book.matchedBookId}`,
         title: book.title,
         authorName: book.author || 'Unknown',
         slug: book.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
         status: 'queued',
-      }),
+      };
+    } else {
+      const rb = book.resolvedBook;
+      payload = {
+        googleBooksId: rb.googleBooksId || `ol-${rb.isbn13 || book.title.toLowerCase().replace(/\s+/g, '-')}`,
+        title: rb.title,
+        authorName: rb.authors[0] || book.author || 'Unknown',
+        slug: rb.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        year: rb.year,
+        publisher: rb.publisher,
+        pages: rb.pages,
+        rating: rb.rating,
+        coverUrl: rb.coverUrl,
+        isbn13: rb.isbn13,
+        language: rb.language,
+        blurb: rb.blurb,
+        status: 'queued',
+      };
+    }
+
+    const addRes = await fetch(`${API}/library`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify(payload),
     });
     const addData = await addRes.json();
 
     if (addRes.ok) {
-      console.log(`  Added "${book.title}" — entry ID: ${addData.entry.id}`);
+      console.log(`  Added "${book.title}" — entry ID: ${addData.entry?.id ?? addData.id}`);
     } else {
       console.error(`  Failed to add "${book.title}":`, addRes.status, addData);
     }
