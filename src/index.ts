@@ -14,10 +14,12 @@ import libraryRoutes from './routes/library';
 import aiRoutes from './routes/ai';
 import recommendationRoutes from './routes/recommendations';
 import uploadRoutes from './routes/upload';
+import { requestLogger } from './middleware/requestLogger';
 
 const app = express();
 const port = process.env.PORT || 3001;
 
+app.use(requestLogger);
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(express.json());
 
