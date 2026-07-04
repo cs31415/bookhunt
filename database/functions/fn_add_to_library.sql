@@ -1,6 +1,6 @@
 -- Insert a library entry. ON CONFLICT DO NOTHING to avoid duplicates.
 -- Returns the entry row (existing or newly created).
-CREATE OR REPLACE FUNCTION sp_add_to_library(
+CREATE OR REPLACE FUNCTION fn_add_to_library(
     p_user_id INT,
     p_book_id INT,
     p_status  reading_status DEFAULT 'queued'

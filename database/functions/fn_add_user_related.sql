@@ -1,7 +1,7 @@
 -- Append a related book to the user_related array on a library entry.
 -- Rejects if p_related_book_id = p_book_id.
 -- Only appends if not already present. Returns the updated array.
-CREATE OR REPLACE FUNCTION sp_add_user_related(
+CREATE OR REPLACE FUNCTION fn_add_user_related(
     p_user_id        INT,
     p_book_id        INT,
     p_related_book_id INT

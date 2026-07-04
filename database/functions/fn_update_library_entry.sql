@@ -1,7 +1,7 @@
 -- Update only the fields that are not NULL (COALESCE with existing values).
 -- If status changes to 'finished', set date_read = NOW().
 -- Returns nothing if entry does not exist.
-CREATE OR REPLACE FUNCTION sp_update_library_entry(
+CREATE OR REPLACE FUNCTION fn_update_library_entry(
     p_user_id     INT,
     p_book_id     INT,
     p_status      reading_status DEFAULT NULL,

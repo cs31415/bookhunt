@@ -2,7 +2,7 @@ import { pool } from '../lib/db';
 
 export async function getBookBySlug(slug: string) {
   const result = await pool.query(
-    'SELECT * FROM sp_get_book_by_slug($1)',
+    'SELECT * FROM fn_get_book_by_slug($1)',
     [slug],
   );
   return result.rows.length > 0 ? result.rows[0] : null;

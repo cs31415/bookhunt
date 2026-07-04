@@ -1,7 +1,7 @@
 -- Return related books for a given book. First pulls explicit related book
 -- ids from the books.related array, then fills remaining slots with books
 -- sharing the most subjects (subject-overlap fallback), up to p_limit total.
-CREATE OR REPLACE FUNCTION sp_get_related_books(
+CREATE OR REPLACE FUNCTION fn_get_related_books(
     p_book_id INT,
     p_limit   INT DEFAULT 6
 ) RETURNS SETOF books

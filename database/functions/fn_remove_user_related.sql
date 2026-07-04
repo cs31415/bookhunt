@@ -1,5 +1,5 @@
 -- Remove a related book from the user_related array. Returns the updated array.
-CREATE OR REPLACE FUNCTION sp_remove_user_related(
+CREATE OR REPLACE FUNCTION fn_remove_user_related(
     p_user_id        INT,
     p_book_id        INT,
     p_related_book_id INT

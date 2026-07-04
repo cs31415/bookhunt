@@ -2,7 +2,7 @@
 -- google_books_id (if present) or openlibrary_id (if present). Returns the
 -- full book row. Handles slug uniqueness by appending a numeric suffix when
 -- conflicts arise.
-CREATE OR REPLACE FUNCTION sp_upsert_book(
+CREATE OR REPLACE FUNCTION fn_upsert_book(
     p_google_books_id VARCHAR,
     p_slug            VARCHAR,
     p_title           VARCHAR,

@@ -1,7 +1,7 @@
 -- Returns personalized book recommendations for a user based on their library.
 -- Scores candidate books by subject affinity, author affinity, and catalog
 -- rating. Falls back to highest-rated books for users with no library entries.
-CREATE OR REPLACE FUNCTION sp_recommendations(
+CREATE OR REPLACE FUNCTION fn_recommendations(
     p_user_id INT,
     p_limit   INT DEFAULT 6
 )

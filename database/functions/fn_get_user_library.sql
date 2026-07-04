@@ -1,6 +1,6 @@
 -- Return all library entries for a user joined with book + author data.
 -- Ordered by date_added DESC.
-CREATE OR REPLACE FUNCTION sp_get_user_library(
+CREATE OR REPLACE FUNCTION fn_get_user_library(
     p_user_id INT
 ) RETURNS TABLE (
     user_id      INT,

@@ -1,5 +1,5 @@
 -- Return book row by google_books_id, or NULL if not found.
-CREATE OR REPLACE FUNCTION sp_get_book_by_google_id(
+CREATE OR REPLACE FUNCTION fn_get_book_by_google_id(
     p_google_books_id VARCHAR
 ) RETURNS SETOF books
 LANGUAGE plpgsql AS $$

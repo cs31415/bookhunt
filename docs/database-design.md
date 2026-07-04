@@ -96,40 +96,40 @@ Cache for AI-generated book summaries. One summary per book, regenerated on dema
 CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned');
 ```
 
-## Stored Procedures
+## Functions
 
 ### Auth
-- `sp_register_user(p_email, p_password_hash, p_display_name)` → `users` row
-- `sp_find_user_by_email(p_email)` → `users` row or NULL
-- `sp_set_reset_token(p_email, p_token, p_expires_at)` → BOOLEAN
-- `sp_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
+- `fn_register_user(p_email, p_password_hash, p_display_name)` → `users` row
+- `fn_find_user_by_email(p_email)` → `users` row or NULL
+- `fn_set_reset_token(p_email, p_token, p_expires_at)` → BOOLEAN
+- `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
 
 ### Books & Authors
-- `sp_upsert_book_from_google(p_google_books_id, p_slug, p_title, p_author_name, p_year, p_publisher, p_pages, p_rating, p_subjects, p_blurb, p_cover_url, p_isbn13, p_language, p_hue)` → creates book + author if not exists, returns book row. Author is upserted by name (slug derived from name).
-- `sp_get_all_books(p_limit, p_offset)` → books + author name, sorted by rating DESC, title ASC
-- `sp_get_book_by_slug(p_slug)` → book + author row
-- `sp_get_book_by_google_id(p_google_books_id)` → book row or NULL (to check if already imported)
-- `sp_get_author_by_slug(p_slug)` → author row
-- `sp_get_books_by_author(p_author_id, p_exclude_book_id, p_limit)` → books by that author
-- `sp_search_books(p_query, p_subjects, p_moods, p_decade, p_sort)` → scored results against locally stored books (title +6, author +5, subject +3, genre +3, theme +3, mood +2, blurb +1)
-- `sp_get_related_books(p_book_id, p_limit)` → explicit related + subject-overlap fallback
-- `sp_update_book_ai_metadata(p_book_id, p_genres, p_themes)` → store AI-generated genres and themes
+- `fn_upsert_book_from_google(p_google_books_id, p_slug, p_title, p_author_name, p_year, p_publisher, p_pages, p_rating, p_subjects, p_blurb, p_cover_url, p_isbn13, p_language, p_hue)` → creates book + author if not exists, returns book row. Author is upserted by name (slug derived from name).
+- `fn_get_all_books(p_limit, p_offset)` → books + author name, sorted by rating DESC, title ASC
+- `fn_get_book_by_slug(p_slug)` → book + author row
+- `fn_get_book_by_google_id(p_google_books_id)` → book row or NULL (to check if already imported)
+- `fn_get_author_by_slug(p_slug)` → author row
+- `fn_get_books_by_author(p_author_id, p_exclude_book_id, p_limit)` → books by that author
+- `fn_search_books(p_query, p_subjects, p_moods, p_decade, p_sort)` → scored results against locally stored books (title +6, author +5, subject +3, genre +3, theme +3, mood +2, blurb +1)
+- `fn_get_related_books(p_book_id, p_limit)` → explicit related + subject-overlap fallback
+- `fn_update_book_ai_metadata(p_book_id, p_genres, p_themes)` → store AI-generated genres and themes
 
 ### Library
-- `sp_get_user_library(p_user_id)` → all library entries with book + author data
-- `sp_add_to_library(p_user_id, p_book_id, p_status)` → upsert library entry (book must exist in books table first — call `sp_upsert_book_from_google` before this for Google Books results)
-- `sp_update_library_entry(p_user_id, p_book_id, p_status, p_user_rating, p_notes, p_review)` → updated row
-- `sp_remove_from_library(p_user_id, p_book_id)` → BOOLEAN
-- `sp_library_stats(p_user_id)` → counts by status, top subjects, top authors
-- `sp_add_user_related(p_user_id, p_book_id, p_related_book_id)` → updated user_related array
-- `sp_remove_user_related(p_user_id, p_book_id, p_related_book_id)` → updated user_related array
+- `fn_get_user_library(p_user_id)` → all library entries with book + author data
+- `fn_add_to_library(p_user_id, p_book_id, p_status)` → upsert library entry (book must exist in books table first — call `fn_upsert_book_from_google` before this for Google Books results)
+- `fn_update_library_entry(p_user_id, p_book_id, p_status, p_user_rating, p_notes, p_review)` → updated row
+- `fn_remove_from_library(p_user_id, p_book_id)` → BOOLEAN
+- `fn_library_stats(p_user_id)` → counts by status, top subjects, top authors
+- `fn_add_user_related(p_user_id, p_book_id, p_related_book_id)` → updated user_related array
+- `fn_remove_user_related(p_user_id, p_book_id, p_related_book_id)` → updated user_related array
 
 ### Recommendations
-- `sp_recommendations(p_user_id, p_limit)` → scored unread books based on subject/author overlap with user's engaged books (finished weight = userRating or 3, reading/queued weight = 2)
+- `fn_recommendations(p_user_id, p_limit)` → scored unread books based on subject/author overlap with user's engaged books (finished weight = userRating or 3, reading/queued weight = 2)
 
 ### AI Summaries
-- `sp_get_ai_summary(p_book_id)` → cached summary or NULL
-- `sp_save_ai_summary(p_book_id, p_summary)` → upsert
+- `fn_get_ai_summary(p_book_id)` → cached summary or NULL
+- `fn_save_ai_summary(p_book_id, p_summary)` → upsert
 
 ## No Seed Script
 The app starts completely empty. All books enter the system through Google Books search or photo import. When a user adds a book to their library, it is created in the `books` and `authors` tables from Google Books data if it doesn't already exist. AI generates themes, genres, and summaries lazily with caching.
