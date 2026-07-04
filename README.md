@@ -21,11 +21,20 @@ src/
   data/               Database access (pool.query wrappers)
   lib/                Shared clients (db, anthropic, s3)
   middleware/         Auth + rate limiting
-database/              PostgreSQL schema + stored procedures
+database/              PostgreSQL schema (tables/ and functions/) with setup scripts
 docs/                  API design, database design, implementation plan
 scripts/               Dev utility scripts
 assets/                Static prototype/design files
 ```
+
+## Database Setup
+
+```bash
+psql -d <your_database> -f database/setup_tables.sql
+psql -d <your_database> -f database/setup_functions.sql
+```
+
+Each table and function lives in its own file under `database/tables/` and `database/functions/`. The setup scripts include them in dependency order.
 
 ## Setup
 

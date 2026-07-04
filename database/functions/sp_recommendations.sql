@@ -1,13 +1,6 @@
--- BookHunt stored procedures: personalized recommendations
-
-BEGIN;
-
---------------------------------------------------------------------------------
--- sp_recommendations
---   Returns personalized book recommendations for a user based on their library.
---   Scores candidate books by subject affinity, author affinity, and catalog
---   rating. Falls back to highest-rated books for users with no library entries.
---------------------------------------------------------------------------------
+-- Returns personalized book recommendations for a user based on their library.
+-- Scores candidate books by subject affinity, author affinity, and catalog
+-- rating. Falls back to highest-rated books for users with no library entries.
 CREATE OR REPLACE FUNCTION sp_recommendations(
     p_user_id INT,
     p_limit   INT DEFAULT 6
@@ -176,5 +169,3 @@ BEGIN
     LIMIT p_limit;
 END;
 $$;
-
-COMMIT;
