@@ -2,7 +2,8 @@ import { matchLibraryEntries as matchLibraryEntriesData } from '../../data/ai-da
 import { throttleOpenLibrary } from '../../lib/open-library-rate-limiter';
 
 interface SearchResult {
-  googleBooksId: string;
+  googleBooksId: string | null;
+  openLibraryId: string | null;
   title: string;
   authors: string[];
   year: number | null;
@@ -21,7 +22,7 @@ interface SearchResult {
 async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
   await throttleOpenLibrary();
 
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn`;
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key`;
 
   let response: globalThis.Response;
   try {
@@ -49,8 +50,10 @@ async function searchOpenLibrary(query: string, limit: number): Promise<SearchRe
     const coverUrl = doc.cover_i
       ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
       : null;
+    const editionKeys: string[] = doc.edition_key || [];
     return {
-      googleBooksId: '',
+      googleBooksId: null,
+      openLibraryId: editionKeys[0] || null,
       title: doc.title || '',
       authors: doc.author_name || [],
       year: doc.first_publish_year || null,
@@ -99,6 +102,7 @@ export async function searchBooks(query: string, limit: number): Promise<SearchR
     const isbn13Entry = identifiers.find((id: any) => id.type === 'ISBN_13');
     return {
       googleBooksId: item.id,
+      openLibraryId: null,
       title: info.title,
       authors: info.authors || [],
       year: info.publishedDate ? parseInt(info.publishedDate.substring(0, 4), 10) : null,
@@ -117,7 +121,7 @@ export async function searchBooks(query: string, limit: number): Promise<SearchR
 }
 
 export async function matchLibraryEntries(userId: number, books: SearchResult[]) {
-  const googleIds = books.map((b) => b.googleBooksId).filter(Boolean);
+  const googleIds = books.map((b) => b.googleBooksId).filter((id): id is string => Boolean(id));
   const isbns = books.map((b) => b.isbn13).filter(Boolean) as string[];
 
   const rows = await matchLibraryEntriesData(userId, googleIds, isbns);
@@ -131,7 +135,7 @@ export async function matchLibraryEntries(userId: number, books: SearchResult[])
 
   for (const book of books) {
     const status =
-      byGoogleId.get(book.googleBooksId) ||
+      (book.googleBooksId ? byGoogleId.get(book.googleBooksId) : undefined) ||
       (book.isbn13 ? byIsbn.get(book.isbn13) : undefined);
     if (status) {
       book.inLibrary = true;

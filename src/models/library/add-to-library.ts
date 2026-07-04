@@ -1,7 +1,9 @@
-import { upsertBookFromGoogle, addToLibrary as addToLibraryData } from '../../data/library-data';
+import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
 
 interface AddToLibraryParams {
-  googleBooksId: string;
+  googleBooksId?: string | null;
+  openLibraryId?: string | null;
+  source?: 'google_books' | 'open_library';
   slug: string;
   title: string;
   authorName: string;
@@ -19,6 +21,6 @@ interface AddToLibraryParams {
 }
 
 export async function addToLibrary(userId: number, params: AddToLibraryParams) {
-  const book = await upsertBookFromGoogle(params);
+  const book = await upsertBook(params);
   return addToLibraryData(userId, book.id, params.status ?? 'queued');
 }

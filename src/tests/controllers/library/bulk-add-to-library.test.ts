@@ -57,7 +57,24 @@ describe('bulkAddToLibrary controller', () => {
     const res = makeRes();
     await bulkAddToLibrary(makeReq({ books: [{ googleBooksId: 'x', slug: 'x', title: 'x' }] }), res);
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'each book requires googleBooksId, slug, title, and authorName' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'each book requires (googleBooksId or openLibraryId), slug, title, and authorName' });
+  });
+
+  it('returns 400 when a book has neither googleBooksId nor openLibraryId', async () => {
+    const res = makeRes();
+    await bulkAddToLibrary(makeReq({ books: [{ slug: 'x', title: 'x', authorName: 'x' }] }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'each book requires (googleBooksId or openLibraryId), slug, title, and authorName' });
+  });
+
+  it('accepts a book with only openLibraryId (no googleBooksId)', async () => {
+    mockBulkAdd.mockResolvedValue({ entries: [{ id: 1 }], errors: [] });
+    const res = makeRes();
+    await bulkAddToLibrary(
+      makeReq({ books: [{ openLibraryId: 'OL1M', slug: 'x', title: 'x', authorName: 'x' }] }),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
   });
 
   it('returns 400 when a book has an invalid status', async () => {

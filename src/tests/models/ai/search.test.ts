@@ -43,6 +43,7 @@ const olDoc = {
   cover_i: 99,
   first_publish_year: 2019,
   isbn: ['9789999999999', '123'],
+  edition_key: ['OL7170815M'],
 };
 
 describe('searchBooks', () => {
@@ -154,7 +155,8 @@ describe('searchBooks', () => {
     const [book] = await searchBooks('cats', 5);
 
     expect(book).toMatchObject({
-      googleBooksId: '',
+      googleBooksId: null,
+      openLibraryId: 'OL7170815M',
       title: 'Open Cat',
       authors: ['OL Author'],
       year: 2019,
@@ -169,6 +171,17 @@ describe('searchBooks', () => {
       libraryStatus: null,
       source: 'open_library',
     });
+  });
+
+  it('sets openLibraryId to null when OpenLibrary doc has no edition_key', async () => {
+    const docNoEdition = { ...olDoc, edition_key: undefined };
+    mockFetch({
+      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
+      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [docNoEdition] }) }),
+    });
+
+    const [book] = await searchBooks('cats', 5);
+    expect(book.openLibraryId).toBeNull();
   });
 
   it('sets coverUrl to null for OpenLibrary docs without cover_i', async () => {
@@ -277,12 +290,12 @@ describe('matchLibraryEntries', () => {
     expect(books[0].libraryStatus).toBe('queued');
   });
 
-  it('matches OpenLibrary books by isbn13 (googleBooksId is empty string)', async () => {
+  it('matches OpenLibrary books by isbn13 (googleBooksId is null)', async () => {
     mockMatchData.mockResolvedValue([
       { google_books_id: null, isbn13: '9789999999999', status: 'reading' },
     ]);
     const books: any[] = [
-      { googleBooksId: '', isbn13: '9789999999999', inLibrary: false, libraryStatus: null, source: 'open_library' },
+      { googleBooksId: null, isbn13: '9789999999999', inLibrary: false, libraryStatus: null, source: 'open_library' },
     ];
     await matchLibraryEntries(1, books);
     expect(books[0].inLibrary).toBe(true);
@@ -299,10 +312,10 @@ describe('matchLibraryEntries', () => {
     expect(mockMatchData).toHaveBeenCalledWith(5, ['g1', 'g2'], ['111']);
   });
 
-  it('excludes empty googleBooksId from the ids passed to data layer', async () => {
+  it('excludes null googleBooksId from the ids passed to data layer', async () => {
     mockMatchData.mockResolvedValue([]);
     const books: any[] = [
-      { googleBooksId: '', isbn13: '9789999999999', inLibrary: false, libraryStatus: null, source: 'open_library' },
+      { googleBooksId: null, isbn13: '9789999999999', inLibrary: false, libraryStatus: null, source: 'open_library' },
     ];
     await matchLibraryEntries(1, books);
     expect(mockMatchData).toHaveBeenCalledWith(1, [], ['9789999999999']);

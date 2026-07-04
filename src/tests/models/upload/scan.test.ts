@@ -23,14 +23,14 @@ const mockFindBookByTitle = uploadData.findBookByTitle as jest.Mock;
 const mockSearchBooks = aiSearch.searchBooks as jest.Mock;
 
 const googleBook = {
-  googleBooksId: 'gb1', title: 'Cat Science', authors: ['Dr Cat'], year: 2020,
+  googleBooksId: 'gb1', openLibraryId: null, title: 'Cat Science', authors: ['Dr Cat'], year: 2020,
   publisher: null, pages: null, rating: null, coverUrl: null, isbn13: null,
   language: null, blurb: null, inLibrary: false, libraryStatus: null,
   source: 'google_books' as const,
 };
 
 const olBook = {
-  googleBooksId: '', title: 'Marjada', authors: ['Arsha Sattar'], year: 2022,
+  googleBooksId: null, openLibraryId: 'OL7170815M', title: 'Marjada', authors: ['Arsha Sattar'], year: 2022,
   publisher: null, pages: null, rating: null,
   coverUrl: 'https://covers.openlibrary.org/b/id/99-M.jpg',
   isbn13: '9781234567890', language: null, blurb: null,

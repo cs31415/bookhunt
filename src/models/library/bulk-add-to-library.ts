@@ -1,7 +1,9 @@
-import { upsertBookFromGoogle, addToLibrary as addToLibraryData } from '../../data/library-data';
+import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
 
 interface BulkAddParams {
-  googleBooksId: string;
+  googleBooksId?: string | null;
+  openLibraryId?: string | null;
+  source?: 'google_books' | 'open_library';
   slug: string;
   title: string;
   authorName: string;
@@ -20,15 +22,18 @@ interface BulkAddParams {
 
 interface BulkAddError {
   index: number;
-  googleBooksId: string;
+  googleBooksId?: string | null;
+  openLibraryId?: string | null;
   reason: string;
 }
 
 export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
   const seen = new Set<string>();
   const deduped = books.filter((book) => {
-    if (seen.has(book.googleBooksId)) return false;
-    seen.add(book.googleBooksId);
+    const key = book.googleBooksId || book.openLibraryId;
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
@@ -39,7 +44,7 @@ export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
     const params = deduped[i];
     try {
       console.log(`[bulk-add model] [${i + 1}/${deduped.length}] upserting "${params.title}"`);
-      const book = await upsertBookFromGoogle(params);
+      const book = await upsertBook(params);
       console.log(`[bulk-add model] [${i + 1}/${deduped.length}] upserted book id=${book.id}, adding to library`);
       const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
       console.log(`[bulk-add model] [${i + 1}/${deduped.length}] done`);
@@ -49,6 +54,7 @@ export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
       errors.push({
         index: i,
         googleBooksId: params.googleBooksId,
+        openLibraryId: params.openLibraryId,
         reason: err instanceof Error ? err.message : String(err),
       });
     }

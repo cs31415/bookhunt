@@ -17,8 +17,8 @@ export async function bulkAddToLibrary(req: Request, res: Response) {
   }
 
   for (const book of books) {
-    if (!book.googleBooksId || !book.slug || !book.title || !book.authorName) {
-      return res.status(400).json({ error: 'each book requires googleBooksId, slug, title, and authorName' });
+    if ((!book.googleBooksId && !book.openLibraryId) || !book.slug || !book.title || !book.authorName) {
+      return res.status(400).json({ error: 'each book requires (googleBooksId or openLibraryId), slug, title, and authorName' });
     }
     if (book.status !== undefined && !VALID_STATUSES.has(book.status)) {
       return res.status(400).json({ error: `invalid status: ${book.status}` });

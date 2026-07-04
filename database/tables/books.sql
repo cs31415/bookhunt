@@ -15,6 +15,8 @@ CREATE TABLE books (
     blurb           TEXT DEFAULT '',
     cover_url       VARCHAR(1000),
     google_books_id VARCHAR(255),
+    openlibrary_id  VARCHAR(255),
+    source          VARCHAR(20),
     isbn13          VARCHAR(20),
     language        VARCHAR(50) DEFAULT 'English',
     related         INT[] DEFAULT '{}'
@@ -22,3 +24,4 @@ CREATE TABLE books (
 
 CREATE INDEX idx_books_author_id ON books(author_id);
 CREATE UNIQUE INDEX idx_books_google_books_id ON books(google_books_id);
+CREATE UNIQUE INDEX idx_books_openlibrary_id ON books(openlibrary_id);
