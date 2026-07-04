@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
@@ -10,28 +11,77 @@ if (fs.existsSync(envPath)) {
 
 const API = process.env.API_URL;
 const PHOTO_DIR = path.join(__dirname, 'photos');
+const UPLOAD_CACHE_PATH = path.join(__dirname, '.upload-cache.json');
+
+function loadUploadCache() {
+  try { return JSON.parse(fs.readFileSync(UPLOAD_CACHE_PATH, 'utf8')); } catch { return {}; }
+}
+
+function saveUploadCache(cache) {
+  fs.writeFileSync(UPLOAD_CACHE_PATH, JSON.stringify(cache, null, 2));
+}
+
+function fileHash(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+const DEFAULT_TIMEOUT_MS = 10_000;
+const SCAN_TIMEOUT_MS = 120_000;
+const BULK_TIMEOUT_MS = 60_000;
+
+function apiFetch(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .catch((err) => {
+      if (err.name === 'AbortError') throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
+      throw err;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+function contentTypeFor(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  return { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+           '.heic': 'image/heic', '.webp': 'image/webp' }[ext] ?? 'image/jpeg';
+}
+
+function slugify(title) {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
 
 const email = process.env.TEST_EMAIL;
 const password = process.env.TEST_PASSWORD;
 const displayName = process.env.TEST_DISPLAY_NAME;
 
-async function getToken() {
+async function main() {
+  const photoFiles = process.argv.slice(2).length ? process.argv.slice(2) : ['IMG_6455.jpeg'];
+
+  for (const f of photoFiles) {
+    if (!fs.existsSync(path.join(PHOTO_DIR, f))) {
+      console.error(`Photo not found: ${path.join(PHOTO_DIR, f)}`);
+      process.exit(1);
+    }
+  }
+
+  console.log(`=== Photo Import Test (${photoFiles.length} photo(s)) ===\n`);
+
+  // 1. Register or login
   console.log(`Registering ${email} ...`);
-  const registerRes = await fetch(`${API}/auth/register`, {
+  const registerRes = await apiFetch(`${API}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, displayName }),
   });
   const registerData = await registerRes.json();
 
+  let token;
   if (registerRes.ok) {
+    token = registerData.token;
     console.log('User registered.\n');
-    return registerData.token;
-  }
-
-  if (registerRes.status === 409) {
-    console.log(`Already registered — logging in ...\n`);
-    const loginRes = await fetch(`${API}/auth/login`, {
+  } else if (registerRes.status === 409) {
+    console.log('User already exists — logging in ...');
+    const loginRes = await apiFetch(`${API}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -41,74 +91,97 @@ async function getToken() {
       console.error('Login failed:', loginRes.status, loginData);
       process.exit(1);
     }
+    token = loginData.token;
     console.log('Logged in.\n');
-    return loginData.token;
-  }
-
-  console.error('Register failed:', registerRes.status, registerData);
-  process.exit(1);
-}
-
-async function main() {
-  const photoFile = process.argv[2] || 'IMG_6473.jpeg';
-  const photoPath = path.join(PHOTO_DIR, photoFile);
-
-  if (!fs.existsSync(photoPath)) {
-    console.error(`Photo not found: ${photoPath}`);
+  } else {
+    console.error('Register failed:', registerRes.status, registerData);
     process.exit(1);
   }
 
-  console.log('=== Photo Import Test ===\n');
-
-  // 1. Register or login
-  const token = await getToken();
   const authHeaders = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
 
-  // 2. Get presigned upload URL
-  console.log('Requesting presigned URL ...');
-  const presignRes = await fetch(`${API}/upload/presign`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ files: [{ contentType: 'image/jpeg' }] }),
-  });
-  const presignData = await presignRes.json();
+  // 2. Hash each photo and check cache for already-uploaded files
+  const uploadCache = loadUploadCache();
+  const hashes = photoFiles.map((f) => fileHash(path.join(PHOTO_DIR, f)));
 
-  if (!presignRes.ok) {
-    console.error('Presign failed:', presignRes.status, presignData);
+  const cached = [], toUpload = [];
+  photoFiles.forEach((f, i) => {
+    const key = uploadCache[hashes[i]];
+    if (key) cached.push({ file: f, index: i, key });
+    else toUpload.push({ file: f, index: i, hash: hashes[i] });
+  });
+
+  if (cached.length) console.log(`  ${cached.length} already uploaded (cache hit), skipping.`);
+
+  const imageKeys = new Array(photoFiles.length);
+  cached.forEach(({ index, key, file }) => {
+    console.log(`  [${index + 1}] ${file} — cache hit: ${key}`);
+    imageKeys[index] = key;
+  });
+
+  // 3. Presign and upload only files not in the cache
+  if (toUpload.length > 0) {
+    console.log(`\nRequesting presigned URL(s) for ${toUpload.length} new file(s) ...`);
+    const presignRes = await apiFetch(`${API}/upload/presign`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ files: toUpload.map((f) => ({ contentType: contentTypeFor(f.file) })) }),
+    });
+    const presignData = await presignRes.json();
+
+    if (!presignRes.ok) {
+      console.error('Presign failed:', presignRes.status, presignData);
+      process.exit(1);
+    }
+
+    console.log(`Uploading ${toUpload.length} photo(s) to S3 in parallel ...`);
+    const uploadResults = await Promise.allSettled(
+      toUpload.map(({ file }, pi) =>
+        fetch(presignData[pi].url, {
+          method: 'PUT',
+          headers: { 'Content-Type': contentTypeFor(file) },
+          body: fs.readFileSync(path.join(PHOTO_DIR, file)),
+        }).then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r;
+        })
+      )
+    );
+
+    uploadResults.forEach((result, pi) => {
+      const { file, index, hash } = toUpload[pi];
+      if (result.status === 'fulfilled') {
+        const key = presignData[pi].key;
+        console.log(`  [${index + 1}] ${file} — uploaded: ${key}`);
+        imageKeys[index] = key;
+        uploadCache[hash] = key;
+      } else {
+        console.error(`  [${index + 1}] ${file} — FAILED: ${result.reason.message}`);
+        console.error('  (R2/S3 credentials may not be configured — set AWS_* env vars in scripts/.env)');
+      }
+    });
+
+    saveUploadCache(uploadCache);
+  }
+
+  const imageKeysFiltered = imageKeys.filter(Boolean);
+  if (imageKeysFiltered.length === 0) {
+    console.error('\nNo photos available. Aborting.');
     process.exit(1);
   }
 
-  const { url: presignUrl, key: imageKey } = presignData[0];
-  console.log('Image key:', imageKey);
-  console.log('Presigned URL:', presignUrl.slice(0, 60) + '...\n');
+  console.log();
 
-  // 3. Upload photo to presigned URL
-  console.log(`Uploading ${photoFile} ...`);
-  const imageBytes = fs.readFileSync(photoPath);
-  const uploadRes = await fetch(presignUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'image/jpeg' },
-    body: imageBytes,
-  });
-
-  if (!uploadRes.ok) {
-    const text = await uploadRes.text();
-    console.error('Upload failed:', uploadRes.status, text);
-    process.exit(1);
-  }
-
-  console.log('Upload successful.\n');
-
-  // 4. Scan the uploaded photo for books
-  console.log('Scanning bookshelf photo with AI vision ...');
-  const scanRes = await fetch(`${API}/upload/scan`, {
+  // 4. Scan all uploaded photos — server resolves each book via Google Books + OpenLibrary fallback
+  console.log(`Scanning ${imageKeysFiltered.length} photo(s) with AI vision ...`);
+  const scanRes = await apiFetch(`${API}/upload/scan`, {
     method: 'POST',
     headers: authHeaders,
-    body: JSON.stringify({ imageKeys: [imageKey] }),
-  });
+    body: JSON.stringify({ imageKeys: imageKeysFiltered }),
+  }, SCAN_TIMEOUT_MS);
   const scanData = await scanRes.json();
 
   if (!scanRes.ok) {
@@ -116,67 +189,87 @@ async function main() {
     process.exit(1);
   }
 
-  const books = scanData.detectedBooks;
-  console.log(`Detected ${books.length} book(s):`);
-  books.forEach((b, i) => {
+  const detectedBooks = scanData.detectedBooks;
+  console.log(`\nDetected ${detectedBooks.length} book(s):`);
+  detectedBooks.forEach((b, i) => {
     const status = b.matchedBookId
-      ? `matched DB id: ${b.matchedBookId}`
+      ? `catalog ID: ${b.matchedBookId}`
       : b.resolvedBook
         ? `resolved via ${b.resolvedBook.source}`
         : 'not found';
     console.log(`  ${i + 1}. "${b.title}" by ${b.author || 'Unknown'} — ${status}`);
   });
 
-  // 5. Add books to library: DB-matched via matchedBookId, search-resolved via resolvedBook
-  const toAdd = books.filter((b) => b.matchedBookId || b.resolvedBook);
-  console.log(`\nAdding ${toAdd.length} book(s) to library ...`);
+  if (detectedBooks.length === 0) {
+    console.log('\nNo books detected. Skipping library step.');
+    console.log('\n=== Photo import test complete ===');
+    return;
+  }
 
-  for (const book of toAdd) {
-    let payload;
-    if (book.matchedBookId) {
-      payload = {
-        googleBooksId: `scan-${book.matchedBookId}`,
-        title: book.title,
-        authorName: book.author || 'Unknown',
-        slug: book.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        status: 'queued',
-      };
-    } else {
-      const rb = book.resolvedBook;
-      payload = {
-        googleBooksId: rb.googleBooksId || `ol-${rb.isbn13 || book.title.toLowerCase().replace(/\s+/g, '-')}`,
+  // 5. Build bulk-add payload from resolvedBook metadata; skip DB-matched (already in catalog)
+  const booksToAdd = [];
+  for (const b of detectedBooks) {
+    if (b.resolvedBook) {
+      const rb = b.resolvedBook;
+      booksToAdd.push({
+        googleBooksId: rb.googleBooksId || `ol-${rb.isbn13 || slugify(rb.title)}`,
+        slug: slugify(rb.title),
         title: rb.title,
-        authorName: rb.authors[0] || book.author || 'Unknown',
-        slug: rb.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        authorName: rb.authors?.[0] || b.author || 'Unknown',
         year: rb.year,
         publisher: rb.publisher,
         pages: rb.pages,
-        rating: rb.rating,
+        subjects: null,
+        blurb: rb.blurb,
         coverUrl: rb.coverUrl,
         isbn13: rb.isbn13,
         language: rb.language,
-        blurb: rb.blurb,
         status: 'queued',
-      };
-    }
-
-    const addRes = await fetch(`${API}/library`, {
-      method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify(payload),
-    });
-    const addData = await addRes.json();
-
-    if (addRes.ok) {
-      console.log(`  Added "${book.title}" — entry ID: ${addData.entry?.id ?? addData.id}`);
-    } else {
-      console.error(`  Failed to add "${book.title}":`, addRes.status, addData);
+      });
     }
   }
 
-  // 6. Verify library contents
+  if (booksToAdd.length === 0) {
+    console.log('\nNo books resolved from search. Skipping library step.');
+    console.log('\n=== Photo import test complete ===');
+    return;
+  }
+
+  // 6. Bulk-add all resolved books to the user's library (in chunks of 20)
+  const CHUNK_SIZE = 20;
+  const chunks = [];
+  for (let i = 0; i < booksToAdd.length; i += CHUNK_SIZE) chunks.push(booksToAdd.slice(i, i + CHUNK_SIZE));
+
+  console.log(`\nBulk-adding ${booksToAdd.length} book(s) to library (${chunks.length} batch(es)) ...`);
+
+  let totalAdded = 0, totalFailed = 0;
+  for (const [ci, chunk] of chunks.entries()) {
+    const bulkRes = await apiFetch(`${API}/library/bulk`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ books: chunk }),
+    }, BULK_TIMEOUT_MS);
+    const bulkData = await bulkRes.json();
+
+    if (!bulkRes.ok && bulkRes.status !== 207) {
+      console.error(`  batch ${ci + 1} failed: ${bulkRes.status}`, bulkData);
+      continue;
+    }
+
+    bulkData.entries.forEach((entry) => {
+      console.log(`  added  "${entry.title ?? entry.book_id}" — entry ID: ${entry.id}`);
+    });
+    bulkData.errors.forEach((err) => {
+      console.error(`  error  [${err.index}] ${err.googleBooksId}: ${err.reason}`);
+    });
+    totalAdded += bulkData.entries.length;
+    totalFailed += bulkData.errors.length;
+  }
+  console.log(`  ${totalAdded} added, ${totalFailed} failed`);
+
+  // 7. Verify library contents
   console.log('\nFetching library ...');
-  const libRes = await fetch(`${API}/library`, {
+  const libRes = await apiFetch(`${API}/library`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const libData = await libRes.json();

@@ -11,3 +11,4 @@ scripts/.env
 .claude/
 
 scripts/photos/
+scripts/.upload-cache.json

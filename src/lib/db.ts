@@ -10,7 +10,8 @@ export function getPool(): Pool {
 }
 
 export const pool = new Proxy({} as Pool, {
-  get(_target, prop, receiver) {
-    return Reflect.get(getPool(), prop, receiver);
+  get(_target, prop) {
+    const value = Reflect.get(getPool(), prop);
+    return typeof value === 'function' ? value.bind(getPool()) : value;
   },
 });

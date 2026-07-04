@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local', override: true });
-dotenv.config();
+import path from 'path';
+const root = path.resolve(__dirname, '..');
+dotenv.config({ path: path.join(root, '.env.local'), override: true });
+dotenv.config({ path: path.join(root, '.env') });
 import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
