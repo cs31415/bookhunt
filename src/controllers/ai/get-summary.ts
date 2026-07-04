@@ -1,18 +1,12 @@
 import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCachedSummary, getSummary as getSummaryModel } from '../../models/ai/get-summary';
+import { getSummary as getSummaryModel } from '../../models/ai/get-summary';
 
 export async function getSummary(req: Request, res: Response) {
   try {
     const bookId = parseInt(req.params.bookId as string, 10);
     if (isNaN(bookId)) {
       res.status(400).json({ error: 'Invalid book ID' });
-      return;
-    }
-
-    const cached = await getCachedSummary(bookId);
-    if (cached) {
-      res.json(cached);
       return;
     }
 

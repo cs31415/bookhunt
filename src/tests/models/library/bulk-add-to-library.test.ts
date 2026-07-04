@@ -1,10 +1,13 @@
 import { bulkAddToLibrary } from '../../../models/library/bulk-add-to-library';
 import * as libraryData from '../../../data/library-data';
+import { resolveOpenLibraryFields } from '../../../models/library/resolve-open-library-fields';
 
 jest.mock('../../../data/library-data');
+jest.mock('../../../models/library/resolve-open-library-fields');
 
 const mockUpsertBook = libraryData.upsertBook as jest.Mock;
 const mockAddToLibrary = libraryData.addToLibrary as jest.Mock;
+const mockResolveOpenLibraryFields = resolveOpenLibraryFields as jest.Mock;
 
 const book1 = { googleBooksId: 'gid1', slug: 'book-one', title: 'Book One', authorName: 'Author A' };
 const book2 = { googleBooksId: 'gid2', slug: 'book-two', title: 'Book Two', authorName: 'Author B' };
@@ -12,6 +15,9 @@ const book2 = { googleBooksId: 'gid2', slug: 'book-two', title: 'Book Two', auth
 describe('bulkAddToLibrary model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockResolveOpenLibraryFields.mockImplementation((params) =>
+      Promise.resolve({ blurb: params.blurb, publisher: params.publisher, pages: params.pages }),
+    );
   });
 
   it('calls upsertBook and addToLibrary for each book', async () => {

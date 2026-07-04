@@ -1,4 +1,5 @@
 import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
+import { resolveOpenLibraryFields } from './resolve-open-library-fields';
 
 interface AddToLibraryParams {
   googleBooksId?: string | null;
@@ -21,6 +22,7 @@ interface AddToLibraryParams {
 }
 
 export async function addToLibrary(userId: number, params: AddToLibraryParams) {
-  const book = await upsertBook(params);
+  const resolved = await resolveOpenLibraryFields(params);
+  const book = await upsertBook({ ...params, ...resolved });
   return addToLibraryData(userId, book.id, params.status ?? 'queued');
 }

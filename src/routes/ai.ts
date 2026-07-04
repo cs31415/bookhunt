@@ -13,7 +13,8 @@ const router = Router();
  * /ai/summary/{bookId}:
  *   get:
  *     tags: [AI]
- *     summary: Get or generate an AI book summary
+ *     summary: Get a book summary, preferring the stored catalog blurb over AI generation
+ *     description: Returns the book's stored blurb (from Google Books or OpenLibrary) when available. Only calls Claude to generate a summary when no blurb is stored for the book.
  *     parameters:
  *       - in: path
  *         name: bookId
@@ -21,7 +22,7 @@ const router = Router();
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: AI-generated summary
+ *         description: Book summary (catalog blurb or AI-generated)
  *         content:
  *           application/json:
  *             schema:
@@ -29,7 +30,7 @@ const router = Router();
  *               properties:
  *                 bookId: { type: integer }
  *                 summary: { type: string }
- *                 generatedAt: { type: string, format: date-time }
+ *                 generatedAt: { type: string, format: date-time, nullable: true, description: "Null when summary is the stored catalog blurb rather than AI-generated" }
  *       404:
  *         description: Book not found
  *       503:
