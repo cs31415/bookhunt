@@ -6,6 +6,7 @@ CREATE OR REPLACE FUNCTION fn_save_ai_summary(
 RETURNS TABLE(book_id INT, summary TEXT, generated_at TIMESTAMPTZ)
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 BEGIN
     RETURN QUERY
     INSERT INTO ai_summaries (book_id, summary, generated_at)
