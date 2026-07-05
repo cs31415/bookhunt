@@ -1,6 +1,7 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getAnthropic } from '../../lib/anthropic';
+import { extractResponseText } from '../../lib/extract-response-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { getS3 } from '../../lib/s3';
 import { findBookByTitle } from '../../data/upload-data';
@@ -33,8 +34,7 @@ export async function detectBooksFromImages(imageKeys: string[]) {
     }],
   });
 
-  const textBlock = response.content.find((block) => block.type === 'text');
-  const rawText = textBlock && 'text' in textBlock ? textBlock.text : '[]';
+  const rawText = extractResponseText(response, '[]');
   const books = parseJsonResponse<{ title: string; author: string | null }[]>(rawText);
 
   const seen = new Set<string>();

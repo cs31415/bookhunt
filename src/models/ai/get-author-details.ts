@@ -1,4 +1,5 @@
 import { getAnthropic } from '../../lib/anthropic';
+import { extractResponseText } from '../../lib/extract-response-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 
 export interface AuthorDetails {
@@ -34,8 +35,7 @@ export async function generateAuthorDetails(name: string, known: AuthorDetails):
     throw error;
   }
 
-  const textBlock = response.content.find((block) => block.type === 'text');
-  const rawText = textBlock && 'text' in textBlock ? textBlock.text : '{}';
+  const rawText = extractResponseText(response, '{}');
   const parsed = parseJsonResponse<{ birth_year: number | null; country: string | null; bio: string | null }>(rawText);
 
   return {
