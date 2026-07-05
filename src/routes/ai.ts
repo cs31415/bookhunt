@@ -4,6 +4,7 @@ import { rateLimiter } from '../middleware/rateLimiter';
 import { getSummary } from '../controllers/ai/get-summary';
 import { regenerateSummary } from '../controllers/ai/regenerate-summary';
 import { generateThemes } from '../controllers/ai/generate-themes';
+import { generateThemesExternal } from '../controllers/ai/generate-themes-external';
 import { search } from '../controllers/ai/search';
 
 const router = Router();
@@ -60,6 +61,42 @@ router.get('/summary/:bookId', getSummary);
  *         description: AI service unavailable
  */
 router.post('/summary/:bookId', rateLimiter(60_000, 5), regenerateSummary);
+
+/**
+ * @swagger
+ * /ai/themes/external:
+ *   post:
+ *     tags: [AI]
+ *     summary: Generate genres and themes for a book not yet in the catalog
+ *     description: For external search results (Google Books/OpenLibrary) with no bookId. Always calls Claude fresh; nothing is cached or persisted since there is no catalog row to attach it to. Must be registered before /ai/themes/{bookId} so the literal "external" segment is not swallowed by the bookId param.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, authorName]
+ *             properties:
+ *               title: { type: string }
+ *               authorName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Genres and themes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 genres: { type: array, items: { type: string } }
+ *                 themes: { type: array, items: { type: string } }
+ *       400:
+ *         description: Missing title or authorName
+ *       429:
+ *         description: Rate limited (10/min)
+ *       503:
+ *         description: AI service unavailable
+ */
+router.post('/themes/external', rateLimiter(60_000, 10), generateThemesExternal);
 
 /**
  * @swagger
