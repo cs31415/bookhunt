@@ -1,4 +1,4 @@
-import { throttleOpenLibrary } from './open-library-rate-limiter';
+import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
 
 type OpenLibraryDescription = string | { value?: string } | undefined;
 
@@ -22,7 +22,7 @@ export async function fetchOpenLibraryEditionDetails(
 
   let edition: any;
   try {
-    const response = await fetch(`https://openlibrary.org/books/${openLibraryId}.json`);
+    const response = await fetch(`${OPENLIBRARY_API_URL}/books/${openLibraryId}.json`);
     if (!response.ok) return empty;
     edition = await response.json();
   } catch {
@@ -37,7 +37,7 @@ export async function fetchOpenLibraryEditionDetails(
   if (!description && workKey) {
     await throttleOpenLibrary();
     try {
-      const response = await fetch(`https://openlibrary.org${workKey}.json`);
+      const response = await fetch(`${OPENLIBRARY_API_URL}${workKey}.json`);
       if (response.ok) {
         const work: any = await response.json();
         description = extractDescription(work.description);

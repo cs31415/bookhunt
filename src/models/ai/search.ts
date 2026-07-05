@@ -1,5 +1,5 @@
 import { matchLibraryEntries as matchLibraryEntriesData } from '../../data/ai-data';
-import { throttleOpenLibrary } from '../../lib/open-library-rate-limiter';
+import { throttleOpenLibrary, OPENLIBRARY_API_URL } from '../../lib/open-library-rate-limiter';
 
 interface SearchResult {
   googleBooksId: string | null;
@@ -22,7 +22,7 @@ interface SearchResult {
 async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
   await throttleOpenLibrary();
 
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key`;
+  const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key`;
 
   let response: globalThis.Response;
   try {

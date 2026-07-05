@@ -1,3 +1,5 @@
+export const OPENLIBRARY_API_URL = process.env.OPENLIBRARY_API_URL || 'https://openlibrary.org';
+
 let lastCallTime = 0;
 
 export async function throttleOpenLibrary(): Promise<void> {

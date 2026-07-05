@@ -1,4 +1,4 @@
-import { throttleOpenLibrary } from './open-library-rate-limiter';
+import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
 
 type OpenLibraryBio = string | { value?: string } | undefined;
 
@@ -24,7 +24,7 @@ export async function fetchOpenLibraryAuthorDetails(name: string): Promise<OpenL
 
   let doc: any;
   try {
-    const response = await fetch(`https://openlibrary.org/search/authors.json?q=${encodeURIComponent(name)}`);
+    const response = await fetch(`${OPENLIBRARY_API_URL}/search/authors.json?q=${encodeURIComponent(name)}`);
     if (!response.ok) return empty;
     const results: any = await response.json();
     const docs: any[] = results.docs ?? [];
@@ -41,7 +41,7 @@ export async function fetchOpenLibraryAuthorDetails(name: string): Promise<OpenL
 
   let bio: string | null = null;
   try {
-    const response = await fetch(`https://openlibrary.org/authors/${doc.key}.json`);
+    const response = await fetch(`${OPENLIBRARY_API_URL}/authors/${doc.key}.json`);
     if (response.ok) {
       const author: any = await response.json();
       bio = extractBio(author.bio);
