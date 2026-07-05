@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getAuthorBySlug, getBooksByAuthor } from '../../models/authors/get-by-slug';
+import { getAuthorBySlug, getAuthorWorks } from '../../models/authors/get-by-slug';
 
 export async function getBySlug(req: Request, res: Response) {
   try {
@@ -12,7 +12,7 @@ export async function getBySlug(req: Request, res: Response) {
       return;
     }
 
-    const books = await getBooksByAuthor(author.id);
+    const books = await getAuthorWorks(author, req.user?.id);
 
     res.json({ author, books });
   } catch (error) {
