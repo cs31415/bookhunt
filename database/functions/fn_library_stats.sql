@@ -47,6 +47,19 @@ BEGIN
                 ORDER BY cnt DESC, a.name ASC
                 LIMIT 10
             ) t
+        ),
+        'top_moods', (
+            SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json)
+            FROM (
+                SELECT mood, COUNT(*) AS cnt
+                FROM library_entries le
+                JOIN books b ON b.id = le.book_id,
+                     unnest(b.moods) AS mood
+                WHERE le.user_id = p_user_id
+                GROUP BY mood
+                ORDER BY cnt DESC, mood ASC
+                LIMIT 10
+            ) t
         )
     ) INTO v_result;
 

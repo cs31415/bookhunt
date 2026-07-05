@@ -37,8 +37,9 @@ All routers are mounted under `/api` (e.g. `app.use('/api', router)`). Paths bel
 ### Search (`/search`)
 | Method | Path | Auth | Params | Response |
 |--------|------|------|--------|----------|
-| GET | / | Optional | `?q&subjects[]&moods[]&decade&status&sort&mode(local|ai)` | `{ books: BookWithAuthor[], mode, interpretation? }` |
-| GET | /google | None | `?q&limit` | `{ books: GoogleBook[], error? }` |
+| GET | / | Optional | `?q&subjects[]&moods[]&decade&authorSlug&status&inLibraryOnly&sort(relevance\|rating\|newest\|oldest\|title)&page&limit` | `{ books: CatalogSearchResult[], total, page, pageSize, query }` — catalog-only text/facet search via `fn_search_books`; `status`/`inLibraryOnly` are honored only when authenticated. Each result includes `in_library`/`library_status`. |
+
+External (Google Books/OpenLibrary) search is a separate concern — see `POST /ai/search` below. There is no `/search/google` route.
 
 ### Library (`/library`)
 | Method | Path | Auth | Body | Response |

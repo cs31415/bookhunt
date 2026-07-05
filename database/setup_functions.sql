@@ -28,6 +28,9 @@ BEGIN;
 \ir functions/fn_add_user_related.sql
 \ir functions/fn_remove_user_related.sql
 
+-- search
+\ir functions/fn_search_books.sql
+
 -- recommendations
 \ir functions/fn_recommendations.sql
 
