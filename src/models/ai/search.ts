@@ -1,5 +1,5 @@
 import { matchLibraryEntries as matchLibraryEntriesData } from '../../data/ai-data';
-import { throttleOpenLibrary } from '../../lib/open-library-rate-limiter';
+import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from '../../lib/open-library-rate-limiter';
 
 interface SearchResult {
   googleBooksId: string | null;
@@ -22,7 +22,7 @@ interface SearchResult {
 async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
   await throttleOpenLibrary();
 
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key`;
+  const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key`;
 
   let response: globalThis.Response;
   try {
@@ -48,7 +48,7 @@ async function searchOpenLibrary(query: string, limit: number): Promise<SearchRe
     const isbns: string[] = doc.isbn || [];
     const isbn13 = isbns.find((id) => id.length === 13) || null;
     const coverUrl = doc.cover_i
-      ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+      ? `${OPENLIBRARY_COVERS_URL}/b/id/${doc.cover_i}-M.jpg`
       : null;
     const editionKeys: string[] = doc.edition_key || [];
     return {

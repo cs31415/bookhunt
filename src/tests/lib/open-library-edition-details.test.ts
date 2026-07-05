@@ -2,6 +2,7 @@ import { fetchOpenLibraryEditionDetails } from '../../lib/open-library-edition-d
 
 jest.mock('../../lib/open-library-rate-limiter', () => ({
   throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
+  OPENLIBRARY_API_URL: 'https://openlibrary.org',
 }));
 
 function mockFetch(handlers: Record<string, () => any>) {

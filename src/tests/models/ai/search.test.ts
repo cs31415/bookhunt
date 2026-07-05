@@ -4,6 +4,8 @@ import * as aiData from '../../../data/ai-data';
 jest.mock('../../../data/ai-data');
 jest.mock('../../../lib/open-library-rate-limiter', () => ({
   throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
+  OPENLIBRARY_API_URL: 'https://openlibrary.org',
+  OPENLIBRARY_COVERS_URL: 'https://covers.openlibrary.org',
 }));
 
 const mockMatchData = aiData.matchLibraryEntries as jest.Mock;

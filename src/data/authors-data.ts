@@ -15,3 +15,14 @@ export async function getBooksByAuthor(authorId: number) {
   );
   return result.rows;
 }
+
+export async function updateAuthorDetails(
+  authorId: number,
+  details: { birthYear: number | null; country: string | null; bio: string | null },
+) {
+  const result = await pool.query(
+    'SELECT * FROM fn_update_author_details($1, $2, $3, $4)',
+    [authorId, details.birthYear, details.country, details.bio],
+  );
+  return result.rows[0];
+}
