@@ -1,4 +1,5 @@
 import { getAnthropic } from '../../lib/anthropic';
+import { parseJsonResponse } from '../../lib/parse-json-response';
 
 export interface AuthorDetails {
   birthYear: number | null;
@@ -35,9 +36,7 @@ export async function generateAuthorDetails(name: string, known: AuthorDetails):
 
   const textBlock = response.content.find((block) => block.type === 'text');
   const rawText = textBlock && 'text' in textBlock ? textBlock.text : '{}';
-  const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const jsonText = fenceMatch ? fenceMatch[1] : rawText;
-  const parsed = JSON.parse(jsonText.trim());
+  const parsed = parseJsonResponse<{ birth_year: number | null; country: string | null; bio: string | null }>(rawText);
 
   return {
     birthYear: parsed.birth_year ?? null,

@@ -1,6 +1,7 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getAnthropic } from '../../lib/anthropic';
+import { parseJsonResponse } from '../../lib/parse-json-response';
 import { getS3 } from '../../lib/s3';
 import { findBookByTitle } from '../../data/upload-data';
 import { searchBooks } from '../ai/search';
@@ -34,9 +35,7 @@ export async function detectBooksFromImages(imageKeys: string[]) {
 
   const textBlock = response.content.find((block) => block.type === 'text');
   const rawText = textBlock && 'text' in textBlock ? textBlock.text : '[]';
-  const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const jsonText = fenceMatch ? fenceMatch[1] : rawText;
-  const books: { title: string; author: string | null }[] = JSON.parse(jsonText.trim());
+  const books = parseJsonResponse<{ title: string; author: string | null }[]>(rawText);
 
   const seen = new Set<string>();
   const unique = books.filter((book) => {

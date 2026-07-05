@@ -1,4 +1,5 @@
 import { getAnthropic } from '../../lib/anthropic';
+import { parseJsonResponse } from '../../lib/parse-json-response';
 import { fetchBookContext, getBookGenresThemes, updateBookAiMetadata } from '../../data/ai-data';
 
 export async function generateThemes(bookId: number) {
@@ -16,8 +17,9 @@ export async function generateThemes(bookId: number) {
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const raw = (response.content[0] as { type: 'text'; text: string }).text;
-  const parsed: { genres: string[]; themes: string[] } = JSON.parse(raw);
+  const textBlock = response.content.find((block) => block.type === 'text');
+  const rawText = textBlock && 'text' in textBlock ? textBlock.text : '{}';
+  const parsed = parseJsonResponse<{ genres: string[]; themes: string[] }>(rawText);
 
   await updateBookAiMetadata(bookId, parsed.genres, parsed.themes);
 
