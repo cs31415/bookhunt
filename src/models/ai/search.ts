@@ -120,7 +120,14 @@ export async function searchBooks(query: string, limit: number): Promise<SearchR
   });
 }
 
-export async function matchLibraryEntries(userId: number, books: SearchResult[]) {
+export interface LibraryMatchable {
+  googleBooksId: string | null;
+  isbn13: string | null;
+  inLibrary: boolean;
+  libraryStatus: string | null;
+}
+
+export async function matchLibraryEntries(userId: number, books: LibraryMatchable[]) {
   const googleIds = books.map((b) => b.googleBooksId).filter((id): id is string => Boolean(id));
   const isbns = books.map((b) => b.isbn13).filter(Boolean) as string[];
 

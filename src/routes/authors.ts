@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authOptional } from '../middleware/auth';
 import { getBySlug } from '../controllers/authors/get-by-slug';
 
 const router = Router();
@@ -8,7 +9,10 @@ const router = Router();
  * /authors/{slug}:
  *   get:
  *     tags: [Authors]
- *     summary: Get an author and their books
+ *     summary: Get an author and their full bibliography
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
  *     parameters:
  *       - in: path
  *         name: slug
@@ -17,7 +21,7 @@ const router = Router();
  *         description: URL-safe author identifier
  *     responses:
  *       200:
- *         description: Author with bibliography
+ *         description: Author with bibliography, each book flagged with in-library status
  *         content:
  *           application/json:
  *             schema:
@@ -30,6 +34,6 @@ const router = Router();
  *       404:
  *         description: Author not found
  */
-router.get('/:slug', getBySlug);
+router.get('/:slug', authOptional, getBySlug);
 
 export default router;

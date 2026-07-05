@@ -1,6 +1,7 @@
 import { getAuthorBySlug as fetchAuthorBySlug, getBooksByAuthor, updateAuthorDetails } from '../../data/authors-data';
 import { fetchOpenLibraryAuthorDetails } from '../../lib/open-library-author-details';
 import { generateAuthorDetails } from '../ai/get-author-details';
+import { searchBooks, matchLibraryEntries } from '../ai/search';
 
 export { getBooksByAuthor };
 
@@ -31,4 +32,70 @@ async function enrichAuthor(author: any) {
     return author;
   }
   return updateAuthorDetails(author.id, { birthYear, country, bio });
+}
+
+interface AuthorWork {
+  bookId: number | null;
+  slug: string | null;
+  googleBooksId: string | null;
+  openLibraryId: string | null;
+  title: string;
+  authors: string[];
+  year: number | null;
+  publisher: string | null;
+  pages: number | null;
+  rating: number | null;
+  coverUrl: string | null;
+  isbn13: string | null;
+  language: string | null;
+  blurb: string | null;
+  inLibrary: boolean;
+  libraryStatus: string | null;
+  source: string | null;
+}
+
+function catalogBookToWork(book: any, authorName: string): AuthorWork {
+  return {
+    bookId: book.id,
+    slug: book.slug,
+    googleBooksId: book.google_books_id,
+    openLibraryId: book.openlibrary_id,
+    title: book.title,
+    authors: [authorName],
+    year: book.year,
+    publisher: book.publisher,
+    pages: book.pages,
+    rating: book.rating,
+    coverUrl: book.cover_url,
+    isbn13: book.isbn13,
+    language: book.language,
+    blurb: book.blurb,
+    inLibrary: false,
+    libraryStatus: null,
+    source: book.source,
+  };
+}
+
+export async function getAuthorWorks(author: any, userId?: number): Promise<AuthorWork[]> {
+  const catalogBooks = await getBooksByAuthor(author.id);
+  const works = catalogBooks.map((b) => catalogBookToWork(b, author.name));
+
+  const knownGoogleIds = new Set(works.map((w) => w.googleBooksId).filter(Boolean));
+  const knownIsbns = new Set(works.map((w) => w.isbn13).filter(Boolean));
+
+  const externalResults = await searchBooks(`inauthor:"${author.name}"`, 40);
+  for (const result of externalResults) {
+    const isDuplicate =
+      (result.googleBooksId && knownGoogleIds.has(result.googleBooksId)) ||
+      (result.isbn13 && knownIsbns.has(result.isbn13));
+    if (!isDuplicate) {
+      works.push({ ...result, bookId: null, slug: null });
+    }
+  }
+
+  if (userId) {
+    await matchLibraryEntries(userId, works);
+  }
+
+  return [...works.filter((w) => w.inLibrary), ...works.filter((w) => !w.inLibrary)];
 }
