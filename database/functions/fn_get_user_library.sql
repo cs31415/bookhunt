@@ -1,5 +1,8 @@
 -- Return all library entries for a user joined with book + author data.
 -- Ordered by date_added DESC.
+-- DROP is required because adding a column changes the RETURNS TABLE row
+-- type, which CREATE OR REPLACE cannot do in place.
+DROP FUNCTION IF EXISTS fn_get_user_library(INT);
 CREATE OR REPLACE FUNCTION fn_get_user_library(
     p_user_id INT
 ) RETURNS TABLE (
@@ -20,6 +23,7 @@ CREATE OR REPLACE FUNCTION fn_get_user_library(
     pages        INT,
     rating       NUMERIC,
     subjects     TEXT[],
+    moods        TEXT[],
     cover_url    VARCHAR,
     hue          VARCHAR
 )
@@ -44,6 +48,7 @@ BEGIN
         b.pages,
         b.rating,
         b.subjects,
+        b.moods,
         b.cover_url,
         b.hue
     FROM library_entries le
