@@ -2,6 +2,34 @@ import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { getSummary as getSummaryModel } from '../../models/ai/get-summary';
 
+/**
+ * @swagger
+ * /ai/summary/{bookId}:
+ *   get:
+ *     tags: [AI]
+ *     summary: Get a book summary, preferring the stored catalog blurb over AI generation
+ *     description: Returns the book's stored blurb (from Google Books or OpenLibrary) when available. Only calls Claude to generate a summary when no blurb is stored for the book.
+ *     parameters:
+ *       - in: path
+ *         name: bookId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Book summary (catalog blurb or AI-generated)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 bookId: { type: integer }
+ *                 summary: { type: string }
+ *                 generatedAt: { type: string, format: date-time, nullable: true, description: "Null when summary is the stored catalog blurb rather than AI-generated" }
+ *       404:
+ *         description: Book not found
+ *       503:
+ *         description: AI service unavailable
+ */
 export async function getSummary(req: Request, res: Response) {
   try {
     const bookId = parseInt(req.params.bookId as string, 10);

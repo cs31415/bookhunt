@@ -2,6 +2,51 @@ import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { detectBooksFromImages } from '../../models/upload/scan';
 
+/**
+ * @swagger
+ * /upload/scan:
+ *   post:
+ *     tags: [Upload]
+ *     summary: Scan one or more bookshelf photos and detect books via AI vision
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [imageKeys]
+ *             properties:
+ *               imageKeys:
+ *                 type: array
+ *                 description: S3 keys returned from /upload/presign (1–10 items)
+ *                 minItems: 1
+ *                 maxItems: 10
+ *                 items: { type: string }
+ *     responses:
+ *       200:
+ *         description: Detected books (deduplicated across all photos)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 detectedBooks:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       title: { type: string }
+ *                       author: { type: string, nullable: true }
+ *                       matchedBookId: { type: integer }
+ *       400:
+ *         description: imageKeys missing, empty, contains non-strings, or exceeds 10 items
+ *       429:
+ *         description: Rate limited (5/min)
+ *       503:
+ *         description: AI vision service unavailable
+ */
 export async function scan(req: Request, res: Response) {
   try {
     const { imageKeys } = req.body;

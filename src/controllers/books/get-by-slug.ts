@@ -1,6 +1,35 @@
 import { Request, Response } from 'express';
 import { getBookBySlug, getLibraryEntry } from '../../models/books/get-by-slug';
 
+/**
+ * @swagger
+ * /books/{slug}:
+ *   get:
+ *     tags: [Books]
+ *     summary: Get a book by slug
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema: { type: string }
+ *         description: URL-safe book identifier
+ *     responses:
+ *       200:
+ *         description: Book with optional library status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 book: { type: object }
+ *                 inLibrary: { type: boolean }
+ *                 libraryEntry: { type: object }
+ *       404:
+ *         description: Book not found
+ */
 export async function getBySlug(req: Request, res: Response) {
   try {
     const slug = req.params.slug as string;

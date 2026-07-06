@@ -1,6 +1,58 @@
 import { Request, Response } from 'express';
 import { searchBooks, matchLibraryEntries } from '../../models/ai/search';
 
+/**
+ * @swagger
+ * /ai/search:
+ *   post:
+ *     tags: [AI]
+ *     summary: Search via Google Books with library matching
+ *     security:
+ *       - bearerAuth: []
+ *       - {}
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [query]
+ *             properties:
+ *               query: { type: string }
+ *               inLibraryOnly: { type: boolean, default: false }
+ *               limit: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Search results with library flags
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 books:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       googleBooksId: { type: string }
+ *                       title: { type: string }
+ *                       authors: { type: array, items: { type: string } }
+ *                       year: { type: integer, nullable: true }
+ *                       publisher: { type: string }
+ *                       pages: { type: integer }
+ *                       rating: { type: number }
+ *                       coverUrl: { type: string }
+ *                       isbn13: { type: string, nullable: true }
+ *                       language: { type: string }
+ *                       blurb: { type: string }
+ *                       inLibrary: { type: boolean }
+ *                       libraryStatus: { type: string, nullable: true }
+ *                 query: { type: string }
+ *       400:
+ *         description: Missing query
+ *       429:
+ *         description: Rate limited (10/min)
+ */
 export async function search(req: Request, res: Response) {
   try {
     const { query, inLibraryOnly = false, limit = 20 } = req.body;

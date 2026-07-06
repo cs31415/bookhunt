@@ -3,6 +3,41 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { registerUser } from '../../models/auth/register';
 
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Register a new user
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, displayName]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 6 }
+ *               displayName: { type: string }
+ *     responses:
+ *       200:
+ *         description: User created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: integer }
+ *                     email: { type: string }
+ *                     displayName: { type: string }
+ *                 token: { type: string }
+ *       409:
+ *         description: Email already registered
+ */
 export async function register(req: Request, res: Response) {
   try {
     const { email, password, displayName } = req.body;

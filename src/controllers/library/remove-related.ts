@@ -1,6 +1,33 @@
 import { Request, Response } from 'express';
 import { removeRelated as removeRelatedModel } from '../../models/library/remove-related';
 
+/**
+ * @swagger
+ * /library/{bookId}/related/{relatedBookId}:
+ *   delete:
+ *     tags: [Library]
+ *     summary: Remove a user-curated related book
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: bookId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: relatedBookId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Updated related books array
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 userRelated: { type: array, items: { type: integer } }
+ */
 export async function removeRelated(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
