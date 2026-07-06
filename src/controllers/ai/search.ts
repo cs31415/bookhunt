@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { searchBooks, matchLibraryEntries } from '../../models/ai/search';
+import { searchBooksWithClaude } from '../../models/ai/search-claude';
 
 /**
  * @swagger
  * /ai/search:
  *   post:
  *     tags: [AI]
- *     summary: Search via Google Books with library matching
+ *     summary: Search via Claude with library matching, falling back to Google Books/OpenLibrary
  *     security:
  *       - bearerAuth: []
  *       - {}
@@ -61,7 +62,10 @@ export async function search(req: Request, res: Response) {
       return;
     }
 
-    const books = await searchBooks(query, limit);
+    let books = await searchBooksWithClaude(query, limit);
+    if (books.length === 0) {
+      books = await searchBooks(query, limit);
+    }
 
     if (req.user && books.length > 0) {
       await matchLibraryEntries(req.user.id, books);

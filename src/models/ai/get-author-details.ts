@@ -1,4 +1,4 @@
-import { ANTHROPIC_MODEL, getAnthropic } from '../../lib/anthropic';
+import { getAnthropicModel, getAnthropic } from '../../lib/anthropic';
 import { extractResponseText } from '../../lib/extract-response-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 
@@ -25,7 +25,7 @@ export async function generateAuthorDetails(name: string, known: AuthorDetails):
   let response;
   try {
     response = await getAnthropic().messages.create({
-      model: ANTHROPIC_MODEL,
+      model: getAnthropicModel(),
       max_tokens: 512,
       messages: [{ role: 'user', content: prompt }],
     });
