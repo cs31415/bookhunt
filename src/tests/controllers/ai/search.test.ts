@@ -1,11 +1,14 @@
 import { Request, Response } from 'express';
 import { search } from '../../../controllers/ai/search';
 import * as searchModel from '../../../models/ai/search';
+import * as searchClaudeModel from '../../../models/ai/search-claude';
 
 jest.mock('../../../models/ai/search');
+jest.mock('../../../models/ai/search-claude');
 
 const mockSearchBooks = searchModel.searchBooks as jest.Mock;
 const mockMatchLibraryEntries = searchModel.matchLibraryEntries as jest.Mock;
+const mockSearchBooksWithClaude = searchClaudeModel.searchBooksWithClaude as jest.Mock;
 
 const bookInLibrary = {
   googleBooksId: 'a',
@@ -32,6 +35,10 @@ function makeRes() {
 }
 
 describe('search controller', () => {
+  beforeEach(() => {
+    mockSearchBooksWithClaude.mockResolvedValue([]);
+  });
+
   it('returns 400 when query is missing', async () => {
     const res = makeRes();
     await search(makeReq({}), res);
@@ -88,5 +95,23 @@ describe('search controller', () => {
     await search(makeReq({ query: 'cats' }), res);
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+  });
+
+  it('uses Claude results when non-empty and does not call searchBooks', async () => {
+    const claudeBook = { googleBooksId: null, title: 'Claude Pick', inLibrary: false, libraryStatus: null, source: 'claude' };
+    mockSearchBooksWithClaude.mockResolvedValue([claudeBook]);
+    const res = makeRes();
+    await search(makeReq({ query: 'cats' }), res);
+    expect(mockSearchBooks).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ books: [claudeBook], query: 'cats' });
+  });
+
+  it('falls back to searchBooks when Claude returns no results', async () => {
+    mockSearchBooksWithClaude.mockResolvedValue([]);
+    mockSearchBooks.mockResolvedValue([bookNotInLibrary]);
+    const res = makeRes();
+    await search(makeReq({ query: 'cats' }), res);
+    expect(mockSearchBooks).toHaveBeenCalledWith('cats', 20);
+    expect(res.json).toHaveBeenCalledWith({ books: [bookNotInLibrary], query: 'cats' });
   });
 });

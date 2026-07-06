@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL!;
+export function getAnthropicModel(): string {
+  return process.env.ANTHROPIC_MODEL!;
+}
 
 let _anthropic: Anthropic | null = null;
 

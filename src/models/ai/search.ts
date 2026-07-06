@@ -1,7 +1,7 @@
 import { matchLibraryEntries as matchLibraryEntriesData } from '../../data/ai-data';
 import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from '../../lib/open-library-rate-limiter';
 
-interface SearchResult {
+export interface SearchResult {
   googleBooksId: string | null;
   openLibraryId: string | null;
   title: string;
@@ -16,7 +16,7 @@ interface SearchResult {
   blurb: string | null;
   inLibrary: boolean;
   libraryStatus: string | null;
-  source: 'google_books' | 'open_library';
+  source: 'google_books' | 'open_library' | 'claude';
 }
 
 async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {

@@ -10,6 +10,7 @@ jest.mock('../../../lib/s3', () => ({
 }));
 jest.mock('../../../lib/anthropic', () => ({
   getAnthropic: jest.fn(),
+  getAnthropicModel: jest.fn(),
 }));
 jest.mock('../../../data/upload-data');
 jest.mock('../../../models/ai/search');
