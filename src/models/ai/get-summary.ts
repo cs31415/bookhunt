@@ -1,4 +1,4 @@
-import { getAnthropic } from '../../lib/anthropic';
+import { ANTHROPIC_MODEL, getAnthropic } from '../../lib/anthropic';
 import { fetchBookContext, getCachedSummary, saveSummary } from '../../data/ai-data';
 
 async function generateSummary(title: string, author: string, blurb?: string): Promise<string> {
@@ -6,7 +6,7 @@ async function generateSummary(title: string, author: string, blurb?: string): P
   const prompt = `Write a 3-paragraph summary of the book '${title}' by ${author}.${blurbContext} Focus on key themes and why the book matters.`;
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-6',
+    model: ANTHROPIC_MODEL,
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   });

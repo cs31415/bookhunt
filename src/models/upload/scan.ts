@@ -1,6 +1,6 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { getAnthropic } from '../../lib/anthropic';
+import { ANTHROPIC_MODEL, getAnthropic } from '../../lib/anthropic';
 import { extractResponseText } from '../../lib/extract-response-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { getS3 } from '../../lib/s3';
@@ -20,7 +20,7 @@ export async function detectBooksFromImages(imageKeys: string[]) {
   }));
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-6',
+    model: ANTHROPIC_MODEL,
     max_tokens: 2048,
     messages: [{
       role: 'user',
