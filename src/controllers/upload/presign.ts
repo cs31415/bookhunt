@@ -2,6 +2,49 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { createPresignedUrl } from '../../models/upload/presign';
 
+/**
+ * @swagger
+ * /upload/presign:
+ *   post:
+ *     tags: [Upload]
+ *     summary: Get presigned S3 URLs for direct image upload
+ *     description: |
+ *       Send `{ files: [{ contentType }, …] }` (1–10 items) and receive `[{ url, key }, …]`.
+ *       PUT each file directly to its returned URL (no auth header required for the S3 PUT).
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [files]
+ *             properties:
+ *               files:
+ *                 type: array
+ *                 minItems: 1
+ *                 maxItems: 10
+ *                 items:
+ *                   type: object
+ *                   required: [contentType]
+ *                   properties:
+ *                     contentType: { type: string, example: "image/jpeg" }
+ *     responses:
+ *       200:
+ *         description: Presigned upload URLs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   url: { type: string }
+ *                   key: { type: string }
+ *       400:
+ *         description: Invalid or missing files array
+ */
 export async function presign(req: Request, res: Response) {
   try {
     const { files } = req.body;

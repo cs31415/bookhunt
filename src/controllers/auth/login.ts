@@ -3,6 +3,40 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { findUserByEmail } from '../../models/auth/login';
 
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Log in with email and password
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string }
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: integer }
+ *                     email: { type: string }
+ *                     displayName: { type: string }
+ *                 token: { type: string }
+ *       401:
+ *         description: Invalid credentials
+ */
 export async function login(req: Request, res: Response) {
   try {
     const { email, password } = req.body;

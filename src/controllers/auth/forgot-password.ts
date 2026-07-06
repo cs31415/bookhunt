@@ -2,6 +2,31 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { setResetToken } from '../../models/auth/forgot-password';
 
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Request a password reset email
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email }
+ *     responses:
+ *       200:
+ *         description: Always returns ok (no email leak)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean }
+ */
 export async function forgotPassword(req: Request, res: Response) {
   try {
     const { email } = req.body;

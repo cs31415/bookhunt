@@ -1,6 +1,25 @@
 import { Request, Response } from 'express';
 import { removeEntry as removeEntryModel } from '../../models/library/remove-entry';
 
+/**
+ * @swagger
+ * /library/{bookId}:
+ *   delete:
+ *     tags: [Library]
+ *     summary: Remove a book from the library
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: bookId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Removed
+ *       404:
+ *         description: Entry not found
+ */
 export async function removeEntry(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
