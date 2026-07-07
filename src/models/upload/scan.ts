@@ -6,8 +6,11 @@ import { parseJsonResponse } from '../../lib/parse-json-response';
 import { getS3 } from '../../lib/s3';
 import { findBookByTitle } from '../../data/upload-data';
 import { searchBooks } from '../ai/search';
+import { validateImageKeys } from './validate-image-keys';
 
-export async function detectBooksFromImages(imageKeys: string[]) {
+export async function detectBooksFromImages(imageKeys: string[], userId: number) {
+  await validateImageKeys(imageKeys, userId);
+
   const imageUrls = await Promise.all(
     imageKeys.map((key) =>
       getSignedUrl(getS3(), new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME!, Key: key }), { expiresIn: 60 }),

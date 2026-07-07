@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { detectBooksFromImages } from '../../models/upload/scan';
+import { ImageValidationError } from '../../models/upload/validate-image-keys';
 
 /**
  * @swagger
@@ -41,7 +42,10 @@ import { detectBooksFromImages } from '../../models/upload/scan';
  *                       author: { type: string, nullable: true }
  *                       matchedBookId: { type: integer }
  *       400:
- *         description: imageKeys missing, empty, contains non-strings, or exceeds 10 items
+ *         description: |
+ *           imageKeys missing, empty, contains non-strings, exceeds 10 items, or a key failed
+ *           validation (not owned by the requesting user, missing object, over 10 MB, or the
+ *           object bytes are not a JPEG/PNG/WebP image matching the declared content type)
  *       429:
  *         description: Rate limited (5/min)
  *       503:
@@ -66,9 +70,13 @@ export async function scan(req: Request, res: Response) {
       return;
     }
 
-    const detectedBooks = await detectBooksFromImages(imageKeys);
+    const detectedBooks = await detectBooksFromImages(imageKeys, req.user!.id);
     res.json({ detectedBooks });
   } catch (error) {
+    if (error instanceof ImageValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error('Error scanning bookshelf:', error);
     if (error instanceof Anthropic.APIError) {
       res.status(503).json({ error: 'Book detection service unavailable' });
