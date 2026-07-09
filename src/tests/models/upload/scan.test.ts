@@ -1,6 +1,6 @@
 import { detectBooksFromImages } from '../../../models/upload/scan';
 import * as uploadData from '../../../data/upload-data';
-import * as aiSearch from '../../../models/ai/search';
+import * as resolveDetected from '../../../models/upload/resolve-detected-book';
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: jest.fn(),
@@ -13,7 +13,7 @@ jest.mock('../../../lib/anthropic', () => ({
   getAnthropicModel: jest.fn(),
 }));
 jest.mock('../../../data/upload-data');
-jest.mock('../../../models/ai/search');
+jest.mock('../../../models/upload/resolve-detected-book');
 jest.mock('../../../models/upload/validate-image-keys', () => ({
   validateImageKeys: jest.fn().mockResolvedValue(undefined),
 }));
@@ -24,7 +24,7 @@ import { getAnthropic } from '../../../lib/anthropic';
 const mockGetSignedUrl = getSignedUrl as jest.Mock;
 const mockGetAnthropic = getAnthropic as jest.Mock;
 const mockFindBookByTitle = uploadData.findBookByTitle as jest.Mock;
-const mockSearchBooks = aiSearch.searchBooks as jest.Mock;
+const mockResolveDetectedBook = resolveDetected.resolveDetectedBook as jest.Mock;
 
 const googleBook = {
   googleBooksId: 'gb1', openLibraryId: null, title: 'Cat Science', authors: ['Dr Cat'], year: 2020,
@@ -55,7 +55,7 @@ describe('detectBooksFromImages', () => {
     process.env.S3_BUCKET_NAME = 'test-bucket';
     process.env.AWS_REGION = 'us-east-1';
     mockGetSignedUrl.mockResolvedValue('https://s3.example.com/img');
-    mockSearchBooks.mockResolvedValue([]);
+    mockResolveDetectedBook.mockResolvedValue(null);
   });
 
   it('generates a signed URL for each image key', async () => {
@@ -111,31 +111,31 @@ describe('detectBooksFromImages', () => {
     mockFindBookByTitle.mockResolvedValue(42);
     const result = await detectBooksFromImages(['uploads/1/a'], 1);
     expect(result).toEqual([{ title: 'Known Book', author: 'Author A', matchedBookId: 42 }]);
-    expect(mockSearchBooks).not.toHaveBeenCalled();
+    expect(mockResolveDetectedBook).not.toHaveBeenCalled();
   });
 
-  it('resolves unmatched books with "title by author" query when author present', async () => {
+  it('resolves unmatched books with the detected title and author', async () => {
     makeAnthropicResponse([{ title: 'Marjada', author: 'Arsha Sattar' }]);
     mockFindBookByTitle.mockResolvedValue(null);
-    mockSearchBooks.mockResolvedValue([olBook]);
+    mockResolveDetectedBook.mockResolvedValue(olBook);
     const result = await detectBooksFromImages(['uploads/1/a'], 1);
-    expect(mockSearchBooks).toHaveBeenCalledWith('Marjada by Arsha Sattar', 1);
+    expect(mockResolveDetectedBook).toHaveBeenCalledWith('Marjada', 'Arsha Sattar');
     expect((result[0] as any).resolvedBook).toMatchObject({ title: 'Marjada', source: 'open_library' });
   });
 
-  it('resolves unmatched books with just title when author is null', async () => {
+  it('resolves unmatched books with a null author', async () => {
     makeAnthropicResponse([{ title: 'Unknown Book', author: null }]);
     mockFindBookByTitle.mockResolvedValue(null);
-    mockSearchBooks.mockResolvedValue([googleBook]);
+    mockResolveDetectedBook.mockResolvedValue(googleBook);
     const result = await detectBooksFromImages(['uploads/1/a'], 1);
-    expect(mockSearchBooks).toHaveBeenCalledWith('Unknown Book', 1);
+    expect(mockResolveDetectedBook).toHaveBeenCalledWith('Unknown Book', null);
     expect((result[0] as any).resolvedBook).toMatchObject({ source: 'google_books' });
   });
 
-  it('omits resolvedBook when search returns no results', async () => {
+  it('omits resolvedBook when resolution finds no acceptable match', async () => {
     makeAnthropicResponse([{ title: 'Obscure Book', author: null }]);
     mockFindBookByTitle.mockResolvedValue(null);
-    mockSearchBooks.mockResolvedValue([]);
+    mockResolveDetectedBook.mockResolvedValue(null);
     const result = await detectBooksFromImages(['uploads/1/a'], 1);
     expect(result[0]).toEqual({ title: 'Obscure Book', author: null });
     expect(result[0]).not.toHaveProperty('resolvedBook');
@@ -147,11 +147,11 @@ describe('detectBooksFromImages', () => {
       { title: 'Marjada', author: 'Arsha Sattar' },
     ]);
     mockFindBookByTitle.mockResolvedValueOnce(10).mockResolvedValueOnce(null);
-    mockSearchBooks.mockResolvedValue([olBook]);
+    mockResolveDetectedBook.mockResolvedValue(olBook);
     const result = await detectBooksFromImages(['uploads/1/a'], 1);
     expect(result[0]).toEqual({ title: 'Known', author: 'A', matchedBookId: 10 });
     expect((result[1] as any).resolvedBook).toMatchObject({ source: 'open_library' });
-    expect(mockSearchBooks).toHaveBeenCalledTimes(1);
+    expect(mockResolveDetectedBook).toHaveBeenCalledTimes(1);
   });
 
   it('returns empty array when Claude returns no books', async () => {
