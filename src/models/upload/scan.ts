@@ -5,7 +5,7 @@ import { extractResponseText } from '../../lib/extract-response-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { getS3 } from '../../lib/s3';
 import { findBookByTitle } from '../../data/upload-data';
-import { searchBooks } from '../ai/search';
+import { resolveDetectedBook } from './resolve-detected-book';
 import { validateImageKeys } from './validate-image-keys';
 
 export async function detectBooksFromImages(imageKeys: string[], userId: number) {
@@ -54,12 +54,11 @@ export async function detectBooksFromImages(imageKeys: string[], userId: number)
     if (matchedBookId) {
       detectedBooks.push({ title: book.title, author: book.author, matchedBookId });
     } else {
-      const query = book.author ? `${book.title} by ${book.author}` : book.title;
-      const results = await searchBooks(query, 1);
+      const resolvedBook = await resolveDetectedBook(book.title, book.author);
       detectedBooks.push({
         title: book.title,
         author: book.author,
-        ...(results.length > 0 && { resolvedBook: results[0] }),
+        ...(resolvedBook && { resolvedBook }),
       });
     }
   }
