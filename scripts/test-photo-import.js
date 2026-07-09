@@ -55,7 +55,7 @@ const password = process.env.TEST_PASSWORD;
 const displayName = process.env.TEST_DISPLAY_NAME;
 
 async function main() {
-  const photoFiles = process.argv.slice(2).length ? process.argv.slice(2) : ['IMG_6455.jpeg'];
+  const photoFiles = process.argv.slice(2).length ? process.argv.slice(2) : ['IMG_6458.jpeg'];
 
   for (const f of photoFiles) {
     if (!fs.existsSync(path.join(PHOTO_DIR, f))) {
@@ -139,16 +139,20 @@ async function main() {
 
     console.log(`Uploading ${toUpload.length} photo(s) to S3 in parallel ...`);
     const uploadResults = await Promise.allSettled(
-      toUpload.map(({ file }, pi) =>
-        fetch(presignData[pi].url, {
-          method: 'PUT',
-          headers: { 'Content-Type': contentTypeFor(file) },
-          body: fs.readFileSync(path.join(PHOTO_DIR, file)),
-        }).then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      toUpload.map(({ file }, pi) => {
+        // Presigned POST: send every policy field, then the file as the last part
+        const form = new FormData();
+        for (const [name, value] of Object.entries(presignData[pi].fields)) form.append(name, value);
+        form.append(
+          'file',
+          new Blob([fs.readFileSync(path.join(PHOTO_DIR, file))], { type: contentTypeFor(file) }),
+          file
+        );
+        return fetch(presignData[pi].url, { method: 'POST', body: form }).then(async (r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
           return r;
-        })
-      )
+        });
+      })
     );
 
     uploadResults.forEach((result, pi) => {
@@ -257,7 +261,7 @@ async function main() {
     }
 
     bulkData.entries.forEach((entry) => {
-      console.log(`  added  "${entry.title ?? entry.book_id}" — entry ID: ${entry.id}`);
+      console.log(`  added  book ID ${entry.book_id} — status: ${entry.status}`);
     });
     bulkData.errors.forEach((err) => {
       console.error(`  error  [${err.index}] ${err.googleBooksId}: ${err.reason}`);
