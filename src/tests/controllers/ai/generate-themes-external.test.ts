@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 import { generateThemesExternal } from '../../../controllers/ai/generate-themes-external';
 import * as generateThemesExternalModel from '../../../models/ai/generate-themes-external';
 
@@ -43,8 +43,8 @@ describe('generateThemesExternal controller', () => {
     expect(res.json).toHaveBeenCalledWith({ genres: ['Memoir'], themes: ['resilience'] });
   });
 
-  it('returns 503 when Claude raises an API error', async () => {
-    mockGenerateThemesExternal.mockRejectedValue(new Anthropic.APIError(503, undefined, 'unavailable', {}));
+  it('returns 503 when all LLM models fail', async () => {
+    mockGenerateThemesExternal.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
     const res = makeRes();
     await generateThemesExternal(makeReq({ title: 'A Book', authorName: 'Author' }), res);
     expect(res.status).toHaveBeenCalledWith(503);

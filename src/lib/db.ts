@@ -11,7 +11,16 @@ export function getPool(): Pool {
 
 export const pool = new Proxy({} as Pool, {
   get(_target, prop) {
-    const value = Reflect.get(getPool(), prop);
-    return typeof value === 'function' ? value.bind(getPool()) : value;
+    const target = getPool();
+    const value = Reflect.get(target, prop);
+    if (prop !== 'query' || typeof value !== 'function') {
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+    return (...args: Parameters<Pool['query']>) => {
+      const [text, params] = args;
+      const sql = typeof text === 'string' ? text : (text as { text: string }).text;
+      console.log(`[db] query: ${sql}${params ? ` params: ${JSON.stringify(params)}` : ''}`);
+      return (value as Pool['query']).apply(target, args);
+    };
   },
 });

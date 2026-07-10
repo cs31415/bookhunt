@@ -11,7 +11,7 @@ interface BookQuery {
  * /search/metadata:
  *   post:
  *     tags: [Search]
- *     summary: Batch-resolve real metadata (cover, ISBN, rating, etc.) for a list of title/author pairs via Google Books/OpenLibrary
+ *     summary: Batch-resolve real metadata (cover, ISBN, rating, etc.) for a list of title/author pairs via the books API
  *     security:
  *       - bearerAuth: []
  *       - {}

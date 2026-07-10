@@ -7,7 +7,7 @@ import { searchBooksWithClaude } from '../../models/ai/search-claude';
  * /ai/search:
  *   post:
  *     tags: [AI]
- *     summary: Search via Claude with library matching, falling back to Google Books/OpenLibrary
+ *     summary: Search via LLM with library matching, falling back to the books API
  *     security:
  *       - bearerAuth: []
  *       - {}

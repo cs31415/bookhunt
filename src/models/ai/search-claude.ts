@@ -1,5 +1,4 @@
-import { getAnthropicModel, getAnthropic } from '../../lib/anthropic';
-import { extractResponseText } from '../../lib/extract-response-text';
+import { completeText } from '../../lib/llm/complete-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { SearchResult } from './search';
 
@@ -8,14 +7,10 @@ export async function searchBooksWithClaude(query: string, limit: number): Promi
   const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title" and "author" fields (author can be null if unknown). Return ONLY valid JSON, no other text.`;
 
   try {
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 1536,
-      messages: [{ role: 'user', content: prompt }],
+    const suggestions = await completeText(prompt, {
+      maxTokens: 1536,
+      transform: (rawText) => parseJsonResponse<{ title: string; author: string | null }[]>(rawText),
     });
-
-    const rawText = extractResponseText(response, '[]');
-    const suggestions = parseJsonResponse<{ title: string; author: string | null }[]>(rawText);
 
     return suggestions
       .filter((s) => s && s.title)
@@ -37,7 +32,7 @@ export async function searchBooksWithClaude(query: string, limit: number): Promi
         source: 'claude' as const,
       }));
   } catch (error) {
-    console.error('[claude] search failed, caller should fall back:', error);
+    console.error('[llm] search failed, caller should fall back:', error);
     return [];
   }
 }

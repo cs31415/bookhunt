@@ -1,18 +1,5 @@
-import { getAnthropicModel, getAnthropic } from '../../lib/anthropic';
 import { fetchBookContext, saveSummary } from '../../data/ai-data';
-
-async function generateSummary(title: string, author: string, blurb?: string): Promise<string> {
-  const blurbContext = blurb ? ` Here is some context about the book: ${blurb}.` : '';
-  const prompt = `Write a 3-paragraph summary of the book '${title}' by ${author}.${blurbContext} Focus on key themes and why the book matters.`;
-
-  const response = await getAnthropic().messages.create({
-    model: getAnthropicModel(),
-    max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  return (response.content[0] as { type: 'text'; text: string }).text;
-}
+import { generateSummary } from './generate-summary';
 
 export async function regenerateSummary(bookId: number) {
   const book = await fetchBookContext(bookId);

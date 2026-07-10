@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmUnavailableError } from '../../lib/llm/llm-errors';
 import { generateThemesExternal as generateThemesExternalModel } from '../../models/ai/generate-themes-external';
 
 /**
@@ -8,7 +8,7 @@ import { generateThemesExternal as generateThemesExternalModel } from '../../mod
  *   post:
  *     tags: [AI]
  *     summary: Generate genres and themes for a book not yet in the catalog
- *     description: For external search results (Google Books/OpenLibrary) with no bookId. Always calls Claude fresh; nothing is cached or persisted since there is no catalog row to attach it to. Must be registered before /ai/themes/{bookId} so the literal "external" segment is not swallowed by the bookId param.
+ *     description: For external search results (from the books API) with no bookId. Always calls the LLM fresh; nothing is cached or persisted since there is no catalog row to attach it to. Must be registered before /ai/themes/{bookId} so the literal "external" segment is not swallowed by the bookId param.
  *     requestBody:
  *       required: true
  *       content:
@@ -48,7 +48,7 @@ export async function generateThemesExternal(req: Request, res: Response) {
     res.json(result);
   } catch (error) {
     console.error('Error generating themes for external book:', error);
-    if (error instanceof Anthropic.APIError) {
+    if (error instanceof LlmUnavailableError) {
       res.status(503).json({ error: 'AI service temporarily unavailable' });
       return;
     }
