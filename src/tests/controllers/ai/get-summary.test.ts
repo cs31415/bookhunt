@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 import { getSummary } from '../../../controllers/ai/get-summary';
 import * as getSummaryModel from '../../../models/ai/get-summary';
 
@@ -40,8 +40,8 @@ describe('getSummary controller', () => {
     expect(res.json).toHaveBeenCalledWith({ bookId: 1, summary: 'A summary', generatedAt: null });
   });
 
-  it('returns 503 when Claude raises an API error', async () => {
-    mockGetSummaryModel.mockRejectedValue(new Anthropic.APIError(503, undefined, 'unavailable', {}));
+  it('returns 503 when all LLM models fail', async () => {
+    mockGetSummaryModel.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
     const res = makeRes();
     await getSummary(makeReq('1'), res);
     expect(res.status).toHaveBeenCalledWith(503);

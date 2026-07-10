@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmUnavailableError } from '../../lib/llm/llm-errors';
 import { detectBooksFromImages } from '../../models/upload/scan';
 import { ImageValidationError } from '../../models/upload/validate-image-keys';
 
@@ -78,7 +78,7 @@ export async function scan(req: Request, res: Response) {
       return;
     }
     console.error('Error scanning bookshelf:', error);
-    if (error instanceof Anthropic.APIError) {
+    if (error instanceof LlmUnavailableError) {
       res.status(503).json({ error: 'Book detection service unavailable' });
       return;
     }

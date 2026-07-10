@@ -1,14 +1,15 @@
 import { searchBooksWithClaude } from '../../../models/ai/search-claude';
-import { getAnthropic } from '../../../lib/anthropic';
+import { completeText } from '../../../lib/llm/complete-text';
+import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 
-jest.mock('../../../lib/anthropic');
+jest.mock('../../../lib/llm/complete-text');
 
-const mockGetAnthropic = getAnthropic as jest.Mock;
+const mockCompleteText = completeText as jest.Mock;
 
-function mockClaudeResponse(text: string) {
-  const mockCreate = jest.fn().mockResolvedValue({ content: [{ type: 'text', text }] });
-  mockGetAnthropic.mockReturnValue({ messages: { create: mockCreate } });
-  return mockCreate;
+function mockLlmResponse(text: string) {
+  mockCompleteText.mockImplementation(async (_prompt, options) =>
+    options.transform ? options.transform(text) : text,
+  );
 }
 
 describe('searchBooksWithClaude', () => {
@@ -17,7 +18,7 @@ describe('searchBooksWithClaude', () => {
   });
 
   it('maps title/author suggestions into placeholder SearchResults with source: claude', async () => {
-    mockClaudeResponse('[{"title":"Grief Is the Thing with Feathers","author":"Max Porter"}]');
+    mockLlmResponse('[{"title":"Grief Is the Thing with Feathers","author":"Max Porter"}]');
 
     const result = await searchBooksWithClaude('books about grief', 5);
 
@@ -43,14 +44,14 @@ describe('searchBooksWithClaude', () => {
   });
 
   it('sets authors to an empty array when author is null', async () => {
-    mockClaudeResponse('[{"title":"Anonymous Work","author":null}]');
+    mockLlmResponse('[{"title":"Anonymous Work","author":null}]');
 
     const [book] = await searchBooksWithClaude('anonymous books', 5);
     expect(book.authors).toEqual([]);
   });
 
   it('parses a markdown-fenced JSON reply', async () => {
-    mockClaudeResponse('```json\n[{"title":"Fenced Book","author":"Someone"}]\n```');
+    mockLlmResponse('```json\n[{"title":"Fenced Book","author":"Someone"}]\n```');
 
     const result = await searchBooksWithClaude('query', 5);
     expect(result).toHaveLength(1);
@@ -58,33 +59,39 @@ describe('searchBooksWithClaude', () => {
   });
 
   it('filters out entries with no title', async () => {
-    mockClaudeResponse('[{"title":"Has Title","author":"A"},{"author":"No Title"}]');
+    mockLlmResponse('[{"title":"Has Title","author":"A"},{"author":"No Title"}]');
 
     const result = await searchBooksWithClaude('query', 5);
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe('Has Title');
   });
 
-  it('returns [] when Claude throws', async () => {
-    const mockCreate = jest.fn().mockRejectedValue(new Error('claude down'));
-    mockGetAnthropic.mockReturnValue({ messages: { create: mockCreate } });
+  it('returns [] when all LLM models fail', async () => {
+    mockCompleteText.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
 
     expect(await searchBooksWithClaude('query', 5)).toEqual([]);
   });
 
   it('returns [] when the response is not valid JSON', async () => {
-    mockClaudeResponse('not json at all');
+    mockLlmResponse('not json at all');
 
     expect(await searchBooksWithClaude('query', 5)).toEqual([]);
   });
 
   it('includes the requested limit in the prompt, clamped between 1 and 40', async () => {
-    const mockCreate = mockClaudeResponse('[]');
+    mockLlmResponse('[]');
 
     await searchBooksWithClaude('query', 100);
-    expect(mockCreate.mock.calls[0][0].messages[0].content).toContain('up to 40 books');
+    expect(mockCompleteText.mock.calls[0][0]).toContain('up to 40 books');
 
     await searchBooksWithClaude('query', 0);
-    expect(mockCreate.mock.calls[1][0].messages[0].content).toContain('up to 1 books');
+    expect(mockCompleteText.mock.calls[1][0]).toContain('up to 1 books');
+  });
+
+  it('requests up to 1536 tokens', async () => {
+    mockLlmResponse('[]');
+
+    await searchBooksWithClaude('query', 5);
+    expect(mockCompleteText.mock.calls[0][1].maxTokens).toBe(1536);
   });
 });

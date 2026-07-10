@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 import { scan } from '../../../controllers/upload/scan';
 import * as scanModel from '../../../models/upload/scan';
 import { ImageValidationError } from '../../../models/upload/validate-image-keys';
@@ -72,8 +72,8 @@ describe('scan controller', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'invalid or unsupported image: uploads/2/abc' });
   });
 
-  it('returns 503 when Anthropic API throws APIError', async () => {
-    mockDetect.mockRejectedValue(new Anthropic.APIError(503, undefined, 'upstream', {}));
+  it('returns 503 when all LLM models fail', async () => {
+    mockDetect.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
     const res = makeRes();
     await scan(makeReq({ imageKeys: ['uploads/1/abc'] }), res);
     expect(res.status).toHaveBeenCalledWith(503);

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmUnavailableError } from '../../lib/llm/llm-errors';
 import { regenerateSummary as regenerateSummaryModel } from '../../models/ai/regenerate-summary';
 
 /**
@@ -40,7 +40,7 @@ export async function regenerateSummary(req: Request, res: Response) {
     res.json(result);
   } catch (error) {
     console.error('Error regenerating summary:', error);
-    if (error instanceof Anthropic.APIError) {
+    if (error instanceof LlmUnavailableError) {
       res.status(503).json({ error: 'AI service temporarily unavailable' });
       return;
     }
