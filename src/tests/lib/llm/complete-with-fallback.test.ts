@@ -20,6 +20,7 @@ describe('completeWithFallback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockHasLlmApiKey.mockReturnValue(true);
+    jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });

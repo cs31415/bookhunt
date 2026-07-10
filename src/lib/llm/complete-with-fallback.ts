@@ -22,6 +22,7 @@ export async function completeWithFallback<T>(
       continue;
     }
     try {
+      console.log(`[${provider}:${model}]\n${request.prompt}`);
       const rawText = await getLlmAdapter(provider)(model, request);
       if (!rawText.trim()) {
         throw new Error('empty response');

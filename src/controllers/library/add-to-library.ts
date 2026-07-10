@@ -6,7 +6,7 @@ import { addToLibrary as addToLibraryModel } from '../../models/library/add-to-l
  * /library:
  *   post:
  *     tags: [Library]
- *     summary: Add a book to the library (upserts from Google Books data)
+ *     summary: Add a book to the library (upserts from books API data)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -18,7 +18,7 @@ import { addToLibrary as addToLibraryModel } from '../../models/library/add-to-l
  *             required: [title, authorName, slug]
  *             properties:
  *               googleBooksId: { type: string, nullable: true, description: "Required if openLibraryId is not provided" }
- *               openLibraryId: { type: string, nullable: true, description: "OpenLibrary edition ID; required if googleBooksId is not provided" }
+ *               openLibraryId: { type: string, nullable: true, description: "Books API edition ID; required if googleBooksId is not provided" }
  *               source: { type: string, enum: [google_books, open_library] }
  *               slug: { type: string }
  *               title: { type: string }

@@ -9,7 +9,7 @@ const MAX_BOOKS = 20;
  * /library/bulk:
  *   post:
  *     tags: [Library]
- *     summary: Bulk add books to the library (upserts from Google Books data)
+ *     summary: Bulk add books to the library (upserts from books API data)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -28,7 +28,7 @@ const MAX_BOOKS = 20;
  *                   required: [slug, title, authorName]
  *                   properties:
  *                     googleBooksId: { type: string, nullable: true, description: "Required if openLibraryId is not provided" }
- *                     openLibraryId: { type: string, nullable: true, description: "OpenLibrary edition ID; required if googleBooksId is not provided" }
+ *                     openLibraryId: { type: string, nullable: true, description: "Books API edition ID; required if googleBooksId is not provided" }
  *                     source: { type: string, enum: [google_books, open_library] }
  *                     slug: { type: string }
  *                     title: { type: string }

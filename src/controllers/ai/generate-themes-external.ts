@@ -8,7 +8,7 @@ import { generateThemesExternal as generateThemesExternalModel } from '../../mod
  *   post:
  *     tags: [AI]
  *     summary: Generate genres and themes for a book not yet in the catalog
- *     description: For external search results (Google Books/OpenLibrary) with no bookId. Always calls Claude fresh; nothing is cached or persisted since there is no catalog row to attach it to. Must be registered before /ai/themes/{bookId} so the literal "external" segment is not swallowed by the bookId param.
+ *     description: For external search results (from the books API) with no bookId. Always calls the LLM fresh; nothing is cached or persisted since there is no catalog row to attach it to. Must be registered before /ai/themes/{bookId} so the literal "external" segment is not swallowed by the bookId param.
  *     requestBody:
  *       required: true
  *       content:

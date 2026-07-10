@@ -8,7 +8,7 @@ import { getSummary as getSummaryModel } from '../../models/ai/get-summary';
  *   get:
  *     tags: [AI]
  *     summary: Get a book summary, preferring the stored catalog blurb over AI generation
- *     description: Returns the book's stored blurb (from Google Books or OpenLibrary) when available. Only calls Claude to generate a summary when no blurb is stored for the book.
+ *     description: Returns the book's stored blurb (from the books API) when available. Only calls the LLM to generate a summary when no blurb is stored for the book.
  *     parameters:
  *       - in: path
  *         name: bookId
