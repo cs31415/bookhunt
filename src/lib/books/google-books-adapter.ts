@@ -40,6 +40,7 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
       isbn13: isbn13Entry?.identifier || null,
       language: info.language || null,
       blurb: info.description || null,
+      categories: info.categories || [],
       inLibrary: false,
       libraryStatus: null,
       source: 'google_books' as const,

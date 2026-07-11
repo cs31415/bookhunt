@@ -34,13 +34,13 @@ describe('generateThemesExternal controller', () => {
   });
 
   it('trims and forwards title/authorName to the model on success', async () => {
-    mockGenerateThemesExternal.mockResolvedValue({ genres: ['Memoir'], themes: ['resilience'] });
+    mockGenerateThemesExternal.mockResolvedValue({ genres: ['Memoir'], themes: ['resilience'], moods: ['Reflective'] });
     const res = makeRes();
 
     await generateThemesExternal(makeReq({ title: '  A Book  ', authorName: '  Some Author  ' }), res);
 
     expect(mockGenerateThemesExternal).toHaveBeenCalledWith('A Book', 'Some Author');
-    expect(res.json).toHaveBeenCalledWith({ genres: ['Memoir'], themes: ['resilience'] });
+    expect(res.json).toHaveBeenCalledWith({ genres: ['Memoir'], themes: ['resilience'], moods: ['Reflective'] });
   });
 
   it('returns 503 when all LLM models fail', async () => {

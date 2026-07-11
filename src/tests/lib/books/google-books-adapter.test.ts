@@ -17,6 +17,7 @@ const googleItem = {
     industryIdentifiers: [{ type: 'ISBN_13', identifier: '9781234567890' }],
     language: 'en',
     description: 'About cats',
+    categories: ['Science > Life Sciences > Zoology'],
   },
 };
 
@@ -38,6 +39,7 @@ describe('searchGoogleBooks', () => {
       isbn13: '9781234567890',
       language: 'en',
       blurb: 'About cats',
+      categories: ['Science > Life Sciences > Zoology'],
       inLibrary: false,
       libraryStatus: null,
       source: 'google_books',
@@ -50,6 +52,14 @@ describe('searchGoogleBooks', () => {
 
     const [book] = await searchGoogleBooks('x', 1);
     expect(book.coverUrl).toMatch(/^https:/);
+  });
+
+  it('defaults categories to an empty array when volumeInfo has none', async () => {
+    const item = { id: 'x', volumeInfo: { title: 'No Categories' } };
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ items: [item] }) }));
+
+    const [book] = await searchGoogleBooks('x', 1);
+    expect(book.categories).toEqual([]);
   });
 
   it('returns empty array when fetch throws', async () => {

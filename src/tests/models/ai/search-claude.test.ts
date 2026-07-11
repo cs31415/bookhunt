@@ -39,6 +39,7 @@ describe('searchBooksWithClaude', () => {
         isbn13: null,
         language: null,
         blurb: null,
+        categories: [],
         inLibrary: false,
         libraryStatus: null,
         source: 'gemini-3.1-flash-lite',

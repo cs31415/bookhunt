@@ -7,7 +7,7 @@ import { generateThemes as generateThemesModel } from '../../models/ai/generate-
  * /ai/themes/{bookId}:
  *   post:
  *     tags: [AI]
- *     summary: Generate or return cached genres and themes for a book
+ *     summary: Generate or return cached genres, themes, and moods for a book
  *     parameters:
  *       - in: path
  *         name: bookId
@@ -15,7 +15,7 @@ import { generateThemes as generateThemesModel } from '../../models/ai/generate-
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Genres and themes
+ *         description: Genres, themes, and moods
  *         content:
  *           application/json:
  *             schema:
@@ -23,6 +23,7 @@ import { generateThemes as generateThemesModel } from '../../models/ai/generate-
  *               properties:
  *                 genres: { type: array, items: { type: string } }
  *                 themes: { type: array, items: { type: string } }
+ *                 moods: { type: array, items: { type: string } }
  *       404:
  *         description: Book not found
  *       429:

@@ -18,6 +18,7 @@ const olDoc = {
   first_publish_year: 2019,
   isbn: ['9789999999999', '123'],
   edition_key: ['OL7170815M'],
+  subject: ['Cats', 'Humor'],
 };
 
 describe('searchOpenLibrary', () => {
@@ -39,10 +40,21 @@ describe('searchOpenLibrary', () => {
       rating: null,
       language: null,
       blurb: null,
+      categories: ['Cats', 'Humor'],
       inLibrary: false,
       libraryStatus: null,
       source: 'open_library',
     });
+  });
+
+  it('requests the subject field and defaults categories to an empty array when absent', async () => {
+    const doc = { ...olDoc, subject: undefined };
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [doc] }) }));
+
+    const [book] = await searchOpenLibrary('cats', 5);
+    expect(book.categories).toEqual([]);
+    const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    expect(url).toContain('fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key,subject');
   });
 
   it('sets openLibraryId to null when doc has no edition_key', async () => {
