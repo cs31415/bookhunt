@@ -13,6 +13,7 @@ BEGIN;
 \ir functions/fn_upsert_book.sql
 \ir functions/fn_get_book_by_slug.sql
 \ir functions/fn_get_book_by_google_id.sql
+\ir functions/fn_get_books_by_ids.sql
 \ir functions/fn_get_author_by_slug.sql
 \ir functions/fn_get_books_by_author.sql
 \ir functions/fn_update_author_details.sql
@@ -30,6 +31,7 @@ BEGIN;
 
 -- search
 \ir functions/fn_search_books.sql
+\ir functions/fn_search_facets.sql
 
 -- recommendations
 \ir functions/fn_recommendations.sql

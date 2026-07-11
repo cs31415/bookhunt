@@ -3,9 +3,11 @@ import { authOptional } from '../middleware/auth';
 import { rateLimiter } from '../middleware/rateLimiter';
 import { searchBooks } from '../controllers/search/search-books';
 import { getMetadata } from '../controllers/search/get-metadata';
+import { getFacets } from '../controllers/search/get-facets';
 
 const router = Router();
 
+router.get('/facets', authOptional, getFacets);
 router.get('/', authOptional, searchBooks);
 router.post('/metadata', rateLimiter(60_000, 30), authOptional, getMetadata);
 
