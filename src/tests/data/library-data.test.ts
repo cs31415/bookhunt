@@ -20,8 +20,11 @@ describe('library-data', () => {
     it('returns rows from fn_get_user_library', async () => {
       const rows = [{ id: 1, title: 'A Book' }];
       mockQuery.mockResolvedValue({ rows });
-      const result = await getUserLibrary(5);
-      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM fn_get_user_library($1)', [5]);
+      const result = await getUserLibrary(5, { limit: 24, offset: 0 });
+      expect(mockQuery).toHaveBeenCalledWith(
+        'SELECT * FROM fn_get_user_library($1, $2, $3)',
+        [5, 24, 0],
+      );
       expect(result).toEqual(rows);
     });
   });

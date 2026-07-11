@@ -44,7 +44,7 @@ External (Google Books/OpenLibrary) search is a separate concern — see `POST /
 ### Library (`/library`)
 | Method | Path | Auth | Body | Response |
 |--------|------|------|------|----------|
-| GET | / | Required | — | `{ entries: LibraryEntryWithBook[], stats }` |
+| GET | / | Required | `?page&limit` | `{ entries: LibraryEntryWithBook[], stats, total, page, pageSize }` |
 | POST | / | Required | `{ googleBooksId, status? }` | `{ entry }` — upserts book from Google Books data first, then adds to library |
 | PUT | /:bookId | Required | `{ status?, userRating?, notes?, review? }` | `{ entry }` |
 | DELETE | /:bookId | Required | — | `{ ok: true }` |

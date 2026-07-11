@@ -1,10 +1,12 @@
--- Return all library entries for a user joined with book + author data.
--- Ordered by date_added DESC.
+-- Return library entries for a user joined with book + author data, paginated.
+-- Ordered by date_added DESC. Returns a window total_count for pagination.
 -- DROP is required because adding a column changes the RETURNS TABLE row
 -- type, which CREATE OR REPLACE cannot do in place.
 DROP FUNCTION IF EXISTS fn_get_user_library(INT);
 CREATE OR REPLACE FUNCTION fn_get_user_library(
-    p_user_id INT
+    p_user_id INT,
+    p_limit   INT DEFAULT 24,
+    p_offset  INT DEFAULT 0
 ) RETURNS TABLE (
     user_id      INT,
     book_id      INT,
@@ -25,7 +27,8 @@ CREATE OR REPLACE FUNCTION fn_get_user_library(
     subjects     TEXT[],
     moods        TEXT[],
     cover_url    VARCHAR,
-    hue          VARCHAR
+    hue          VARCHAR,
+    total_count  BIGINT
 )
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -50,11 +53,13 @@ BEGIN
         b.subjects,
         b.moods,
         b.cover_url,
-        b.hue
+        b.hue,
+        COUNT(*) OVER ()::BIGINT AS total_count
     FROM library_entries le
     JOIN books   b ON b.id = le.book_id
     JOIN authors a ON a.id = b.author_id
     WHERE le.user_id = p_user_id
-    ORDER BY le.date_added DESC;
+    ORDER BY le.date_added DESC
+    LIMIT p_limit OFFSET p_offset;
 END;
 $$;

@@ -1,7 +1,15 @@
 import { pool } from '../lib/db';
 
-export async function getUserLibrary(userId: number) {
-  const result = await pool.query('SELECT * FROM fn_get_user_library($1)', [userId]);
+export interface GetUserLibraryParams {
+  limit: number;
+  offset: number;
+}
+
+export async function getUserLibrary(userId: number, { limit, offset }: GetUserLibraryParams) {
+  const result = await pool.query(
+    'SELECT * FROM fn_get_user_library($1, $2, $3)',
+    [userId, limit, offset],
+  );
   return result.rows;
 }
 

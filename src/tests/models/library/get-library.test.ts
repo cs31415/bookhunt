@@ -7,16 +7,41 @@ const mockGetUserLibrary = libraryData.getUserLibrary as jest.Mock;
 const mockGetLibraryStats = libraryData.getLibraryStats as jest.Mock;
 
 describe('getLibrary model', () => {
-  it('fetches entries and stats in parallel and returns combined result', async () => {
-    const entries = [{ id: 1, title: 'A Book' }];
-    const stats = { total: 1, read: 0, queued: 1 };
-    mockGetUserLibrary.mockResolvedValue(entries);
+  it('fetches entries and stats in parallel, defaults pagination, and strips total_count', async () => {
+    const rows = [{ id: 1, title: 'A Book', total_count: '3' }];
+    const stats = { total: 3, read: 0, queued: 1 };
+    mockGetUserLibrary.mockResolvedValue(rows);
     mockGetLibraryStats.mockResolvedValue(stats);
 
     const result = await getLibrary(42);
 
-    expect(mockGetUserLibrary).toHaveBeenCalledWith(42);
+    expect(mockGetUserLibrary).toHaveBeenCalledWith(42, { limit: 24, offset: 0 });
     expect(mockGetLibraryStats).toHaveBeenCalledWith(42);
-    expect(result).toEqual({ entries, stats });
+    expect(result).toEqual({
+      entries: [{ id: 1, title: 'A Book' }],
+      stats,
+      total: 3,
+      page: 1,
+      pageSize: 24,
+    });
+  });
+
+  it('computes offset from page/limit query params', async () => {
+    mockGetUserLibrary.mockResolvedValue([]);
+    mockGetLibraryStats.mockResolvedValue({ total: 0 });
+
+    await getLibrary(42, { page: '3', limit: '10' });
+
+    expect(mockGetUserLibrary).toHaveBeenCalledWith(42, { limit: 10, offset: 20 });
+  });
+
+  it('clamps limit to the maximum and returns 0 total when there are no entries', async () => {
+    mockGetUserLibrary.mockResolvedValue([]);
+    mockGetLibraryStats.mockResolvedValue({ total: 0 });
+
+    const result = await getLibrary(42, { limit: '999' });
+
+    expect(mockGetUserLibrary).toHaveBeenCalledWith(42, { limit: 60, offset: 0 });
+    expect(result.total).toBe(0);
   });
 });
