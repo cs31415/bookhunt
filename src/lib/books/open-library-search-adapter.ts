@@ -4,7 +4,7 @@ import { SearchResult } from './books-types';
 export async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
   await throttleOpenLibrary();
 
-  const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key`;
+  const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key,subject`;
 
   let response: globalThis.Response;
   try {
@@ -46,6 +46,7 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
       isbn13,
       language: null,
       blurb: null,
+      categories: doc.subject || [],
       inLibrary: false,
       libraryStatus: null,
       source: 'open_library' as const,

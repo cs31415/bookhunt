@@ -34,24 +34,26 @@ export async function saveSummary(bookId: number, summary: string) {
 
 export async function getBookGenresThemes(bookId: number) {
   const result = await pool.query(
-    'SELECT genres, themes FROM books WHERE id = $1',
+    'SELECT genres, themes, moods FROM books WHERE id = $1',
     [bookId],
   );
   if (
     result.rows.length > 0 &&
     result.rows[0].genres?.length > 0 &&
-    result.rows[0].themes?.length > 0
+    result.rows[0].themes?.length > 0 &&
+    result.rows[0].moods?.length > 0
   ) {
     return {
       genres: result.rows[0].genres as string[],
       themes: result.rows[0].themes as string[],
+      moods: result.rows[0].moods as string[],
     };
   }
   return null;
 }
 
-export async function updateBookAiMetadata(bookId: number, genres: string[], themes: string[]) {
-  await pool.query('SELECT fn_update_book_ai_metadata($1, $2, $3)', [bookId, genres, themes]);
+export async function updateBookAiMetadata(bookId: number, genres: string[], themes: string[], moods: string[]) {
+  await pool.query('SELECT fn_update_book_ai_metadata($1, $2, $3, $4)', [bookId, genres, themes, moods]);
 }
 
 export async function matchLibraryEntries(userId: number, googleIds: string[], isbns: string[]) {

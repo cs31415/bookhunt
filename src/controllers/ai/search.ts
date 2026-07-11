@@ -46,6 +46,7 @@ import { searchBooksWithClaude } from '../../models/ai/search-claude';
  *                       isbn13: { type: string, nullable: true }
  *                       language: { type: string }
  *                       blurb: { type: string }
+ *                       categories: { type: array, items: { type: string } }
  *                       inLibrary: { type: boolean }
  *                       libraryStatus: { type: string, nullable: true }
  *                 query: { type: string }

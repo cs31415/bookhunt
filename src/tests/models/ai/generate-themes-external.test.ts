@@ -17,22 +17,22 @@ describe('generateThemesExternal model', () => {
   });
 
   it('prompts the LLM with the given title and author and parses a plain JSON reply', async () => {
-    mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"]}');
+    mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}');
 
     const result = await generateThemesExternal('A Book', 'Some Author');
 
     const prompt = mockCompleteText.mock.calls[0][0];
     expect(prompt).toContain('A Book');
     expect(prompt).toContain('Some Author');
-    expect(result).toEqual({ genres: ['Memoir'], themes: ['resilience'] });
+    expect(result).toEqual({ genres: ['Memoir'], themes: ['resilience'], moods: ['Reflective'] });
   });
 
   it('parses a markdown-fenced JSON reply', async () => {
-    mockLlmResponse('```json\n{"genres":["Memoir"],"themes":["resilience"]}\n```');
+    mockLlmResponse('```json\n{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}\n```');
 
     const result = await generateThemesExternal('A Book', 'Some Author');
 
-    expect(result).toEqual({ genres: ['Memoir'], themes: ['resilience'] });
+    expect(result).toEqual({ genres: ['Memoir'], themes: ['resilience'], moods: ['Reflective'] });
   });
 
   it('propagates errors from the LLM call', async () => {

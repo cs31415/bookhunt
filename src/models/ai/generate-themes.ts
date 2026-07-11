@@ -10,7 +10,7 @@ export async function generateThemes(bookId: number) {
 
   const parsed = await generateThemesExternal(book.title, book.author_name);
 
-  await updateBookAiMetadata(bookId, parsed.genres, parsed.themes);
+  await updateBookAiMetadata(bookId, parsed.genres, parsed.themes, parsed.moods);
 
   return parsed;
 }

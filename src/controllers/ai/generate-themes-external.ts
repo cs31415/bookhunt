@@ -7,7 +7,7 @@ import { generateThemesExternal as generateThemesExternalModel } from '../../mod
  * /ai/themes/external:
  *   post:
  *     tags: [AI]
- *     summary: Generate genres and themes for a book not yet in the catalog
+ *     summary: Generate genres, themes, and moods for a book not yet in the catalog
  *     description: For external search results (from the books API) with no bookId. Always calls the LLM fresh; nothing is cached or persisted since there is no catalog row to attach it to. Must be registered before /ai/themes/{bookId} so the literal "external" segment is not swallowed by the bookId param.
  *     requestBody:
  *       required: true
@@ -21,7 +21,7 @@ import { generateThemesExternal as generateThemesExternalModel } from '../../mod
  *               authorName: { type: string }
  *     responses:
  *       200:
- *         description: Genres and themes
+ *         description: Genres, themes, and moods
  *         content:
  *           application/json:
  *             schema:
@@ -29,6 +29,7 @@ import { generateThemesExternal as generateThemesExternalModel } from '../../mod
  *               properties:
  *                 genres: { type: array, items: { type: string } }
  *                 themes: { type: array, items: { type: string } }
+ *                 moods: { type: array, items: { type: string } }
  *       400:
  *         description: Missing title or authorName
  *       429:

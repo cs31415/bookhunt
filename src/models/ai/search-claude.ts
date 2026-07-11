@@ -27,6 +27,7 @@ export async function searchBooksWithClaude(query: string, limit: number): Promi
         isbn13: null,
         language: null,
         blurb: null,
+        categories: [],
         inLibrary: false,
         libraryStatus: null,
         source: model.model,

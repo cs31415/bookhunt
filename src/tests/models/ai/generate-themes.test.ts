@@ -27,34 +27,34 @@ describe('generateThemes model', () => {
     expect(mockCompleteText).not.toHaveBeenCalled();
   });
 
-  it('returns cached genres/themes without calling the LLM', async () => {
+  it('returns cached genres/themes/moods without calling the LLM', async () => {
     mockFetchBookContext.mockResolvedValue({ title: 'A Book', author_name: 'Author' });
-    mockGetBookGenresThemes.mockResolvedValue({ genres: ['Sci-Fi'], themes: ['Isolation'] });
+    mockGetBookGenresThemes.mockResolvedValue({ genres: ['Sci-Fi'], themes: ['Isolation'], moods: ['Bleak'] });
 
     const result = await generateThemes(1);
 
-    expect(result).toEqual({ genres: ['Sci-Fi'], themes: ['Isolation'] });
+    expect(result).toEqual({ genres: ['Sci-Fi'], themes: ['Isolation'], moods: ['Bleak'] });
     expect(mockCompleteText).not.toHaveBeenCalled();
   });
 
   it('parses a plain JSON response from the LLM and persists it', async () => {
     mockFetchBookContext.mockResolvedValue({ title: 'A Book', author_name: 'Author' });
     mockGetBookGenresThemes.mockResolvedValue(null);
-    mockLlmResponse('{"genres":["Popular Science"],"themes":["units of selection"]}');
+    mockLlmResponse('{"genres":["Popular Science"],"themes":["units of selection"],"moods":["Rigorous"]}');
 
     const result = await generateThemes(1);
 
-    expect(mockUpdateBookAiMetadata).toHaveBeenCalledWith(1, ['Popular Science'], ['units of selection']);
-    expect(result).toEqual({ genres: ['Popular Science'], themes: ['units of selection'] });
+    expect(mockUpdateBookAiMetadata).toHaveBeenCalledWith(1, ['Popular Science'], ['units of selection'], ['Rigorous']);
+    expect(result).toEqual({ genres: ['Popular Science'], themes: ['units of selection'], moods: ['Rigorous'] });
   });
 
   it('parses a markdown-fenced JSON response from the LLM (regression for the 500 on real replies)', async () => {
     mockFetchBookContext.mockResolvedValue({ title: 'A Book', author_name: 'Author' });
     mockGetBookGenresThemes.mockResolvedValue(null);
-    mockLlmResponse('```json\n{"genres":["Popular Science"],"themes":["units of selection"]}\n```');
+    mockLlmResponse('```json\n{"genres":["Popular Science"],"themes":["units of selection"],"moods":["Rigorous"]}\n```');
 
     const result = await generateThemes(1);
 
-    expect(result).toEqual({ genres: ['Popular Science'], themes: ['units of selection'] });
+    expect(result).toEqual({ genres: ['Popular Science'], themes: ['units of selection'], moods: ['Rigorous'] });
   });
 });
