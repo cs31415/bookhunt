@@ -1,4 +1,5 @@
 import { pool } from '../lib/db';
+import { BooksProvider } from '../lib/books/books-types';
 
 export async function getUserLibrary(userId: number) {
   const result = await pool.query('SELECT * FROM fn_get_user_library($1)', [userId]);
@@ -13,7 +14,7 @@ export async function getLibraryStats(userId: number) {
 export interface UpsertBookParams {
   googleBooksId?: string | null;
   openLibraryId?: string | null;
-  source?: 'google_books' | 'open_library';
+  source?: BooksProvider;
   slug: string;
   title: string;
   authorName: string;

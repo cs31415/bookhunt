@@ -97,13 +97,13 @@ describe('search controller', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
   });
 
-  it('uses Claude results when non-empty and does not call searchBooks', async () => {
-    const claudeBook = { googleBooksId: null, title: 'Claude Pick', inLibrary: false, libraryStatus: null, source: 'claude' };
-    mockSearchBooksWithClaude.mockResolvedValue([claudeBook]);
+  it('uses LLM results when non-empty and does not call searchBooks', async () => {
+    const llmBook = { googleBooksId: null, title: 'LLM Pick', inLibrary: false, libraryStatus: null, source: 'gemini-3.1-flash-lite' };
+    mockSearchBooksWithClaude.mockResolvedValue([llmBook]);
     const res = makeRes();
     await search(makeReq({ query: 'cats' }), res);
     expect(mockSearchBooks).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith({ books: [claudeBook], query: 'cats' });
+    expect(res.json).toHaveBeenCalledWith({ books: [llmBook], query: 'cats' });
   });
 
   it('falls back to searchBooks when Claude returns no results', async () => {

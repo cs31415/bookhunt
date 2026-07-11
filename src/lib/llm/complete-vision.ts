@@ -9,5 +9,6 @@ export async function completeVision<T = string>(
 ): Promise<T> {
   const chain = parseModelConfig('LLM_VISION_MODELS');
   const transform = options.transform ?? ((rawText: string) => rawText as unknown as T);
-  return completeWithFallback(chain, { prompt, imageUrls, maxTokens: options.maxTokens }, transform);
+  const { result } = await completeWithFallback(chain, { prompt, imageUrls, maxTokens: options.maxTokens }, transform);
+  return result;
 }

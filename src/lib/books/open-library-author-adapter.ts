@@ -1,24 +1,14 @@
 import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
-
-type OpenLibraryBio = string | { value?: string } | undefined;
-
-export interface OpenLibraryAuthorDetails {
-  birthYear: number | null;
-  bio: string | null;
-}
-
-function extractBio(bio: OpenLibraryBio): string | null {
-  if (!bio) return null;
-  return typeof bio === 'string' ? bio : bio.value ?? null;
-}
+import { extractOpenLibraryTextField } from './extract-open-library-text-field';
+import { AuthorDetails } from './books-types';
 
 function extractBirthYear(birthDate: string | undefined): number | null {
   const match = birthDate?.match(/\d{4}/);
   return match ? Number(match[0]) : null;
 }
 
-export async function fetchOpenLibraryAuthorDetails(name: string): Promise<OpenLibraryAuthorDetails> {
-  const empty: OpenLibraryAuthorDetails = { birthYear: null, bio: null };
+export async function fetchOpenLibraryAuthorDetails(name: string): Promise<AuthorDetails> {
+  const empty: AuthorDetails = { birthYear: null, bio: null };
 
   await throttleOpenLibrary();
 
@@ -44,7 +34,7 @@ export async function fetchOpenLibraryAuthorDetails(name: string): Promise<OpenL
     const response = await fetch(`${OPENLIBRARY_API_URL}/authors/${doc.key}.json`);
     if (response.ok) {
       const author: any = await response.json();
-      bio = extractBio(author.bio);
+      bio = extractOpenLibraryTextField(author.bio);
     }
   } catch {
     // leave bio null

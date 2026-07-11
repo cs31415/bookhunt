@@ -1,22 +1,9 @@
 import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
+import { extractOpenLibraryTextField } from './extract-open-library-text-field';
+import { EditionDetails } from './books-types';
 
-type OpenLibraryDescription = string | { value?: string } | undefined;
-
-export interface OpenLibraryEditionDetails {
-  description: string | null;
-  publisher: string | null;
-  pages: number | null;
-}
-
-function extractDescription(description: OpenLibraryDescription): string | null {
-  if (!description) return null;
-  return typeof description === 'string' ? description : description.value ?? null;
-}
-
-export async function fetchOpenLibraryEditionDetails(
-  openLibraryId: string,
-): Promise<OpenLibraryEditionDetails> {
-  const empty: OpenLibraryEditionDetails = { description: null, publisher: null, pages: null };
+export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Promise<EditionDetails> {
+  const empty: EditionDetails = { description: null, publisher: null, pages: null };
 
   await throttleOpenLibrary();
 
@@ -31,7 +18,7 @@ export async function fetchOpenLibraryEditionDetails(
 
   const publisher: string | null = edition.publishers?.[0] || null;
   const pages: number | null = edition.number_of_pages || null;
-  let description = extractDescription(edition.description);
+  let description = extractOpenLibraryTextField(edition.description);
 
   const workKey: string | undefined = edition.works?.[0]?.key;
   if (!description && workKey) {
@@ -40,7 +27,7 @@ export async function fetchOpenLibraryEditionDetails(
       const response = await fetch(`${OPENLIBRARY_API_URL}${workKey}.json`);
       if (response.ok) {
         const work: any = await response.json();
-        description = extractDescription(work.description);
+        description = extractOpenLibraryTextField(work.description);
       }
     } catch {
       // leave description null

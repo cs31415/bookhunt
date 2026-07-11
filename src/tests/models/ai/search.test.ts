@@ -1,267 +1,45 @@
 import { searchBooks, matchLibraryEntries } from '../../../models/ai/search';
 import * as aiData from '../../../data/ai-data';
+import { searchWithFallback } from '../../../lib/books/search-with-fallback';
+import { parseBooksProviderConfig } from '../../../lib/books/parse-books-provider-config';
 
 jest.mock('../../../data/ai-data');
-jest.mock('../../../lib/open-library-rate-limiter', () => ({
-  throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
-  OPENLIBRARY_API_URL: 'https://openlibrary.org',
-  OPENLIBRARY_COVERS_URL: 'https://covers.openlibrary.org',
-}));
+jest.mock('../../../lib/books/search-with-fallback');
+jest.mock('../../../lib/books/parse-books-provider-config');
 
 const mockMatchData = aiData.matchLibraryEntries as jest.Mock;
-
-const GOOGLE_URL = 'googleapis.com';
-const OL_URL = 'openlibrary.org';
-
-function mockFetch(handlers: Record<string, () => any>) {
-  (global.fetch as jest.Mock).mockImplementation((url: string) => {
-    for (const [key, handler] of Object.entries(handlers)) {
-      if (url.includes(key)) return handler();
-    }
-    return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
-  });
-}
-
-const googleItem = {
-  id: 'abc123',
-  volumeInfo: {
-    title: 'Cat Science',
-    authors: ['Dr Cat'],
-    publishedDate: '2020-05-10',
-    publisher: 'CatPress',
-    pageCount: 200,
-    averageRating: 4.5,
-    imageLinks: { thumbnail: 'http://example.com/cover.jpg' },
-    industryIdentifiers: [{ type: 'ISBN_13', identifier: '9781234567890' }],
-    language: 'en',
-    description: 'About cats',
-  },
-};
-
-const olDoc = {
-  key: '/works/OL1W',
-  title: 'Open Cat',
-  author_name: ['OL Author'],
-  cover_i: 99,
-  first_publish_year: 2019,
-  isbn: ['9789999999999', '123'],
-  edition_key: ['OL7170815M'],
-};
+const mockSearchWithFallback = searchWithFallback as jest.Mock;
+const mockParseBooksProviderConfig = parseBooksProviderConfig as jest.Mock;
 
 describe('searchBooks', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    jest.clearAllMocks();
+    mockParseBooksProviderConfig.mockReturnValue(['google_books', 'open_library']);
+    mockSearchWithFallback.mockResolvedValue([]);
   });
 
-  it('returns Google Books results on success and sets source: google_books', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({ items: [googleItem] }) }),
-    });
+  it('builds the provider chain from BOOKS_SEARCH_PROVIDERS and delegates to searchWithFallback', async () => {
+    await searchBooks('cats', 5);
 
-    const result = await searchBooks('cats', 1);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      googleBooksId: 'abc123',
-      title: 'Cat Science',
-      source: 'google_books',
-    });
+    expect(mockParseBooksProviderConfig).toHaveBeenCalledWith('BOOKS_SEARCH_PROVIDERS');
+    expect(mockSearchWithFallback).toHaveBeenCalledWith(['google_books', 'open_library'], 'cats', 5);
   });
 
-  it('maps Google Books response fields correctly', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({ items: [googleItem] }) }),
-    });
+  it('returns whatever searchWithFallback resolves', async () => {
+    const results = [{ title: 'Cat Science' }];
+    mockSearchWithFallback.mockResolvedValue(results);
 
-    const [book] = await searchBooks('cats', 1);
-
-    expect(book).toMatchObject({
-      googleBooksId: 'abc123',
-      title: 'Cat Science',
-      authors: ['Dr Cat'],
-      year: 2020,
-      publisher: 'CatPress',
-      pages: 200,
-      rating: 4.5,
-      coverUrl: 'https://example.com/cover.jpg',
-      isbn13: '9781234567890',
-      language: 'en',
-      blurb: 'About cats',
-      inLibrary: false,
-      libraryStatus: null,
-      source: 'google_books',
-    });
-  });
-
-  it('falls back to OpenLibrary when Google Books throws', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.reject(new Error('network')),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [olDoc] }) }),
-    });
-
-    const result = await searchBooks('cats', 5);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].source).toBe('open_library');
-    expect(result[0].title).toBe('Open Cat');
-  });
-
-  it('falls back to OpenLibrary when Google Books returns non-ok', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: false }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [olDoc] }) }),
-    });
-
-    const result = await searchBooks('cats', 5);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].source).toBe('open_library');
-  });
-
-  it('falls back to OpenLibrary when Google Books returns empty results', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [olDoc] }) }),
-    });
-
-    const result = await searchBooks('unknown', 5);
-
-    expect(result).toHaveLength(1);
-    expect(result[0].source).toBe('open_library');
-  });
-
-  it('returns empty array when both Google Books and OpenLibrary fail', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.reject(new Error('network')),
-      [OL_URL]: () => Promise.reject(new Error('ol network')),
-    });
-
-    expect(await searchBooks('cats', 5)).toEqual([]);
-  });
-
-  it('returns empty array when both return non-ok', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: false }),
-      [OL_URL]: () => Promise.resolve({ ok: false }),
-    });
-
-    expect(await searchBooks('cats', 5)).toEqual([]);
-  });
-
-  it('maps OpenLibrary response fields correctly and sets source: open_library', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [olDoc] }) }),
-    });
-
-    const [book] = await searchBooks('cats', 5);
-
-    expect(book).toMatchObject({
-      googleBooksId: null,
-      openLibraryId: 'OL7170815M',
-      title: 'Open Cat',
-      authors: ['OL Author'],
-      year: 2019,
-      coverUrl: 'https://covers.openlibrary.org/b/id/99-M.jpg',
-      isbn13: '9789999999999',
-      publisher: null,
-      pages: null,
-      rating: null,
-      language: null,
-      blurb: null,
-      inLibrary: false,
-      libraryStatus: null,
-      source: 'open_library',
-    });
-  });
-
-  it('sets openLibraryId to null when OpenLibrary doc has no edition_key', async () => {
-    const docNoEdition = { ...olDoc, edition_key: undefined };
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [docNoEdition] }) }),
-    });
-
-    const [book] = await searchBooks('cats', 5);
-    expect(book.openLibraryId).toBeNull();
-  });
-
-  it('sets coverUrl to null for OpenLibrary docs without cover_i', async () => {
-    const docNoCover = { ...olDoc, cover_i: undefined };
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [docNoCover] }) }),
-    });
-
-    const [book] = await searchBooks('cats', 5);
-    expect(book.coverUrl).toBeNull();
-  });
-
-  it('sets isbn13 to null when no 13-digit ISBN in OpenLibrary doc', async () => {
-    const docShortIsbn = { ...olDoc, isbn: ['0123456789'] };
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [docShortIsbn] }) }),
-    });
-
-    const [book] = await searchBooks('cats', 5);
-    expect(book.isbn13).toBeNull();
-  });
-
-  it('returns empty array when OpenLibrary returns malformed JSON', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () =>
-        Promise.resolve({
-          ok: true,
-          json: async () => {
-            throw new SyntaxError('bad json');
-          },
-        }),
-    });
-
-    expect(await searchBooks('cats', 5)).toEqual([]);
-  });
-
-  it('upgrades Google Books cover URL from http to https', async () => {
-    const item = { id: 'x', volumeInfo: { imageLinks: { thumbnail: 'http://books.google.com/cover.jpg' } } };
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({ items: [item] }) }),
-    });
-
-    const [book] = await searchBooks('x', 1);
-    expect(book.coverUrl).toMatch(/^https:/);
+    expect(await searchBooks('cats', 5)).toBe(results);
   });
 
   it('clamps limit to max of 40', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({ items: [] }) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [] }) }),
-    });
     await searchBooks('q', 100);
-    const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
-    expect(url).toContain('maxResults=40');
+    expect(mockSearchWithFallback).toHaveBeenCalledWith(['google_books', 'open_library'], 'q', 40);
   });
 
   it('clamps limit to min of 1', async () => {
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({ items: [] }) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [] }) }),
-    });
     await searchBooks('q', 0);
-    const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
-    expect(url).toContain('maxResults=1');
-  });
-
-  it('throttles OpenLibrary calls via rate limiter', async () => {
-    const { throttleOpenLibrary } = require('../../../lib/open-library-rate-limiter');
-    mockFetch({
-      [GOOGLE_URL]: () => Promise.resolve({ ok: true, json: async () => ({}) }),
-      [OL_URL]: () => Promise.resolve({ ok: true, json: async () => ({ docs: [] }) }),
-    });
-
-    await searchBooks('q', 5);
-    expect(throttleOpenLibrary).toHaveBeenCalledTimes(1);
+    expect(mockSearchWithFallback).toHaveBeenCalledWith(['google_books', 'open_library'], 'q', 1);
   });
 });
 

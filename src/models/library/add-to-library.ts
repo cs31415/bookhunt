@@ -1,10 +1,11 @@
 import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
-import { resolveOpenLibraryFields } from './resolve-open-library-fields';
+import { resolveEditionFields } from './resolve-edition-fields';
+import { BooksProvider } from '../../lib/books/books-types';
 
 interface AddToLibraryParams {
   googleBooksId?: string | null;
   openLibraryId?: string | null;
-  source?: 'google_books' | 'open_library';
+  source?: BooksProvider;
   slug: string;
   title: string;
   authorName: string;
@@ -22,7 +23,7 @@ interface AddToLibraryParams {
 }
 
 export async function addToLibrary(userId: number, params: AddToLibraryParams) {
-  const resolved = await resolveOpenLibraryFields(params);
+  const resolved = await resolveEditionFields(params);
   const book = await upsertBook({ ...params, ...resolved });
   return addToLibraryData(userId, book.id, params.status ?? 'queued');
 }

@@ -1,4 +1,4 @@
-import { completeText } from '../../lib/llm/complete-text';
+import { completeTextWithModel } from '../../lib/llm/complete-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { SearchResult } from './search';
 
@@ -7,7 +7,7 @@ export async function searchBooksWithClaude(query: string, limit: number): Promi
   const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title" and "author" fields (author can be null if unknown). Return ONLY valid JSON, no other text.`;
 
   try {
-    const suggestions = await completeText(prompt, {
+    const { result: suggestions, model } = await completeTextWithModel(prompt, {
       maxTokens: 1536,
       transform: (rawText) => parseJsonResponse<{ title: string; author: string | null }[]>(rawText),
     });
@@ -29,7 +29,7 @@ export async function searchBooksWithClaude(query: string, limit: number): Promi
         blurb: null,
         inLibrary: false,
         libraryStatus: null,
-        source: 'claude' as const,
+        source: model.model,
       }));
   } catch (error) {
     console.error('[llm] search failed, caller should fall back:', error);

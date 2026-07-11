@@ -3,6 +3,11 @@ import { LlmUnavailableError } from './llm-errors';
 import { getLlmAdapter } from './get-llm-adapter';
 import { hasLlmApiKey } from './has-llm-api-key';
 
+export interface CompleteWithFallbackResult<T> {
+  result: T;
+  model: ModelRef;
+}
+
 /**
  * Try each model in the chain until one produces a usable result. A model fails
  * when its adapter throws, it returns empty text, or the caller's transform
@@ -13,10 +18,11 @@ export async function completeWithFallback<T>(
   chain: ModelRef[],
   request: LlmRequest,
   transform: (rawText: string) => T,
-): Promise<T> {
+): Promise<CompleteWithFallbackResult<T>> {
   const causes: unknown[] = [];
 
-  for (const { provider, model } of chain) {
+  for (const modelRef of chain) {
+    const { provider, model } = modelRef;
     if (!hasLlmApiKey(provider)) {
       console.warn(`[llm] skipping ${provider}:${model}: no API key configured`);
       continue;
@@ -27,7 +33,7 @@ export async function completeWithFallback<T>(
       if (!rawText.trim()) {
         throw new Error('empty response');
       }
-      return transform(rawText);
+      return { result: transform(rawText), model: modelRef };
     } catch (error) {
       console.error(`[llm] ${provider}:${model} failed, trying next model:`, error);
       causes.push(error);
