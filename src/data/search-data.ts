@@ -34,3 +34,8 @@ export async function searchBooks(params: SearchBooksParams) {
   const result = await pool.query(sql, args);
   return result.rows;
 }
+
+export async function getSearchFacets() {
+  const result = await pool.query('SELECT * FROM fn_search_facets()');
+  return result.rows[0];
+}

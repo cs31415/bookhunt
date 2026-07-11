@@ -15,3 +15,11 @@ export async function getLibraryEntry(userId: number, bookId: number) {
   );
   return result.rows.length > 0 ? result.rows[0] : null;
 }
+
+export async function getBooksByIds(ids: number[]) {
+  const result = await pool.query(
+    'SELECT * FROM fn_get_books_by_ids($1)',
+    [ids],
+  );
+  return result.rows;
+}

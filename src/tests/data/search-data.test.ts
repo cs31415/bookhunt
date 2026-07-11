@@ -1,4 +1,4 @@
-import { searchBooks } from '../../data/search-data';
+import { searchBooks, getSearchFacets } from '../../data/search-data';
 import { pool } from '../../lib/db';
 
 jest.mock('../../lib/db', () => ({
@@ -48,6 +48,18 @@ describe('search-data', () => {
         ],
       );
       expect(result).toEqual(rows);
+    });
+  });
+
+  describe('getSearchFacets', () => {
+    it('calls fn_search_facets and returns the single row', async () => {
+      const row = { subjects: ['History', 'Science'], moods: ['Lyrical'] };
+      mockQuery.mockResolvedValue({ rows: [row] });
+
+      const result = await getSearchFacets();
+
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM fn_search_facets()');
+      expect(result).toEqual(row);
     });
   });
 });
