@@ -1,13 +1,13 @@
 import { addToLibrary } from '../../../models/library/add-to-library';
 import * as libraryData from '../../../data/library-data';
-import { resolveOpenLibraryFields } from '../../../models/library/resolve-open-library-fields';
+import { resolveEditionFields } from '../../../models/library/resolve-edition-fields';
 
 jest.mock('../../../data/library-data');
-jest.mock('../../../models/library/resolve-open-library-fields');
+jest.mock('../../../models/library/resolve-edition-fields');
 
 const mockUpsertBook = libraryData.upsertBook as jest.Mock;
 const mockAddToLibrary = libraryData.addToLibrary as jest.Mock;
-const mockResolveOpenLibraryFields = resolveOpenLibraryFields as jest.Mock;
+const mockResolveEditionFields = resolveEditionFields as jest.Mock;
 
 const baseParams = {
   googleBooksId: 'gid',
@@ -19,7 +19,7 @@ const baseParams = {
 describe('addToLibrary model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockResolveOpenLibraryFields.mockImplementation((params) =>
+    mockResolveEditionFields.mockImplementation((params) =>
       Promise.resolve({ blurb: params.blurb, publisher: params.publisher, pages: params.pages }),
     );
   });
@@ -64,7 +64,7 @@ describe('addToLibrary model', () => {
   it('merges resolved OpenLibrary fields into the upserted book params', async () => {
     mockUpsertBook.mockResolvedValue({ id: 21 });
     mockAddToLibrary.mockResolvedValue({ id: 21, status: 'queued' });
-    mockResolveOpenLibraryFields.mockResolvedValue({
+    mockResolveEditionFields.mockResolvedValue({
       blurb: 'Fetched from OpenLibrary',
       publisher: 'OL Press',
       pages: 321,
@@ -79,7 +79,7 @@ describe('addToLibrary model', () => {
     };
     await addToLibrary(1, olParams);
 
-    expect(mockResolveOpenLibraryFields).toHaveBeenCalledWith(olParams);
+    expect(mockResolveEditionFields).toHaveBeenCalledWith(olParams);
     expect(mockUpsertBook).toHaveBeenCalledWith({
       ...olParams,
       blurb: 'Fetched from OpenLibrary',

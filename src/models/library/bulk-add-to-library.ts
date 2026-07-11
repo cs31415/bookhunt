@@ -1,10 +1,11 @@
 import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
-import { resolveOpenLibraryFields } from './resolve-open-library-fields';
+import { resolveEditionFields } from './resolve-edition-fields';
+import { BooksProvider } from '../../lib/books/books-types';
 
 interface BulkAddParams {
   googleBooksId?: string | null;
   openLibraryId?: string | null;
-  source?: 'google_books' | 'open_library';
+  source?: BooksProvider;
   slug: string;
   title: string;
   authorName: string;
@@ -45,7 +46,7 @@ export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
     const params = deduped[i];
     try {
       console.log(`[bulk-add model] [${i + 1}/${deduped.length}] upserting "${params.title}"`);
-      const resolved = await resolveOpenLibraryFields(params);
+      const resolved = await resolveEditionFields(params);
       const book = await upsertBook({ ...params, ...resolved });
       console.log(`[bulk-add model] [${i + 1}/${deduped.length}] upserted book id=${book.id}, adding to library`);
       const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');

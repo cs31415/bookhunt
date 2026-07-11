@@ -29,13 +29,14 @@ describe('completeWithFallback', () => {
     jest.restoreAllMocks();
   });
 
-  it('returns the transformed result from the first model that succeeds', async () => {
+  it('returns the transformed result and model from the first model that succeeds', async () => {
     const adapter = jest.fn().mockResolvedValue('raw text');
     mockGetLlmAdapter.mockReturnValue(adapter);
 
-    const result = await completeWithFallback(chain, request, (t) => t.toUpperCase());
+    const { result, model } = await completeWithFallback(chain, request, (t) => t.toUpperCase());
 
     expect(result).toBe('RAW TEXT');
+    expect(model).toEqual({ provider: 'anthropic', model: 'claude-haiku-4-5' });
     expect(adapter).toHaveBeenCalledTimes(1);
     expect(adapter).toHaveBeenCalledWith('claude-haiku-4-5', request);
   });
@@ -45,9 +46,10 @@ describe('completeWithFallback', () => {
     const succeeding = jest.fn().mockResolvedValue('from openai');
     mockGetLlmAdapter.mockImplementation((provider) => (provider === 'anthropic' ? failing : succeeding));
 
-    const result = await completeWithFallback(chain, request, (t) => t);
+    const { result, model } = await completeWithFallback(chain, request, (t) => t);
 
     expect(result).toBe('from openai');
+    expect(model).toEqual({ provider: 'openai', model: 'gpt-4o-mini' });
     expect(succeeding).toHaveBeenCalledWith('gpt-4o-mini', request);
   });
 
@@ -56,7 +58,8 @@ describe('completeWithFallback', () => {
     const succeeding = jest.fn().mockResolvedValue('content');
     mockGetLlmAdapter.mockImplementation((provider) => (provider === 'anthropic' ? empty : succeeding));
 
-    expect(await completeWithFallback(chain, request, (t) => t)).toBe('content');
+    const { result } = await completeWithFallback(chain, request, (t) => t);
+    expect(result).toBe('content');
   });
 
   it('falls through when the transform throws (e.g. unparsable JSON)', async () => {
@@ -64,7 +67,7 @@ describe('completeWithFallback', () => {
     const goodJson = jest.fn().mockResolvedValue('{"ok":true}');
     mockGetLlmAdapter.mockImplementation((provider) => (provider === 'anthropic' ? badJson : goodJson));
 
-    const result = await completeWithFallback(chain, request, (t) => JSON.parse(t));
+    const { result } = await completeWithFallback(chain, request, (t) => JSON.parse(t));
 
     expect(result).toEqual({ ok: true });
   });
@@ -74,7 +77,8 @@ describe('completeWithFallback', () => {
     const adapter = jest.fn().mockResolvedValue('from openai');
     mockGetLlmAdapter.mockReturnValue(adapter);
 
-    expect(await completeWithFallback(chain, request, (t) => t)).toBe('from openai');
+    const { result } = await completeWithFallback(chain, request, (t) => t);
+    expect(result).toBe('from openai');
     expect(adapter).toHaveBeenCalledTimes(1);
     expect(adapter).toHaveBeenCalledWith('gpt-4o-mini', request);
   });

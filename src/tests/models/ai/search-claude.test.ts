@@ -1,15 +1,18 @@
 import { searchBooksWithClaude } from '../../../models/ai/search-claude';
-import { completeText } from '../../../lib/llm/complete-text';
+import { completeTextWithModel } from '../../../lib/llm/complete-text';
 import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 
 jest.mock('../../../lib/llm/complete-text');
 
-const mockCompleteText = completeText as jest.Mock;
+const mockCompleteTextWithModel = completeTextWithModel as jest.Mock;
 
-function mockLlmResponse(text: string) {
-  mockCompleteText.mockImplementation(async (_prompt, options) =>
-    options.transform ? options.transform(text) : text,
-  );
+const defaultModel = { provider: 'google', model: 'gemini-3.1-flash-lite' };
+
+function mockLlmResponse(text: string, model = defaultModel) {
+  mockCompleteTextWithModel.mockImplementation(async (_prompt, options) => ({
+    result: options.transform ? options.transform(text) : text,
+    model,
+  }));
 }
 
 describe('searchBooksWithClaude', () => {
@@ -17,7 +20,7 @@ describe('searchBooksWithClaude', () => {
     jest.clearAllMocks();
   });
 
-  it('maps title/author suggestions into placeholder SearchResults with source: claude', async () => {
+  it('maps title/author suggestions into placeholder SearchResults with source: <model name>', async () => {
     mockLlmResponse('[{"title":"Grief Is the Thing with Feathers","author":"Max Porter"}]');
 
     const result = await searchBooksWithClaude('books about grief', 5);
@@ -38,9 +41,19 @@ describe('searchBooksWithClaude', () => {
         blurb: null,
         inLibrary: false,
         libraryStatus: null,
-        source: 'claude',
+        source: 'gemini-3.1-flash-lite',
       },
     ]);
+  });
+
+  it('sets source to whichever model actually answered', async () => {
+    mockLlmResponse('[{"title":"A Book","author":"An Author"}]', {
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5',
+    });
+
+    const [book] = await searchBooksWithClaude('query', 5);
+    expect(book.source).toBe('claude-haiku-4-5');
   });
 
   it('sets authors to an empty array when author is null', async () => {
@@ -67,7 +80,7 @@ describe('searchBooksWithClaude', () => {
   });
 
   it('returns [] when all LLM models fail', async () => {
-    mockCompleteText.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
+    mockCompleteTextWithModel.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
 
     expect(await searchBooksWithClaude('query', 5)).toEqual([]);
   });
@@ -82,16 +95,16 @@ describe('searchBooksWithClaude', () => {
     mockLlmResponse('[]');
 
     await searchBooksWithClaude('query', 100);
-    expect(mockCompleteText.mock.calls[0][0]).toContain('up to 40 books');
+    expect(mockCompleteTextWithModel.mock.calls[0][0]).toContain('up to 40 books');
 
     await searchBooksWithClaude('query', 0);
-    expect(mockCompleteText.mock.calls[1][0]).toContain('up to 1 books');
+    expect(mockCompleteTextWithModel.mock.calls[1][0]).toContain('up to 1 books');
   });
 
   it('requests up to 1536 tokens', async () => {
     mockLlmResponse('[]');
 
     await searchBooksWithClaude('query', 5);
-    expect(mockCompleteText.mock.calls[0][1].maxTokens).toBe(1536);
+    expect(mockCompleteTextWithModel.mock.calls[0][1].maxTokens).toBe(1536);
   });
 });

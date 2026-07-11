@@ -1,5 +1,6 @@
 import { getAuthorBySlug as fetchAuthorBySlug, getBooksByAuthor, updateAuthorDetails } from '../../data/authors-data';
-import { fetchOpenLibraryAuthorDetails } from '../../lib/open-library-author-details';
+import { getAuthorDetailsWithFallback } from '../../lib/books/get-author-details-with-fallback';
+import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-config';
 import { generateAuthorDetails } from '../ai/get-author-details';
 import { searchBooks, matchLibraryEntries } from '../ai/search';
 
@@ -16,9 +17,10 @@ async function enrichAuthor(author: any) {
   let { birth_year: birthYear, country, bio } = author;
 
   if (!birthYear || !bio) {
-    const olDetails = await fetchOpenLibraryAuthorDetails(author.name);
-    birthYear = birthYear || olDetails.birthYear;
-    bio = bio || olDetails.bio;
+    const chain = parseBooksProviderConfig('BOOKS_SEARCH_PROVIDERS');
+    const details = await getAuthorDetailsWithFallback(chain, author.name);
+    birthYear = birthYear || details.birthYear;
+    bio = bio || details.bio;
   }
 
   if (!birthYear || !country || !bio) {
