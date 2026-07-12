@@ -3,7 +3,8 @@ import { Request, Response, NextFunction } from 'express';
 import { requestLogger } from '../../middleware/requestLogger';
 
 function makeReq(method: string, originalUrl: string, body?: unknown) {
-  return { method, originalUrl, body } as unknown as Request;
+  const path = originalUrl.split('?')[0];
+  return { method, originalUrl, path, body } as unknown as Request;
 }
 
 function makeRes(statusCode: number) {
@@ -60,6 +61,16 @@ describe('requestLogger', () => {
   it('does not log OPTIONS requests', () => {
     const req = makeReq('OPTIONS', '/api/books');
     const res = makeRes(204);
+    requestLogger(req, res, next);
+
+    (res as unknown as EventEmitter).emit('finish');
+
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not log health check calls', () => {
+    const req = makeReq('GET', '/api/health');
+    const res = makeRes(200);
     requestLogger(req, res, next);
 
     (res as unknown as EventEmitter).emit('finish');
