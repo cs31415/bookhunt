@@ -57,6 +57,16 @@ describe('requestLogger', () => {
     expect(line).toContain('POST /api/auth/register 201');
   });
 
+  it('does not log OPTIONS requests', () => {
+    const req = makeReq('OPTIONS', '/api/books');
+    const res = makeRes(204);
+    requestLogger(req, res, next);
+
+    (res as unknown as EventEmitter).emit('finish');
+
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
   it('does not log before the response finishes', () => {
     const req = makeReq('GET', '/api/books');
     const res = makeRes(200);

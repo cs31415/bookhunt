@@ -45,6 +45,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   }) as Response['send'];
 
   res.on('finish', () => {
+    if (req.method === 'OPTIONS') return;
+
     const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
     let line = `${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`;
     if (req.method === 'POST' && req.body && Object.keys(req.body).length > 0) {
