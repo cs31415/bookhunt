@@ -9,6 +9,8 @@ function makeReq(method: string, originalUrl: string, body?: unknown) {
 function makeRes(statusCode: number) {
   const res = new EventEmitter() as unknown as Response;
   (res as any).statusCode = statusCode;
+  (res as any).json = jest.fn().mockReturnValue(res);
+  (res as any).send = jest.fn().mockReturnValue(res);
   return res;
 }
 
@@ -110,5 +112,77 @@ describe('requestLogger', () => {
 
     const [line] = logSpy.mock.calls[0];
     expect(line).not.toContain('body=');
+  });
+
+  it('logs the response body passed to res.json', () => {
+    const req = makeReq('GET', '/api/books/42');
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    res.json({ id: 42, title: 'Dune' });
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).toContain('response={"id":42,"title":"Dune"}');
+  });
+
+  it('logs an array response body from res.json without mangling it', () => {
+    const req = makeReq('GET', '/api/books');
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    res.json([{ id: 1 }, { id: 2 }]);
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).toContain('response=[{"id":1},{"id":2}]');
+  });
+
+  it('logs the response body passed to res.send when res.json is not used', () => {
+    const req = makeReq('GET', '/health');
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    res.send('OK');
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).toContain('response="OK"');
+  });
+
+  it('redacts sensitive fields in the logged response body', () => {
+    const req = makeReq('POST', '/api/auth/login', { username: 'alice', password: 'hunter2' });
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    res.json({ token: 'abc123', user: 'alice' });
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).toContain('"token":"[REDACTED]"');
+    expect(line).not.toContain('abc123');
+  });
+
+  it('does not append a response suffix when no body was sent', () => {
+    const req = makeReq('DELETE', '/api/library/7');
+    const res = makeRes(204);
+    requestLogger(req, res, next);
+
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).not.toContain('response=');
+  });
+
+  it('does not append a response suffix for an empty object body', () => {
+    const req = makeReq('GET', '/api/books/999');
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    res.json({});
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).not.toContain('response=');
   });
 });
