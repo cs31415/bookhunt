@@ -47,6 +47,7 @@ import { searchBooksWithClaude } from '../../models/ai/search-claude';
  *                       language: { type: string }
  *                       blurb: { type: string }
  *                       categories: { type: array, items: { type: string } }
+ *                       moods: { type: array, items: { type: string } }
  *                       inLibrary: { type: boolean }
  *                       libraryStatus: { type: string, nullable: true }
  *                 query: { type: string }

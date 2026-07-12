@@ -14,6 +14,7 @@ export interface SearchResult {
   language: string | null;
   blurb: string | null;
   categories: string[];
+  moods: string[];
   inLibrary: boolean;
   libraryStatus: string | null;
   // 'google_books' | 'open_library', or the specific LLM model name (e.g. 'gemini-3.1-flash-lite') that answered the fallback search

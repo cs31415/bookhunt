@@ -3,13 +3,16 @@ import { parseJsonResponse } from '../../lib/parse-json-response';
 import { SearchResult } from './search';
 
 export async function searchBooksWithClaude(query: string, limit: number): Promise<SearchResult[]> {
-  const maxResults = Math.min(Math.max(1, limit), 40);
-  const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title" and "author" fields (author can be null if unknown). Return ONLY valid JSON, no other text.`;
+  const maxResults = Math.min(Math.max(1, limit), 20);
+  const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title", "author" (can be null if unknown), "categories" (2-4 genre tags like 'Popular Science', 'Memoir'), and "moods" (2-4 reader mood/feel tags like 'Mind-expanding', 'Rigorous') fields. Return ONLY valid JSON, no other text.`;
 
   try {
     const { result: suggestions, model } = await completeTextWithModel(prompt, {
-      maxTokens: 1536,
-      transform: (rawText) => parseJsonResponse<{ title: string; author: string | null }[]>(rawText),
+      maxTokens: 2048,
+      transform: (rawText) =>
+        parseJsonResponse<{ title: string; author: string | null; categories?: string[]; moods?: string[] }[]>(
+          rawText,
+        ),
     });
 
     return suggestions
@@ -27,7 +30,8 @@ export async function searchBooksWithClaude(query: string, limit: number): Promi
         isbn13: null,
         language: null,
         blurb: null,
-        categories: [],
+        categories: s.categories ?? [],
+        moods: s.moods ?? [],
         inLibrary: false,
         libraryStatus: null,
         source: model.model,

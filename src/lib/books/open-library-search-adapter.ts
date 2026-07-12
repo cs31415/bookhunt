@@ -47,6 +47,7 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
       language: null,
       blurb: null,
       categories: doc.subject || [],
+      moods: [],
       inLibrary: false,
       libraryStatus: null,
       source: 'open_library' as const,

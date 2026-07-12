@@ -41,6 +41,7 @@ describe('searchOpenLibrary', () => {
       language: null,
       blurb: null,
       categories: ['Cats', 'Humor'],
+      moods: [],
       inLibrary: false,
       libraryStatus: null,
       source: 'open_library',

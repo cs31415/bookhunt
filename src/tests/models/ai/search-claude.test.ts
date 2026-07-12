@@ -20,8 +20,10 @@ describe('searchBooksWithClaude', () => {
     jest.clearAllMocks();
   });
 
-  it('maps title/author suggestions into placeholder SearchResults with source: <model name>', async () => {
-    mockLlmResponse('[{"title":"Grief Is the Thing with Feathers","author":"Max Porter"}]');
+  it('maps title/author/categories/moods suggestions into placeholder SearchResults with source: <model name>', async () => {
+    mockLlmResponse(
+      '[{"title":"Grief Is the Thing with Feathers","author":"Max Porter","categories":["Fiction","Grief Lit"],"moods":["Devastating","Tender"]}]',
+    );
 
     const result = await searchBooksWithClaude('books about grief', 5);
 
@@ -39,12 +41,21 @@ describe('searchBooksWithClaude', () => {
         isbn13: null,
         language: null,
         blurb: null,
-        categories: [],
+        categories: ['Fiction', 'Grief Lit'],
+        moods: ['Devastating', 'Tender'],
         inLibrary: false,
         libraryStatus: null,
         source: 'gemini-3.1-flash-lite',
       },
     ]);
+  });
+
+  it('defaults categories and moods to an empty array when the LLM omits them', async () => {
+    mockLlmResponse('[{"title":"A Book","author":"An Author"}]');
+
+    const [book] = await searchBooksWithClaude('query', 5);
+    expect(book.categories).toEqual([]);
+    expect(book.moods).toEqual([]);
   });
 
   it('sets source to whichever model actually answered', async () => {
@@ -92,20 +103,20 @@ describe('searchBooksWithClaude', () => {
     expect(await searchBooksWithClaude('query', 5)).toEqual([]);
   });
 
-  it('includes the requested limit in the prompt, clamped between 1 and 40', async () => {
+  it('includes the requested limit in the prompt, clamped between 1 and 20', async () => {
     mockLlmResponse('[]');
 
     await searchBooksWithClaude('query', 100);
-    expect(mockCompleteTextWithModel.mock.calls[0][0]).toContain('up to 40 books');
+    expect(mockCompleteTextWithModel.mock.calls[0][0]).toContain('up to 20 books');
 
     await searchBooksWithClaude('query', 0);
     expect(mockCompleteTextWithModel.mock.calls[1][0]).toContain('up to 1 books');
   });
 
-  it('requests up to 1536 tokens', async () => {
+  it('requests up to 2048 tokens', async () => {
     mockLlmResponse('[]');
 
     await searchBooksWithClaude('query', 5);
-    expect(mockCompleteTextWithModel.mock.calls[0][1].maxTokens).toBe(1536);
+    expect(mockCompleteTextWithModel.mock.calls[0][1].maxTokens).toBe(2048);
   });
 });
