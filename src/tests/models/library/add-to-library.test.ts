@@ -25,18 +25,18 @@ describe('addToLibrary model', () => {
   });
 
   it('upserts book then adds to library with default status queued', async () => {
-    mockUpsertBook.mockResolvedValue({ id: 10 });
+    mockUpsertBook.mockResolvedValue({ id: 10, slug: 'a-book' });
     mockAddToLibrary.mockResolvedValue({ id: 10, status: 'queued' });
 
     const result = await addToLibrary(1, baseParams);
 
     expect(mockUpsertBook).toHaveBeenCalledWith(baseParams);
     expect(mockAddToLibrary).toHaveBeenCalledWith(1, 10, 'queued');
-    expect(result).toEqual({ id: 10, status: 'queued' });
+    expect(result).toEqual({ entry: { id: 10, status: 'queued' }, book: { id: 10, slug: 'a-book' } });
   });
 
   it('uses provided status instead of default', async () => {
-    mockUpsertBook.mockResolvedValue({ id: 5 });
+    mockUpsertBook.mockResolvedValue({ id: 5, slug: 'a-book' });
     mockAddToLibrary.mockResolvedValue({ id: 5, status: 'read' });
 
     await addToLibrary(2, { ...baseParams, status: 'read' });
@@ -45,7 +45,7 @@ describe('addToLibrary model', () => {
   });
 
   it('adds a book sourced from OpenLibrary (no googleBooksId)', async () => {
-    mockUpsertBook.mockResolvedValue({ id: 20 });
+    mockUpsertBook.mockResolvedValue({ id: 20, slug: 'ol-book' });
     mockAddToLibrary.mockResolvedValue({ id: 20, status: 'queued' });
 
     const olParams = {
@@ -58,7 +58,7 @@ describe('addToLibrary model', () => {
     const result = await addToLibrary(1, olParams);
 
     expect(mockUpsertBook).toHaveBeenCalledWith(olParams);
-    expect(result).toEqual({ id: 20, status: 'queued' });
+    expect(result).toEqual({ entry: { id: 20, status: 'queued' }, book: { id: 20, slug: 'ol-book' } });
   });
 
   it('merges resolved OpenLibrary fields into the upserted book params', async () => {
