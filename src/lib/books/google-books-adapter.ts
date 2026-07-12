@@ -41,6 +41,7 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
       language: info.language || null,
       blurb: info.description || null,
       categories: info.categories || [],
+      moods: [],
       inLibrary: false,
       libraryStatus: null,
       source: 'google_books' as const,

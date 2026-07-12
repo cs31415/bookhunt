@@ -36,7 +36,7 @@ export async function resolveBookBySlug(slug: string, authorSlug?: string) {
     pages: match.pages,
     rating: match.rating,
     subjects: match.categories,
-    moods: [],
+    moods: match.moods,
     genres: [],
     themes: [],
     hue: '#6f7a55',

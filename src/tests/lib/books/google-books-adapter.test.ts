@@ -40,6 +40,7 @@ describe('searchGoogleBooks', () => {
       language: 'en',
       blurb: 'About cats',
       categories: ['Science > Life Sciences > Zoology'],
+      moods: [],
       inLibrary: false,
       libraryStatus: null,
       source: 'google_books',
