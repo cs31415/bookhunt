@@ -1,4 +1,4 @@
-import { getBookBySlug, getLibraryEntry, getBooksByIds } from '../../data/books-data';
+import { getBookBySlug, getLibraryEntry, getBooksByIds, getBooksByGoogleIds } from '../../data/books-data';
 import { pool } from '../../lib/db';
 
 jest.mock('../../lib/db', () => ({
@@ -54,6 +54,19 @@ describe('books-data', () => {
       expect(mockQuery).toHaveBeenCalledWith(
         'SELECT * FROM fn_get_books_by_ids($1)',
         [[1, 2]],
+      );
+      expect(result).toEqual(rows);
+    });
+  });
+
+  describe('getBooksByGoogleIds', () => {
+    it('calls fn_get_books_by_google_ids with the id array and returns rows', async () => {
+      const rows = [{ book_id: 1, google_books_id: 'abc123' }];
+      mockQuery.mockResolvedValue({ rows });
+      const result = await getBooksByGoogleIds(['abc123']);
+      expect(mockQuery).toHaveBeenCalledWith(
+        'SELECT * FROM fn_get_books_by_google_ids($1)',
+        [['abc123']],
       );
       expect(result).toEqual(rows);
     });
