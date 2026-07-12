@@ -1,0 +1,98 @@
+import { Request, Response } from 'express';
+import { getBookBySlug } from '../../data/books-data';
+import { addExistingToLibrary as addExistingToLibraryModel } from '../../models/library/add-existing-to-library';
+import { addToLibrary as upsertAndAddModel } from '../../models/library/add-to-library';
+
+const VALID_STATUSES = new Set(['queued', 'reading', 'finished', 'abandoned']);
+
+/**
+ * @swagger
+ * /library/{slug}:
+ *   post:
+ *     tags: [Library]
+ *     summary: Add a book to the library by slug - an existing catalog book, or a not-yet-cataloged one
+ *     description: >
+ *       If slug matches an existing catalog book, adds it directly (idempotent, no upsert - same as
+ *       the old POST /library/:bookId). Otherwise, upserts a new catalog row from the title/authorName/
+ *       googleBooksId (or openLibraryId) and other fields in the request body, then adds it - this is
+ *       the only place a not-yet-cataloged book's catalog row gets created (see LOS-127). Replaces the
+ *       old standalone upsert-based POST /library.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string, enum: [queued, reading, finished, abandoned], default: queued }
+ *               title: { type: string, description: "Required if slug doesn't match an existing catalog book" }
+ *               authorName: { type: string, description: "Required if slug doesn't match an existing catalog book" }
+ *               googleBooksId: { type: string, nullable: true }
+ *               openLibraryId: { type: string, nullable: true }
+ *               source: { type: string, enum: [google_books, open_library] }
+ *               year: { type: integer }
+ *               publisher: { type: string }
+ *               pages: { type: integer }
+ *               rating: { type: number }
+ *               subjects: { type: array, items: { type: string } }
+ *               blurb: { type: string }
+ *               coverUrl: { type: string }
+ *               isbn13: { type: string }
+ *               language: { type: string }
+ *     responses:
+ *       200:
+ *         description: Library entry (existing or newly created), plus the catalog book's real id/slug
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 entry: { type: object }
+ *                 book:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: integer }
+ *                     slug: { type: string }
+ *       400:
+ *         description: Invalid status, or slug not found and insufficient fields to create it
+ */
+export async function addToLibraryBySlug(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const slug = req.params.slug as string;
+
+    const status = req.body?.status ?? 'queued';
+    if (!VALID_STATUSES.has(status)) {
+      res.status(400).json({ error: 'Invalid status' });
+      return;
+    }
+
+    const existing = await getBookBySlug(slug);
+    if (existing) {
+      const entry = await addExistingToLibraryModel(userId, existing.id, status);
+      res.json({ entry, book: { id: existing.id, slug: existing.slug } });
+      return;
+    }
+
+    const { title, authorName, googleBooksId, openLibraryId } = req.body ?? {};
+    if (!title || !authorName || (!googleBooksId && !openLibraryId)) {
+      res.status(400).json({
+        error:
+          'No catalog book matches this slug, and title, authorName, and one of googleBooksId/openLibraryId are required to create it',
+      });
+      return;
+    }
+
+    const { entry, book } = await upsertAndAddModel(userId, { ...req.body, slug });
+    res.json({ entry, book: { id: book.id, slug: book.slug } });
+  } catch (error) {
+    console.error('Error adding to library:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}

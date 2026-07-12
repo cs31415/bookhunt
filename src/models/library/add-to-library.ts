@@ -25,5 +25,6 @@ interface AddToLibraryParams {
 export async function addToLibrary(userId: number, params: AddToLibraryParams) {
   const resolved = await resolveEditionFields(params);
   const book = await upsertBook({ ...params, ...resolved });
-  return addToLibraryData(userId, book.id, params.status ?? 'queued');
+  const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
+  return { entry, book };
 }
