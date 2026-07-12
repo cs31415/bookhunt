@@ -59,12 +59,13 @@ export async function getMetadata(req: Request, res: Response) {
 
     const batch: BookQuery[] = queries.slice(0, 40);
 
-    const results: (SearchResult | null)[] = [];
-    for (const { title, author } of batch) {
-      const query = author ? `${title} by ${author}` : title;
-      const [match] = await searchBooks(query, 1);
-      results.push(match ?? null);
-    }
+    const results: (SearchResult | null)[] = await Promise.all(
+      batch.map(async ({ title, author }) => {
+        const query = author ? `${title} by ${author}` : title;
+        const [match] = await searchBooks(query, 1);
+        return match ?? null;
+      }),
+    );
 
     if (req.user) {
       const resolved = results.filter((b): b is SearchResult => b !== null);

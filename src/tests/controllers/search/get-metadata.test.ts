@@ -69,7 +69,7 @@ describe('getMetadata controller', () => {
     });
   });
 
-  it('calls searchBooks sequentially, not concurrently', async () => {
+  it('calls searchBooks concurrently rather than one at a time', async () => {
     const order: string[] = [];
     mockSearchBooks.mockImplementation(async (query: string) => {
       order.push(`start:${query}`);
@@ -79,7 +79,23 @@ describe('getMetadata controller', () => {
     });
     const res = makeRes();
     await getMetadata(makeReq({ books: [{ title: 'A' }, { title: 'B' }] }), res);
-    expect(order).toEqual(['start:A', 'end:A', 'start:B', 'end:B']);
+    expect(order).toEqual(['start:A', 'start:B', 'end:A', 'end:B']);
+  });
+
+  it('preserves input order in the response even if results resolve out of order', async () => {
+    mockSearchBooks.mockImplementation(async (query: string) => {
+      const delay = query === 'First' ? 10 : 0;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return [{ title: query, googleBooksId: `g-${query}` }];
+    });
+    const res = makeRes();
+    await getMetadata(makeReq({ books: [{ title: 'First' }, { title: 'Second' }] }), res);
+    expect(res.json).toHaveBeenCalledWith({
+      books: [
+        { title: 'First', googleBooksId: 'g-First' },
+        { title: 'Second', googleBooksId: 'g-Second' },
+      ],
+    });
   });
 
   it('truncates the batch to the first 40 entries', async () => {
