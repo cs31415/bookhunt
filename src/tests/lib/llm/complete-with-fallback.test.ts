@@ -102,4 +102,43 @@ describe('completeWithFallback', () => {
     await expect(completeWithFallback(chain, request, (t) => t)).rejects.toThrow(LlmUnavailableError);
     expect(mockGetLlmAdapter).not.toHaveBeenCalled();
   });
+
+  describe('LOG_LLM_QUERIES gating', () => {
+    const originalEnv = process.env.LOG_LLM_QUERIES;
+
+    afterEach(() => {
+      process.env.LOG_LLM_QUERIES = originalEnv;
+    });
+
+    it('does not log the prompt or query line when LOG_LLM_QUERIES is unset', async () => {
+      delete process.env.LOG_LLM_QUERIES;
+      const adapter = jest.fn().mockResolvedValue('raw text');
+      mockGetLlmAdapter.mockReturnValue(adapter);
+      await completeWithFallback(chain, request, (t) => t);
+
+      expect(console.log).not.toHaveBeenCalled();
+    });
+
+    it('logs the prompt and query line when LOG_LLM_QUERIES=true', async () => {
+      process.env.LOG_LLM_QUERIES = 'true';
+      const adapter = jest.fn().mockResolvedValue('raw text');
+      mockGetLlmAdapter.mockReturnValue(adapter);
+      await completeWithFallback(chain, request, (t) => t);
+
+      expect(console.log).toHaveBeenCalledWith('[anthropic:claude-haiku-4-5]\nhello');
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/^\[llm\] query "anthropic:claude-haiku-4-5", \d+ms$/),
+      );
+    });
+
+    it('still logs failures unconditionally when LOG_LLM_QUERIES is unset', async () => {
+      delete process.env.LOG_LLM_QUERIES;
+      const failing = jest.fn().mockRejectedValue(new Error('down'));
+      mockGetLlmAdapter.mockReturnValue(failing);
+
+      await expect(completeWithFallback(chain, request, (t) => t)).rejects.toThrow(LlmUnavailableError);
+
+      expect(console.error).toHaveBeenCalled();
+    });
+  });
 });

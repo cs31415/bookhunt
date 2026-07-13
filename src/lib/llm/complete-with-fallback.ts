@@ -2,6 +2,7 @@ import { LlmRequest, ModelRef } from './llm-types';
 import { LlmUnavailableError } from './llm-errors';
 import { getLlmAdapter } from './get-llm-adapter';
 import { hasLlmApiKey } from './has-llm-api-key';
+import { isLlmLoggingEnabled } from './is-llm-logging-enabled';
 
 export interface CompleteWithFallbackResult<T> {
   result: T;
@@ -27,11 +28,17 @@ export async function completeWithFallback<T>(
       console.warn(`[llm] skipping ${provider}:${model}: no API key configured`);
       continue;
     }
+    const start = Date.now();
     try {
-      console.log(`[${provider}:${model}]\n${request.prompt}`);
+      if (isLlmLoggingEnabled()) {
+        console.log(`[${provider}:${model}]\n${request.prompt}`);
+      }
       const rawText = await getLlmAdapter(provider)(model, request);
       if (!rawText.trim()) {
         throw new Error('empty response');
+      }
+      if (isLlmLoggingEnabled()) {
+        console.log(`[llm] query "${provider}:${model}", ${Date.now() - start}ms`);
       }
       return { result: transform(rawText), model: modelRef };
     } catch (error) {
