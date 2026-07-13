@@ -23,3 +23,11 @@ export async function getBooksByIds(ids: number[]) {
   );
   return result.rows;
 }
+
+export async function getBooksByGoogleIds(googleBooksIds: string[]) {
+  const result = await pool.query(
+    'SELECT * FROM fn_get_books_by_google_ids($1)',
+    [googleBooksIds],
+  );
+  return result.rows;
+}
