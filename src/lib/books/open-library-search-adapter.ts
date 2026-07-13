@@ -1,4 +1,5 @@
 import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
+import { loggedFetch } from './logged-fetch';
 import { SearchResult } from './books-types';
 
 export async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
@@ -8,7 +9,7 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
 
   let response: globalThis.Response;
   try {
-    response = await fetch(url);
+    response = await loggedFetch('open_library', url);
   } catch {
     return [];
   }

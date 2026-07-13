@@ -1,5 +1,6 @@
 import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
 import { extractOpenLibraryTextField } from './extract-open-library-text-field';
+import { loggedFetch } from './logged-fetch';
 import { EditionDetails } from './books-types';
 
 export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Promise<EditionDetails> {
@@ -9,7 +10,7 @@ export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Pro
 
   let edition: any;
   try {
-    const response = await fetch(`${OPENLIBRARY_API_URL}/books/${openLibraryId}.json`);
+    const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}/books/${openLibraryId}.json`);
     if (!response.ok) return empty;
     edition = await response.json();
   } catch {
@@ -24,7 +25,7 @@ export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Pro
   if (!description && workKey) {
     await throttleOpenLibrary();
     try {
-      const response = await fetch(`${OPENLIBRARY_API_URL}${workKey}.json`);
+      const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}${workKey}.json`);
       if (response.ok) {
         const work: any = await response.json();
         description = extractOpenLibraryTextField(work.description);
