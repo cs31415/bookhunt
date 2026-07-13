@@ -22,7 +22,9 @@ export async function resolveDetectedBook(
   const fieldedMatch = fieldedResults.find((r) => matchesDetectedBook(r, title, author));
   if (fieldedMatch) return fieldedMatch;
 
-  const freeText = author ? `${title} by ${author}` : title;
+  // No literal "by" -- Google Books tolerates it, but Open Library's search
+  // treats it as a literal token and returns zero matches.
+  const freeText = author ? `${title} ${author}` : title;
   const freeTextResults = await searchBooks(freeText, 5);
   return freeTextResults.find((r) => matchesDetectedBook(r, title, author)) ?? null;
 }

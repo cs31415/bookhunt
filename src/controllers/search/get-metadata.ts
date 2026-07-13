@@ -61,7 +61,9 @@ export async function getMetadata(req: Request, res: Response) {
 
     const results: (SearchResult | null)[] = await Promise.all(
       batch.map(async ({ title, author }) => {
-        const query = author ? `${title} by ${author}` : title;
+        // No literal "by" -- Google Books tolerates it, but Open Library's
+        // search treats it as a literal token and returns zero matches.
+        const query = author ? `${title} ${author}` : title;
         const [match] = await searchBooks(query, 1);
         return match ?? null;
       }),

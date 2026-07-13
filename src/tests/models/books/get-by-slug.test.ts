@@ -62,7 +62,7 @@ describe('resolveBookBySlug model', () => {
 
     const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
 
-    expect(mockSearchBooks).toHaveBeenCalledWith('economics in one lesson by henry hazlitt', 1);
+    expect(mockSearchBooks).toHaveBeenCalledWith('economics in one lesson henry hazlitt', 1);
     expect(result).toEqual({
       id: 0,
       slug: 'economics-in-one-lesson',

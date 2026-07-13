@@ -23,7 +23,9 @@ export async function resolveBookBySlug(slug: string, authorSlug?: string) {
 
   const title = deslugify(slug);
   const author = deslugify(authorSlug);
-  const [match] = await searchBooks(`${title} by ${author}`, 1);
+  // No literal "by" here -- Google Books tolerates it, but Open Library's
+  // search treats it as a literal token and returns zero matches.
+  const [match] = await searchBooks(`${title} ${author}`, 1);
   if (!match) return null;
 
   return {

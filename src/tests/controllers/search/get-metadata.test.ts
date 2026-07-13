@@ -41,11 +41,11 @@ describe('getMetadata controller', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  it('builds the query as "title by author" when author is given', async () => {
+  it('builds the query as "title author" (no literal "by") when author is given', async () => {
     mockSearchBooks.mockResolvedValue([{ title: 'A Book', googleBooksId: 'g1' }]);
     const res = makeRes();
     await getMetadata(makeReq({ books: [{ title: 'A Book', author: 'Some Author' }] }), res);
-    expect(mockSearchBooks).toHaveBeenCalledWith('A Book by Some Author', 1);
+    expect(mockSearchBooks).toHaveBeenCalledWith('A Book Some Author', 1);
   });
 
   it('builds the query as just the title when author is omitted', async () => {
