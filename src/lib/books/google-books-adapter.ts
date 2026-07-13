@@ -1,4 +1,5 @@
 import { EditionDetails, SearchResult } from './books-types';
+import { loggedFetch } from './logged-fetch';
 
 function withApiKey(url: string): string {
   return process.env.GOOGLE_BOOKS_API_KEY ? `${url}&key=${process.env.GOOGLE_BOOKS_API_KEY}` : url;
@@ -11,7 +12,7 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
 
   let response: globalThis.Response;
   try {
-    response = await fetch(url);
+    response = await loggedFetch('google_books', url);
   } catch {
     return [];
   }
@@ -55,7 +56,7 @@ export async function getGoogleBooksEditionDetails(googleBooksId: string): Promi
 
   let response: globalThis.Response;
   try {
-    response = await fetch(url);
+    response = await loggedFetch('google_books', url);
   } catch {
     return empty;
   }

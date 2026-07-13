@@ -1,5 +1,6 @@
 import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
 import { extractOpenLibraryTextField } from './extract-open-library-text-field';
+import { loggedFetch } from './logged-fetch';
 import { AuthorDetails } from './books-types';
 
 function extractBirthYear(birthDate: string | undefined): number | null {
@@ -14,7 +15,7 @@ export async function fetchOpenLibraryAuthorDetails(name: string): Promise<Autho
 
   let doc: any;
   try {
-    const response = await fetch(`${OPENLIBRARY_API_URL}/search/authors.json?q=${encodeURIComponent(name)}`);
+    const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}/search/authors.json?q=${encodeURIComponent(name)}`);
     if (!response.ok) return empty;
     const results: any = await response.json();
     const docs: any[] = results.docs ?? [];
@@ -31,7 +32,7 @@ export async function fetchOpenLibraryAuthorDetails(name: string): Promise<Autho
 
   let bio: string | null = null;
   try {
-    const response = await fetch(`${OPENLIBRARY_API_URL}/authors/${doc.key}.json`);
+    const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}/authors/${doc.key}.json`);
     if (response.ok) {
       const author: any = await response.json();
       bio = extractOpenLibraryTextField(author.bio);
