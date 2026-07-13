@@ -43,7 +43,7 @@ describe('resolveDetectedBook', () => {
     const resolved = await resolveDetectedBook("Dauiares' Book of Greek Myths", 'Doubleday');
     expect(mockSearchBooks).toHaveBeenNthCalledWith(
       2,
-      "Dauiares' Book of Greek Myths by Doubleday",
+      "Dauiares' Book of Greek Myths Doubleday",
       5,
     );
     expect(resolved).toBe(daulaires);
