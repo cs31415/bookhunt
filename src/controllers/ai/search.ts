@@ -22,6 +22,8 @@ import { searchBooksWithClaude } from '../../models/ai/search-claude';
  *               query: { type: string }
  *               inLibraryOnly: { type: boolean, default: false }
  *               limit: { type: integer, default: 20 }
+ *               seedCategory: { type: string, description: "If set, every result's categories will include this tag verbatim" }
+ *               seedMood: { type: string, description: "If set, every result's moods will include this tag verbatim" }
  *     responses:
  *       200:
  *         description: Search results with library flags
@@ -58,13 +60,13 @@ import { searchBooksWithClaude } from '../../models/ai/search-claude';
  */
 export async function search(req: Request, res: Response) {
   try {
-    const { query, inLibraryOnly = false, limit = 20 } = req.body;
+    const { query, inLibraryOnly = false, limit = 20, seedCategory, seedMood } = req.body;
     if (!query || typeof query !== 'string' || !query.trim()) {
       res.status(400).json({ error: 'Query parameter is required' });
       return;
     }
 
-    let books = await searchBooksWithClaude(query, limit);
+    let books = await searchBooksWithClaude(query, limit, seedCategory, seedMood);
     if (books.length === 0) {
       books = await searchBooks(query, limit);
     }

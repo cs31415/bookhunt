@@ -119,4 +119,30 @@ describe('searchBooksWithClaude', () => {
     await searchBooksWithClaude('query', 5);
     expect(mockCompleteTextWithModel.mock.calls[0][1].maxTokens).toBe(2048);
   });
+
+  it('omits seed clauses from the prompt when seedCategory/seedMood are not provided', async () => {
+    mockLlmResponse('[]');
+
+    await searchBooksWithClaude('query', 5);
+    const prompt = mockCompleteTextWithModel.mock.calls[0][0];
+    expect(prompt).not.toContain('must include');
+  });
+
+  it('instructs the LLM to include seedCategory verbatim in every categories array', async () => {
+    mockLlmResponse('[]');
+
+    await searchBooksWithClaude('stoicism books', 5, 'Stoicism');
+    const prompt = mockCompleteTextWithModel.mock.calls[0][0];
+    expect(prompt).toContain('"categories" array must include "Stoicism" verbatim');
+    expect(prompt).not.toContain('"moods" array must include');
+  });
+
+  it('instructs the LLM to include seedMood verbatim in every moods array', async () => {
+    mockLlmResponse('[]');
+
+    await searchBooksWithClaude('lyrical books', 5, undefined, 'Lyrical');
+    const prompt = mockCompleteTextWithModel.mock.calls[0][0];
+    expect(prompt).toContain('"moods" array must include "Lyrical" verbatim');
+    expect(prompt).not.toContain('"categories" array must include');
+  });
 });

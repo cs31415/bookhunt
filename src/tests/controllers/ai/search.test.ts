@@ -114,4 +114,16 @@ describe('search controller', () => {
     expect(mockSearchBooks).toHaveBeenCalledWith('cats', 20);
     expect(res.json).toHaveBeenCalledWith({ books: [bookNotInLibrary], query: 'cats' });
   });
+
+  it('forwards seedCategory and seedMood to searchBooksWithClaude', async () => {
+    const res = makeRes();
+    await search(makeReq({ query: 'cats', seedCategory: 'Philosophy', seedMood: 'Rigorous' }), res);
+    expect(mockSearchBooksWithClaude).toHaveBeenCalledWith('cats', 20, 'Philosophy', 'Rigorous');
+  });
+
+  it('passes undefined seedCategory/seedMood to searchBooksWithClaude when not provided', async () => {
+    const res = makeRes();
+    await search(makeReq({ query: 'cats' }), res);
+    expect(mockSearchBooksWithClaude).toHaveBeenCalledWith('cats', 20, undefined, undefined);
+  });
 });

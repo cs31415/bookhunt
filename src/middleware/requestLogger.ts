@@ -17,6 +17,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const start = process.hrtime.bigint();
 
   res.on('finish', () => {
+    if (req.method === 'OPTIONS' || req.path === '/api/health') return;
+
     const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
     let line = `${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`;
     if (req.method === 'POST' && req.body && Object.keys(req.body).length > 0) {

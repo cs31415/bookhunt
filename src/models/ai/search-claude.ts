@@ -2,9 +2,24 @@ import { completeTextWithModel } from '../../lib/llm/complete-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { SearchResult } from './search';
 
-export async function searchBooksWithClaude(query: string, limit: number): Promise<SearchResult[]> {
+export async function searchBooksWithClaude(
+  query: string,
+  limit: number,
+  seedCategory?: string,
+  seedMood?: string,
+): Promise<SearchResult[]> {
   const maxResults = Math.min(Math.max(1, limit), 20);
-  const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title", "author" (can be null if unknown), "categories" (2-4 genre tags like 'Popular Science', 'Memoir'), and "moods" (2-4 reader mood/feel tags like 'Mind-expanding', 'Rigorous') fields. Return ONLY valid JSON, no other text.`;
+  const seedClauses = [
+    seedCategory
+      ? `Every book's "categories" array must include "${seedCategory}" verbatim, alongside 1-3 other genre tags.`
+      : null,
+    seedMood
+      ? `Every book's "moods" array must include "${seedMood}" verbatim, alongside 1-3 other mood tags.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title", "author" (can be null if unknown), "categories" (2-4 genre tags like 'Popular Science', 'Memoir'), and "moods" (2-4 reader mood/feel tags like 'Mind-expanding', 'Rigorous') fields.${seedClauses ? ` ${seedClauses}` : ''} Return ONLY valid JSON, no other text.`;
 
   try {
     const { result: suggestions, model } = await completeTextWithModel(prompt, {
