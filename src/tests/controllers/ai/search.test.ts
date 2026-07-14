@@ -6,7 +6,6 @@ import * as searchClaudeModel from '../../../models/ai/search-claude';
 jest.mock('../../../models/ai/search');
 jest.mock('../../../models/ai/search-claude');
 
-const mockSearchBooks = searchModel.searchBooks as jest.Mock;
 const mockMatchLibraryEntries = searchModel.matchLibraryEntries as jest.Mock;
 const mockSearchBooksWithClaude = searchClaudeModel.searchBooksWithClaude as jest.Mock;
 
@@ -53,7 +52,7 @@ describe('search controller', () => {
   });
 
   it('returns books with library books sorted first', async () => {
-    mockSearchBooks.mockResolvedValue([bookNotInLibrary, bookInLibrary]);
+    mockSearchBooksWithClaude.mockResolvedValue([bookNotInLibrary, bookInLibrary]);
     mockMatchLibraryEntries.mockResolvedValue(undefined);
     const res = makeRes();
     await search(makeReq({ query: 'cats' }, { id: 1, email: 'a@b.com' }), res);
@@ -64,7 +63,7 @@ describe('search controller', () => {
   });
 
   it('filters to library-only books when inLibraryOnly is true', async () => {
-    mockSearchBooks.mockResolvedValue([bookNotInLibrary, bookInLibrary]);
+    mockSearchBooksWithClaude.mockResolvedValue([bookNotInLibrary, bookInLibrary]);
     mockMatchLibraryEntries.mockResolvedValue(undefined);
     const res = makeRes();
     await search(makeReq({ query: 'cats', inLibraryOnly: true }, { id: 1, email: 'a@b.com' }), res);
@@ -75,44 +74,40 @@ describe('search controller', () => {
   });
 
   it('skips matchLibraryEntries when user is not authenticated', async () => {
-    mockSearchBooks.mockResolvedValue([bookNotInLibrary]);
+    mockSearchBooksWithClaude.mockResolvedValue([bookNotInLibrary]);
     const res = makeRes();
     await search(makeReq({ query: 'cats' }), res);
     expect(mockMatchLibraryEntries).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ books: [bookNotInLibrary], query: 'cats' });
   });
 
-  it('uses provided limit when calling searchBooks', async () => {
-    mockSearchBooks.mockResolvedValue([]);
+  it('uses provided limit when calling searchBooksWithClaude', async () => {
     const res = makeRes();
     await search(makeReq({ query: 'dogs', limit: 5 }), res);
-    expect(mockSearchBooks).toHaveBeenCalledWith('dogs', 5);
+    expect(mockSearchBooksWithClaude).toHaveBeenCalledWith('dogs', 5, undefined, undefined);
   });
 
   it('returns 500 on unexpected error', async () => {
-    mockSearchBooks.mockRejectedValue(new Error('network'));
+    mockSearchBooksWithClaude.mockRejectedValue(new Error('network'));
     const res = makeRes();
     await search(makeReq({ query: 'cats' }), res);
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
   });
 
-  it('uses LLM results when non-empty and does not call searchBooks', async () => {
+  it('returns LLM results as-is', async () => {
     const llmBook = { googleBooksId: null, title: 'LLM Pick', inLibrary: false, libraryStatus: null, source: 'gemini-3.1-flash-lite' };
     mockSearchBooksWithClaude.mockResolvedValue([llmBook]);
     const res = makeRes();
     await search(makeReq({ query: 'cats' }), res);
-    expect(mockSearchBooks).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ books: [llmBook], query: 'cats' });
   });
 
-  it('falls back to searchBooks when Claude returns no results', async () => {
+  it('returns an empty list when Claude returns no results, without any fallback', async () => {
     mockSearchBooksWithClaude.mockResolvedValue([]);
-    mockSearchBooks.mockResolvedValue([bookNotInLibrary]);
     const res = makeRes();
     await search(makeReq({ query: 'cats' }), res);
-    expect(mockSearchBooks).toHaveBeenCalledWith('cats', 20);
-    expect(res.json).toHaveBeenCalledWith({ books: [bookNotInLibrary], query: 'cats' });
+    expect(res.json).toHaveBeenCalledWith({ books: [], query: 'cats' });
   });
 
   it('forwards seedCategory and seedMood to searchBooksWithClaude', async () => {

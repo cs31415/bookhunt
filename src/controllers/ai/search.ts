@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { searchBooks, matchLibraryEntries } from '../../models/ai/search';
+import { matchLibraryEntries } from '../../models/ai/search';
 import { searchBooksWithClaude } from '../../models/ai/search-claude';
 
 /**
@@ -7,7 +7,7 @@ import { searchBooksWithClaude } from '../../models/ai/search-claude';
  * /ai/search:
  *   post:
  *     tags: [AI]
- *     summary: Search via LLM with library matching, falling back to the books API
+ *     summary: Search via LLM only, with library matching
  *     security:
  *       - bearerAuth: []
  *       - {}
@@ -66,10 +66,7 @@ export async function search(req: Request, res: Response) {
       return;
     }
 
-    let books = await searchBooksWithClaude(query, limit, seedCategory, seedMood);
-    if (books.length === 0) {
-      books = await searchBooks(query, limit);
-    }
+    const books = await searchBooksWithClaude(query, limit, seedCategory, seedMood);
 
     if (req.user && books.length > 0) {
       await matchLibraryEntries(req.user.id, books);
