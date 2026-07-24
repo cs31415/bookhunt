@@ -35,6 +35,7 @@ export interface AuthorDetails {
 export interface BooksProviderAdapter {
   provider: BooksProvider;
   search: (query: string, limit: number) => Promise<SearchResult[]>;
+  getById?: (id: string) => Promise<SearchResult | null>;
   getEditionDetails?: (id: string) => Promise<EditionDetails>;
   getAuthorDetails?: (name: string) => Promise<AuthorDetails>;
 }

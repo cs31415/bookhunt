@@ -1,7 +1,7 @@
-import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
+import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
 import { extractOpenLibraryTextField } from './extract-open-library-text-field';
 import { loggedFetch } from './logged-fetch';
-import { EditionDetails } from './books-types';
+import { EditionDetails, SearchResult } from './books-types';
 
 export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Promise<EditionDetails> {
   const empty: EditionDetails = { description: null, publisher: null, pages: null };
@@ -36,4 +36,44 @@ export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Pro
   }
 
   return { description, publisher, pages };
+}
+
+// Best-effort: the edition JSON has no resolved author names (only author keys)
+// and no per-edition subjects, so `authors`/`categories` come back empty here.
+export async function getOpenLibraryById(openLibraryId: string): Promise<SearchResult | null> {
+  await throttleOpenLibrary();
+
+  let edition: any;
+  try {
+    const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}/books/${openLibraryId}.json`);
+    if (!response.ok) return null;
+    edition = await response.json();
+  } catch {
+    return null;
+  }
+
+  if (!edition?.title) return null;
+
+  const isbns13: string[] = edition.isbn_13 || [];
+  const coverId: number | undefined = edition.covers?.[0];
+
+  return {
+    googleBooksId: null,
+    openLibraryId,
+    title: edition.title,
+    authors: [],
+    year: edition.publish_date ? parseInt(edition.publish_date.match(/\d{4}/)?.[0] ?? '', 10) || null : null,
+    publisher: edition.publishers?.[0] || null,
+    pages: edition.number_of_pages || null,
+    rating: null,
+    coverUrl: coverId ? `${OPENLIBRARY_COVERS_URL}/b/id/${coverId}-M.jpg` : null,
+    isbn13: isbns13[0] || null,
+    language: null,
+    blurb: extractOpenLibraryTextField(edition.description),
+    categories: [],
+    moods: [],
+    inLibrary: false,
+    libraryStatus: null,
+    source: 'open_library' as const,
+  };
 }

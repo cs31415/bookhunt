@@ -38,7 +38,40 @@ describe('getBySlug controller', () => {
 
     await getBySlug(makeReq({ slug: 'economics-in-one-lesson' }, { a: 'henry-hazlitt' }), res);
 
-    expect(mockResolveBookBySlug).toHaveBeenCalledWith('economics-in-one-lesson', 'henry-hazlitt');
+    expect(mockResolveBookBySlug).toHaveBeenCalledWith('economics-in-one-lesson', 'henry-hazlitt', undefined);
+  });
+
+  it('parses ?pid=g:<id> into a google_books provider id hint', async () => {
+    mockResolveBookBySlug.mockResolvedValue({ id: 1, slug: 'x', cataloged: false });
+    const res = makeRes();
+
+    await getBySlug(makeReq({ slug: 'sapiens' }, { a: 'yuval-noah-harari', pid: 'g:MosvEQAAQBAJ' }), res);
+
+    expect(mockResolveBookBySlug).toHaveBeenCalledWith('sapiens', 'yuval-noah-harari', {
+      source: 'google_books',
+      id: 'MosvEQAAQBAJ',
+    });
+  });
+
+  it('parses ?pid=o:<id> into an open_library provider id hint', async () => {
+    mockResolveBookBySlug.mockResolvedValue({ id: 1, slug: 'x', cataloged: false });
+    const res = makeRes();
+
+    await getBySlug(makeReq({ slug: 'sapiens' }, { a: 'yuval-noah-harari', pid: 'o:OL123M' }), res);
+
+    expect(mockResolveBookBySlug).toHaveBeenCalledWith('sapiens', 'yuval-noah-harari', {
+      source: 'open_library',
+      id: 'OL123M',
+    });
+  });
+
+  it('ignores a malformed pid and falls back to no provider id hint', async () => {
+    mockResolveBookBySlug.mockResolvedValue({ id: 1, slug: 'x', cataloged: false });
+    const res = makeRes();
+
+    await getBySlug(makeReq({ slug: 'sapiens' }, { a: 'yuval-noah-harari', pid: 'xyz' }), res);
+
+    expect(mockResolveBookBySlug).toHaveBeenCalledWith('sapiens', 'yuval-noah-harari', undefined);
   });
 
   it('checks the library entry for a cataloged book when authenticated', async () => {

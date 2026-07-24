@@ -1,8 +1,9 @@
-import { fetchOpenLibraryEditionDetails } from '../../../lib/books/open-library-edition-adapter';
+import { fetchOpenLibraryEditionDetails, getOpenLibraryById } from '../../../lib/books/open-library-edition-adapter';
 
 jest.mock('../../../lib/books/open-library-rate-limiter', () => ({
   throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
   OPENLIBRARY_API_URL: 'https://openlibrary.org',
+  OPENLIBRARY_COVERS_URL: 'https://covers.openlibrary.org',
 }));
 
 function mockFetch(handlers: Record<string, () => any>) {
@@ -121,5 +122,84 @@ describe('fetchOpenLibraryEditionDetails', () => {
 
     const result = await fetchOpenLibraryEditionDetails('OL1M');
     expect(result.description).toBeNull();
+  });
+});
+
+describe('getOpenLibraryById', () => {
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  it('maps an edition response into a SearchResult', async () => {
+    mockFetch({
+      '/books/OL1M.json': () =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            title: 'Sapiens',
+            publishers: ['Harper'],
+            number_of_pages: 443,
+            publish_date: 'February 10, 2015',
+            isbn_13: ['9780062316097'],
+            covers: [12345],
+            description: 'A brief history of humankind',
+          }),
+        }),
+    });
+
+    const result = await getOpenLibraryById('OL1M');
+
+    expect(result).toEqual({
+      googleBooksId: null,
+      openLibraryId: 'OL1M',
+      title: 'Sapiens',
+      authors: [],
+      year: 2015,
+      publisher: 'Harper',
+      pages: 443,
+      rating: null,
+      coverUrl: 'https://covers.openlibrary.org/b/id/12345-M.jpg',
+      isbn13: '9780062316097',
+      language: null,
+      blurb: 'A brief history of humankind',
+      categories: [],
+      moods: [],
+      inLibrary: false,
+      libraryStatus: null,
+      source: 'open_library',
+    });
+  });
+
+  it('returns null when the edition has no title', async () => {
+    mockFetch({ '/books/OL1M.json': () => Promise.resolve({ ok: true, json: async () => ({}) }) });
+    expect(await getOpenLibraryById('OL1M')).toBeNull();
+  });
+
+  it('returns null when the lookup fails', async () => {
+    mockFetch({ '/books/OL1M.json': () => Promise.resolve({ ok: false }) });
+    expect(await getOpenLibraryById('OL1M')).toBeNull();
+  });
+
+  it('returns null when the fetch throws', async () => {
+    mockFetch({ '/books/OL1M.json': () => Promise.reject(new Error('network')) });
+    expect(await getOpenLibraryById('OL1M')).toBeNull();
+  });
+
+  it('handles missing optional fields gracefully', async () => {
+    mockFetch({
+      '/books/OL1M.json': () => Promise.resolve({ ok: true, json: async () => ({ title: 'Bare Edition' }) }),
+    });
+
+    const result = await getOpenLibraryById('OL1M');
+
+    expect(result).toMatchObject({
+      title: 'Bare Edition',
+      year: null,
+      publisher: null,
+      pages: null,
+      coverUrl: null,
+      isbn13: null,
+      blurb: null,
+    });
   });
 });
