@@ -1,4 +1,4 @@
-import { searchGoogleBooks, getGoogleBooksEditionDetails } from '../../../lib/books/google-books-adapter';
+import { searchGoogleBooks, getGoogleBooksEditionDetails, getGoogleBooksById } from '../../../lib/books/google-books-adapter';
 
 function mockFetch(handler: () => any) {
   global.fetch = jest.fn().mockImplementation(handler) as any;
@@ -127,5 +127,40 @@ describe('getGoogleBooksEditionDetails', () => {
       publisher: null,
       pages: null,
     });
+  });
+});
+
+describe('getGoogleBooksById', () => {
+  it('maps a single-volume response the same way as a search result', async () => {
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => googleItem }));
+
+    const result = await getGoogleBooksById('abc123');
+
+    expect(result).toMatchObject({
+      googleBooksId: 'abc123',
+      title: 'Cat Science',
+      authors: ['Dr Cat'],
+      year: 2020,
+      publisher: 'CatPress',
+      pages: 200,
+      rating: 4.5,
+      isbn13: '9781234567890',
+      source: 'google_books',
+    });
+  });
+
+  it('returns null when the volume has no id', async () => {
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({}) }));
+    expect(await getGoogleBooksById('missing')).toBeNull();
+  });
+
+  it('returns null when the response is non-ok', async () => {
+    mockFetch(() => Promise.resolve({ ok: false }));
+    expect(await getGoogleBooksById('abc123')).toBeNull();
+  });
+
+  it('returns null when the fetch throws', async () => {
+    mockFetch(() => Promise.reject(new Error('network')));
+    expect(await getGoogleBooksById('abc123')).toBeNull();
   });
 });

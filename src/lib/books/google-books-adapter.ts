@@ -24,30 +24,54 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
   const data: any = await response.json();
   const items: any[] = data.items || [];
 
-  return items.map((item: any) => {
-    const info = item.volumeInfo || {};
-    const identifiers = info.industryIdentifiers || [];
-    const isbn13Entry = identifiers.find((id: any) => id.type === 'ISBN_13');
-    return {
-      googleBooksId: item.id,
-      openLibraryId: null,
-      title: info.title,
-      authors: info.authors || [],
-      year: info.publishedDate ? parseInt(info.publishedDate.substring(0, 4), 10) : null,
-      publisher: info.publisher || null,
-      pages: info.pageCount || null,
-      rating: info.averageRating || null,
-      coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
-      isbn13: isbn13Entry?.identifier || null,
-      language: info.language || null,
-      blurb: info.description || null,
-      categories: info.categories || [],
-      moods: [],
-      inLibrary: false,
-      libraryStatus: null,
-      source: 'google_books' as const,
-    };
-  });
+  return items.map(mapGoogleBooksVolume);
+}
+
+function mapGoogleBooksVolume(item: any): SearchResult {
+  const info = item.volumeInfo || {};
+  const identifiers = info.industryIdentifiers || [];
+  const isbn13Entry = identifiers.find((id: any) => id.type === 'ISBN_13');
+  return {
+    googleBooksId: item.id,
+    openLibraryId: null,
+    title: info.title,
+    authors: info.authors || [],
+    year: info.publishedDate ? parseInt(info.publishedDate.substring(0, 4), 10) : null,
+    publisher: info.publisher || null,
+    pages: info.pageCount || null,
+    rating: info.averageRating || null,
+    coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
+    isbn13: isbn13Entry?.identifier || null,
+    language: info.language || null,
+    blurb: info.description || null,
+    categories: info.categories || [],
+    moods: [],
+    inLibrary: false,
+    libraryStatus: null,
+    source: 'google_books' as const,
+  };
+}
+
+export async function getGoogleBooksById(googleBooksId: string): Promise<SearchResult | null> {
+  const url = withApiKey(`https://www.googleapis.com/books/v1/volumes/${googleBooksId}?`);
+
+  let response: globalThis.Response;
+  try {
+    response = await loggedFetch('google_books', url);
+  } catch {
+    return null;
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const item: any = await response.json();
+  if (!item?.id) {
+    return null;
+  }
+
+  return mapGoogleBooksVolume(item);
 }
 
 export async function getGoogleBooksEditionDetails(googleBooksId: string): Promise<EditionDetails> {
