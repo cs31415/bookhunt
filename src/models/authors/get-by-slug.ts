@@ -1,4 +1,4 @@
-import { getAuthorBySlug as fetchAuthorBySlug, getBooksByAuthor, updateAuthorDetails } from '../../data/authors-data';
+import { getAuthorBySlug as fetchAuthorBySlug, getBooksByAuthor, updateAuthorDetails, createAuthor } from '../../data/authors-data';
 import { getAuthorDetailsWithFallback } from '../../lib/books/get-author-details-with-fallback';
 import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-config';
 import { generateAuthorDetails } from '../ai/get-author-details';
@@ -149,14 +149,19 @@ function resolveAuthorName(results: SearchResult[], slug: string, fallbackQuery:
 
 /**
  * Resolves an author that isn't in the catalog by de-slugifying the slug to a
- * name and looking them up live via the provider chain (no catalog write) -
- * this is how a provider-sourced book's author link (e.g. followed from an
- * uncataloged Book Detail page) can load an Author page. Returns null when no
- * provider knows the author, so the route 404s. See LOS-149.
+ * name and looking them up live via the provider chain - this is how a
+ * provider-sourced book's author link (e.g. followed from an uncataloged Book
+ * Detail page) can load an Author page. Returns null when no provider knows the
+ * author, so the route 404s. See LOS-149.
  *
- * Biographical details aren't persisted (there's no catalog row to update), so
- * they're enriched per request; an enrichment failure degrades to null fields
- * rather than failing the whole page.
+ * The resolved author (with whatever biographical details enrichment produced)
+ * is persisted so subsequent requests hit the catalog path instead of
+ * re-resolving live (LOS-150). Enrichment failures degrade to null fields
+ * rather than failing the whole page; the row is still written and later
+ * requests can top up missing fields via enrichAuthor.
+ *
+ * Only the author is persisted here - the provider-returned works stay
+ * uncataloged (bookId: null), matching the pre-LOS-150 behavior.
  */
 export async function resolveProviderAuthor(slug: string, userId?: number) {
   const nameQuery = deslugify(slug);
@@ -192,8 +197,8 @@ export async function resolveProviderAuthor(slug: string, userId?: number) {
   }
   const books = [...works.filter((w) => w.inLibrary), ...works.filter((w) => !w.inLibrary)];
 
-  // id: 0 marks a synthesized, non-cataloged author (matches resolveBookBySlug's
-  // id: 0 sentinel for ephemeral books).
-  const author = { id: 0, slug, name, birth_year: birthYear, country, bio };
+  // Persist the resolved author so the next request for this slug hits the
+  // catalog path (getAuthorBySlug) instead of re-resolving live (LOS-150).
+  const author = await createAuthor({ slug, name, birthYear, country, bio });
   return { author, books };
 }

@@ -17,6 +17,7 @@ BEGIN;
 \ir functions/fn_get_books_by_google_ids.sql
 \ir functions/fn_get_author_by_slug.sql
 \ir functions/fn_get_books_by_author.sql
+\ir functions/fn_create_author.sql
 \ir functions/fn_update_author_details.sql
 \ir functions/fn_get_related_books.sql
 \ir functions/fn_update_book_ai_metadata.sql

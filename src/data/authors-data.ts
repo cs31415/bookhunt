@@ -16,6 +16,16 @@ export async function getBooksByAuthor(authorId: number) {
   return result.rows;
 }
 
+export async function createAuthor(
+  author: { slug: string; name: string; birthYear: number | null; country: string | null; bio: string | null },
+) {
+  const result = await pool.query(
+    'SELECT * FROM fn_create_author($1, $2, $3, $4, $5)',
+    [author.slug, author.name, author.birthYear, author.country, author.bio],
+  );
+  return result.rows[0];
+}
+
 export async function updateAuthorDetails(
   authorId: number,
   details: { birthYear: number | null; country: string | null; bio: string | null },
