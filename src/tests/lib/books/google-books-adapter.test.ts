@@ -47,6 +47,17 @@ describe('searchGoogleBooks', () => {
     });
   });
 
+  it('strips embedded HTML from the description into blurb', async () => {
+    const item = {
+      id: 'h1',
+      volumeInfo: { title: 'Tagged', description: '<p>A saga &amp; more.</p><p>Book two.</p>' },
+    };
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ items: [item] }) }));
+
+    const [book] = await searchGoogleBooks('tagged', 1);
+    expect(book.blurb).toBe('A saga & more. Book two.');
+  });
+
   it('upgrades cover URL from http to https', async () => {
     const item = { id: 'x', volumeInfo: { imageLinks: { thumbnail: 'http://books.google.com/cover.jpg' } } };
     mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ items: [item] }) }));
@@ -100,6 +111,19 @@ describe('getGoogleBooksEditionDetails', () => {
     const result = await getGoogleBooksEditionDetails('abc123');
 
     expect(result).toEqual({ description: 'A description', publisher: 'A Press', pages: 300 });
+  });
+
+  it('strips embedded HTML from the edition description', async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({ volumeInfo: { description: 'Line one.<br>Line two &amp; three.' } }),
+      }),
+    );
+
+    const result = await getGoogleBooksEditionDetails('abc123');
+
+    expect(result.description).toBe('Line one. Line two & three.');
   });
 
   it('returns nulls when the volume fetch fails', async () => {

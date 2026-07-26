@@ -16,4 +16,12 @@ describe('extractOpenLibraryTextField', () => {
   it('returns null for an object with no value field', () => {
     expect(extractOpenLibraryTextField({})).toBeNull();
   });
+
+  it('strips embedded HTML from a plain string', () => {
+    expect(extractOpenLibraryTextField('A <b>bold</b> bio.<br>Second line.')).toBe('A bold bio. Second line.');
+  });
+
+  it('strips embedded HTML from a wrapped value', () => {
+    expect(extractOpenLibraryTextField({ value: '<p>Wrapped &amp; cleaned</p>' })).toBe('Wrapped & cleaned');
+  });
 });
