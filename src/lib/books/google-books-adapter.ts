@@ -1,5 +1,6 @@
 import { EditionDetails, SearchResult } from './books-types';
 import { loggedFetch } from './logged-fetch';
+import { stripHtml } from '../text/strip-html';
 
 function withApiKey(url: string): string {
   return process.env.GOOGLE_BOOKS_API_KEY ? `${url}&key=${process.env.GOOGLE_BOOKS_API_KEY}` : url;
@@ -43,7 +44,7 @@ function mapGoogleBooksVolume(item: any): SearchResult {
     coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
     isbn13: isbn13Entry?.identifier || null,
     language: info.language || null,
-    blurb: info.description || null,
+    blurb: stripHtml(info.description),
     categories: info.categories || [],
     moods: [],
     inLibrary: false,
@@ -93,7 +94,7 @@ export async function getGoogleBooksEditionDetails(googleBooksId: string): Promi
   const info = data.volumeInfo || {};
 
   return {
-    description: info.description || null,
+    description: stripHtml(info.description),
     publisher: info.publisher || null,
     pages: info.pageCount || null,
   };
