@@ -80,14 +80,40 @@ describe('resolveBookBySlug model', () => {
     expect(mockUpsertBook).not.toHaveBeenCalled();
   });
 
-  it('returns null on a miss with no author hint', async () => {
+  it('does a title-only provider search on a miss with no author hint, returning null when nothing matches', async () => {
     mockGetBookBySlug.mockResolvedValue(null);
+    mockSearchBooks.mockResolvedValue([]);
 
     const result = await resolveBookBySlug('unknown-book');
 
+    // No ?a= hint: search by the deslugified title alone rather than 404ing early.
+    expect(mockSearchBooks).toHaveBeenCalledWith('unknown book', 1);
     expect(result).toBeNull();
-    expect(mockSearchBooks).not.toHaveBeenCalled();
     expect(mockUpsertBook).not.toHaveBeenCalled();
+  });
+
+  it('resolves and persists via a title-only search when no author hint is given (LOS-155)', async () => {
+    mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+    mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
+    mockUpsertBook.mockResolvedValue({ slug: 'economics-in-one-lesson' });
+
+    const result = await resolveBookBySlug('economics-in-one-lesson');
+
+    expect(mockSearchBooks).toHaveBeenCalledWith('economics in one lesson', 1);
+    expect(mockUpsertBook).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'economics-in-one-lesson', authorName: 'Henry Hazlitt' }),
+    );
+    expect(result).toEqual({ ...CATALOG_ROW, cataloged: true });
+  });
+
+  it("persists 'Unknown' author when there's no hint and the match credits no author", async () => {
+    mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+    mockSearchBooks.mockResolvedValue([{ ...SEARCH_RESULT_MATCH, authors: [] }]);
+    mockUpsertBook.mockResolvedValue({ slug: 'economics-in-one-lesson' });
+
+    await resolveBookBySlug('economics-in-one-lesson');
+
+    expect(mockUpsertBook).toHaveBeenCalledWith(expect.objectContaining({ authorName: 'Unknown' }));
   });
 
   it('persists the resolved book and returns the catalog row on a miss with a hint', async () => {
