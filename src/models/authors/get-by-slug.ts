@@ -2,7 +2,7 @@ import { getAuthorBySlug as fetchAuthorBySlug, getBooksByAuthor, updateAuthorDet
 import { getAuthorDetailsWithFallback } from '../../lib/books/get-author-details-with-fallback';
 import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-config';
 import { generateAuthorDetails } from '../ai/get-author-details';
-import { searchBooks, matchLibraryEntries } from '../ai/search';
+import { searchBooks, matchLibraryEntries, SearchResult } from '../ai/search';
 
 export { getBooksByAuthor };
 
@@ -100,4 +100,100 @@ export async function getAuthorWorks(author: any, userId?: number): Promise<Auth
   }
 
   return [...works.filter((w) => w.inLibrary), ...works.filter((w) => !w.inLibrary)];
+}
+
+function deslugify(value: string): string {
+  return value.replace(/-/g, ' ').trim();
+}
+
+// Mirrors the frontend/backend slug convention so we can tell whether a
+// provider-credited author name is the one this slug actually refers to.
+function slugifyName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function titleCase(value: string): string {
+  return value.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// The de-slugified query loses the author's real casing (and can't tell us the
+// canonical name when the slug is ambiguous), so recover it from what the
+// provider actually credits: prefer the credited author whose own slug matches
+// the requested one, else the most frequently credited author, else the
+// title-cased query as a last resort.
+function resolveAuthorName(results: SearchResult[], slug: string, fallbackQuery: string): string {
+  const counts = new Map<string, number>();
+  for (const result of results) {
+    for (const author of result.authors) {
+      if (author) counts.set(author, (counts.get(author) ?? 0) + 1);
+    }
+  }
+
+  const exact = [...counts.keys()].find((name) => slugifyName(name) === slug);
+  if (exact) return exact;
+
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [name, count] of counts) {
+    if (count > bestCount) {
+      best = name;
+      bestCount = count;
+    }
+  }
+
+  return best ?? titleCase(fallbackQuery);
+}
+
+/**
+ * Resolves an author that isn't in the catalog by de-slugifying the slug to a
+ * name and looking them up live via the provider chain (no catalog write) -
+ * this is how a provider-sourced book's author link (e.g. followed from an
+ * uncataloged Book Detail page) can load an Author page. Returns null when no
+ * provider knows the author, so the route 404s. See LOS-149.
+ *
+ * Biographical details aren't persisted (there's no catalog row to update), so
+ * they're enriched per request; an enrichment failure degrades to null fields
+ * rather than failing the whole page.
+ */
+export async function resolveProviderAuthor(slug: string, userId?: number) {
+  const nameQuery = deslugify(slug);
+  if (!nameQuery) return null;
+
+  const results = await searchBooks(`inauthor:"${nameQuery}"`, 40);
+  if (results.length === 0) return null;
+
+  const name = resolveAuthorName(results, slug, nameQuery);
+
+  let birthYear: number | null = null;
+  let country: string | null = null;
+  let bio: string | null = null;
+  try {
+    const chain = parseBooksProviderConfig('BOOKS_SEARCH_PROVIDERS');
+    const details = await getAuthorDetailsWithFallback(chain, name);
+    birthYear = details.birthYear;
+    bio = details.bio;
+
+    if (!birthYear || !country || !bio) {
+      const aiDetails = await generateAuthorDetails(name, { birthYear, country, bio });
+      birthYear = birthYear || aiDetails.birthYear;
+      country = country || aiDetails.country;
+      bio = bio || aiDetails.bio;
+    }
+  } catch (error) {
+    console.error(`[authors] enrichment failed for "${name}", returning without details:`, error);
+  }
+
+  const works: AuthorWork[] = results.map((result) => ({ ...result, bookId: null, slug: null }));
+  if (userId) {
+    await matchLibraryEntries(userId, works);
+  }
+  const books = [...works.filter((w) => w.inLibrary), ...works.filter((w) => !w.inLibrary)];
+
+  // id: 0 marks a synthesized, non-cataloged author (matches resolveBookBySlug's
+  // id: 0 sentinel for ephemeral books).
+  const author = { id: 0, slug, name, birth_year: birthYear, country, bio };
+  return { author, books };
 }

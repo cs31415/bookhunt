@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getAuthorBySlug, getAuthorWorks } from '../../models/authors/get-by-slug';
+import { getAuthorBySlug, getAuthorWorks, resolveProviderAuthor } from '../../models/authors/get-by-slug';
 
 /**
  * @swagger
@@ -37,14 +37,21 @@ export async function getBySlug(req: Request, res: Response) {
 
     const author = await getAuthorBySlug(slug);
 
-    if (!author) {
+    if (author) {
+      const books = await getAuthorWorks(author, req.user?.id);
+      res.json({ author, books });
+      return;
+    }
+
+    // Not in the catalog - fall back to resolving the author live from a
+    // provider by slug (LOS-149). Still 404s when no provider knows them.
+    const providerPage = await resolveProviderAuthor(slug, req.user?.id);
+    if (!providerPage) {
       res.status(404).json({ error: 'Author not found' });
       return;
     }
 
-    const books = await getAuthorWorks(author, req.user?.id);
-
-    res.json({ author, books });
+    res.json(providerPage);
   } catch (error) {
     console.error('Error fetching author:', error);
     res.status(500).json({ error: 'Internal server error' });
