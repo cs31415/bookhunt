@@ -3,17 +3,20 @@ import { searchBooks, matchLibraryEntries } from '../../../models/ai/search';
 import { getAuthorDetailsWithFallback } from '../../../lib/books/get-author-details-with-fallback';
 import { generateAuthorDetails } from '../../../models/ai/get-author-details';
 import { parseBooksProviderConfig } from '../../../lib/books/parse-books-provider-config';
+import { createAuthor } from '../../../data/authors-data';
 
 jest.mock('../../../models/ai/search');
 jest.mock('../../../lib/books/get-author-details-with-fallback');
 jest.mock('../../../models/ai/get-author-details');
 jest.mock('../../../lib/books/parse-books-provider-config');
+jest.mock('../../../data/authors-data');
 
 const mockSearchBooks = searchBooks as jest.Mock;
 const mockMatchLibraryEntries = matchLibraryEntries as jest.Mock;
 const mockGetAuthorDetailsWithFallback = getAuthorDetailsWithFallback as jest.Mock;
 const mockGenerateAuthorDetails = generateAuthorDetails as jest.Mock;
 const mockParseBooksProviderConfig = parseBooksProviderConfig as jest.Mock;
+const mockCreateAuthor = createAuthor as jest.Mock;
 
 function makeResult(overrides: Record<string, unknown> = {}) {
   return {
@@ -44,6 +47,15 @@ describe('resolveProviderAuthor', () => {
     mockParseBooksProviderConfig.mockReturnValue(['google_books', 'open_library']);
     mockGetAuthorDetailsWithFallback.mockResolvedValue({ birthYear: null, bio: null });
     mockGenerateAuthorDetails.mockResolvedValue({ birthYear: null, country: null, bio: null });
+    // Echo the persisted row back the way the stored proc would, with a real id.
+    mockCreateAuthor.mockImplementation(async ({ slug, name, birthYear, country, bio }) => ({
+      id: 101,
+      slug,
+      name,
+      birth_year: birthYear,
+      country,
+      bio,
+    }));
   });
 
   it('returns null (→ 404) when no provider knows the author', async () => {
@@ -70,10 +82,18 @@ describe('resolveProviderAuthor', () => {
     const result = await resolveProviderAuthor('neil-shubin');
 
     expect(result?.author).toEqual({
-      id: 0,
+      id: 101,
       slug: 'neil-shubin',
       name: 'Neil Shubin',
       birth_year: 1960,
+      country: 'United States',
+      bio: 'A paleontologist.',
+    });
+    // The resolved author is persisted so later requests hit the catalog path.
+    expect(mockCreateAuthor).toHaveBeenCalledWith({
+      slug: 'neil-shubin',
+      name: 'Neil Shubin',
+      birthYear: 1960,
       country: 'United States',
       bio: 'A paleontologist.',
     });
@@ -125,10 +145,18 @@ describe('resolveProviderAuthor', () => {
     const result = await resolveProviderAuthor('neil-shubin');
 
     expect(result?.author).toEqual({
-      id: 0,
+      id: 101,
       slug: 'neil-shubin',
       name: 'Neil Shubin',
       birth_year: null,
+      country: null,
+      bio: null,
+    });
+    // Still persisted (with null details) so the row exists for later top-up.
+    expect(mockCreateAuthor).toHaveBeenCalledWith({
+      slug: 'neil-shubin',
+      name: 'Neil Shubin',
+      birthYear: null,
       country: null,
       bio: null,
     });
