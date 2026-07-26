@@ -1,13 +1,16 @@
 import { resolveBookBySlug } from '../../../models/books/get-by-slug';
 import * as booksData from '../../../data/books-data';
+import { upsertBook } from '../../../data/library-data';
 import { searchBooks } from '../../../models/ai/search';
 import { getBooksProviderAdapter } from '../../../lib/books/get-books-provider-adapter';
 
 jest.mock('../../../data/books-data');
+jest.mock('../../../data/library-data');
 jest.mock('../../../models/ai/search');
 jest.mock('../../../lib/books/get-books-provider-adapter');
 
 const mockGetBookBySlug = booksData.getBookBySlug as jest.Mock;
+const mockUpsertBook = upsertBook as jest.Mock;
 const mockSearchBooks = searchBooks as jest.Mock;
 const mockGetBooksProviderAdapter = getBooksProviderAdapter as jest.Mock;
 
@@ -31,6 +34,32 @@ const SEARCH_RESULT_MATCH = {
   source: 'google_books',
 };
 
+// The catalog projection (fn_get_book_by_slug) returned after the book is
+// persisted - carries author_name/author_slug the raw upsert row lacks.
+const CATALOG_ROW = {
+  id: 7,
+  slug: 'economics-in-one-lesson',
+  title: 'Economics in One Lesson',
+  author_id: 3,
+  year: 1946,
+  publisher: 'Harper',
+  pages: 218,
+  rating: 4.5,
+  subjects: ['Economics'],
+  moods: [],
+  genres: [],
+  themes: [],
+  hue: '#6f7a55',
+  blurb: 'A classic.',
+  cover_url: 'https://x/y.jpg',
+  google_books_id: 'gid',
+  isbn13: '9780000000000',
+  language: 'en',
+  related: [],
+  author_name: 'Henry Hazlitt',
+  author_slug: 'henry-hazlitt',
+};
+
 describe('resolveBookBySlug model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -48,6 +77,7 @@ describe('resolveBookBySlug model', () => {
       cataloged: true,
     });
     expect(mockSearchBooks).not.toHaveBeenCalled();
+    expect(mockUpsertBook).not.toHaveBeenCalled();
   });
 
   it('returns null on a miss with no author hint', async () => {
@@ -57,39 +87,62 @@ describe('resolveBookBySlug model', () => {
 
     expect(result).toBeNull();
     expect(mockSearchBooks).not.toHaveBeenCalled();
+    expect(mockUpsertBook).not.toHaveBeenCalled();
   });
 
-  it('de-slugifies title and author into a search query and returns an ephemeral result on a miss with a hint', async () => {
-    mockGetBookBySlug.mockResolvedValue(null);
+  it('persists the resolved book and returns the catalog row on a miss with a hint', async () => {
+    mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
     mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
+    mockUpsertBook.mockResolvedValue({ slug: 'economics-in-one-lesson' });
 
     const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
 
     expect(mockSearchBooks).toHaveBeenCalledWith('economics in one lesson henry hazlitt', 1);
-    expect(result).toEqual({
-      id: 0,
+    // The provider match is persisted via the shared upsert helper.
+    expect(mockUpsertBook).toHaveBeenCalledWith({
+      googleBooksId: 'gid',
+      openLibraryId: null,
+      source: 'google_books',
       slug: 'economics-in-one-lesson',
       title: 'Economics in One Lesson',
-      author_id: 0,
+      authorName: 'Henry Hazlitt',
       year: 1946,
       publisher: 'Harper',
       pages: 218,
       rating: 4.5,
       subjects: ['Economics'],
-      moods: ['Rigorous'],
-      genres: [],
-      themes: [],
-      hue: '#6f7a55',
       blurb: 'A classic.',
-      cover_url: 'https://x/y.jpg',
-      google_books_id: 'gid',
+      coverUrl: 'https://x/y.jpg',
       isbn13: '9780000000000',
       language: 'en',
-      related: [],
-      author_name: 'Henry Hazlitt',
-      author_slug: 'henry-hazlitt',
-      cataloged: false,
     });
+    // The response is the catalog projection re-read by the persisted slug.
+    expect(mockGetBookBySlug).toHaveBeenLastCalledWith('economics-in-one-lesson');
+    expect(result).toEqual({ ...CATALOG_ROW, cataloged: true });
+  });
+
+  it('persists under an open_library source when only an openLibraryId is present', async () => {
+    mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+    mockSearchBooks.mockResolvedValue([
+      { ...SEARCH_RESULT_MATCH, googleBooksId: null, openLibraryId: 'OL1W', source: 'open_library' },
+    ]);
+    mockUpsertBook.mockResolvedValue({ slug: 'economics-in-one-lesson' });
+
+    await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+    expect(mockUpsertBook).toHaveBeenCalledWith(
+      expect.objectContaining({ googleBooksId: null, openLibraryId: 'OL1W', source: 'open_library' }),
+    );
+  });
+
+  it('falls back to the deslugified author-slug hint when the match credits no author', async () => {
+    mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+    mockSearchBooks.mockResolvedValue([{ ...SEARCH_RESULT_MATCH, authors: [] }]);
+    mockUpsertBook.mockResolvedValue({ slug: 'economics-in-one-lesson' });
+
+    await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+    expect(mockUpsertBook).toHaveBeenCalledWith(expect.objectContaining({ authorName: 'henry hazlitt' }));
   });
 
   it('returns null when the live search also finds nothing', async () => {
@@ -99,11 +152,13 @@ describe('resolveBookBySlug model', () => {
     const result = await resolveBookBySlug('unknown-book', 'unknown-author');
 
     expect(result).toBeNull();
+    expect(mockUpsertBook).not.toHaveBeenCalled();
   });
 
   describe('with a provider id hint', () => {
     it('fetches the exact edition by id instead of falling back to text search', async () => {
-      mockGetBookBySlug.mockResolvedValue(null);
+      mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+      mockUpsertBook.mockResolvedValue({ slug: 'sapiens' });
       const mockGetById = jest.fn().mockResolvedValue(SEARCH_RESULT_MATCH);
       mockGetBooksProviderAdapter.mockReturnValue({ getById: mockGetById });
 
@@ -115,12 +170,14 @@ describe('resolveBookBySlug model', () => {
       expect(mockGetBooksProviderAdapter).toHaveBeenCalledWith('google_books');
       expect(mockGetById).toHaveBeenCalledWith('MosvEQAAQBAJ');
       expect(mockSearchBooks).not.toHaveBeenCalled();
+      expect(mockUpsertBook).toHaveBeenCalled();
       expect(result?.google_books_id).toBe('gid');
-      expect(result?.cataloged).toBe(false);
+      expect(result?.cataloged).toBe(true);
     });
 
     it('falls back to text search when getById returns null', async () => {
-      mockGetBookBySlug.mockResolvedValue(null);
+      mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+      mockUpsertBook.mockResolvedValue({ slug: 'sapiens' });
       const mockGetById = jest.fn().mockResolvedValue(null);
       mockGetBooksProviderAdapter.mockReturnValue({ getById: mockGetById });
       mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
@@ -135,7 +192,8 @@ describe('resolveBookBySlug model', () => {
     });
 
     it('falls back to text search when getById throws', async () => {
-      mockGetBookBySlug.mockResolvedValue(null);
+      mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+      mockUpsertBook.mockResolvedValue({ slug: 'sapiens' });
       const mockGetById = jest.fn().mockRejectedValue(new Error('network error'));
       mockGetBooksProviderAdapter.mockReturnValue({ getById: mockGetById });
       mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
@@ -150,7 +208,8 @@ describe('resolveBookBySlug model', () => {
     });
 
     it('falls back to text search when the adapter has no getById', async () => {
-      mockGetBookBySlug.mockResolvedValue(null);
+      mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+      mockUpsertBook.mockResolvedValue({ slug: 'sapiens' });
       mockGetBooksProviderAdapter.mockReturnValue({});
       mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
 
