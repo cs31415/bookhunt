@@ -6,7 +6,7 @@ Personal book explorer app — search, curate a library, get AI-powered summarie
 
 - **API**: Node.js + Express + TypeScript
 - **Database**: PostgreSQL (stored procedures, no ORM)
-- **AI**: Claude API (summaries, themes, bookshelf scanning)
+- **AI**: LLM APIs (Anthropic/OpenAI/Google, configurable per model) for summaries, themes, bookshelf scanning
 - **Search**: Google Books API
 - **Storage**: AWS S3 (bookshelf photo uploads)
 - **Auth**: JWT + bcrypt

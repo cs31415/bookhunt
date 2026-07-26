@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { matchLibraryEntries } from '../../models/ai/search';
-import { searchBooksWithClaude } from '../../models/ai/search-claude';
+import { searchBooksWithLlm } from '../../models/ai/search-llm';
 
 /**
  * @swagger
@@ -66,7 +66,7 @@ export async function search(req: Request, res: Response) {
       return;
     }
 
-    const books = await searchBooksWithClaude(query, limit, seedCategory, seedMood);
+    const books = await searchBooksWithLlm(query, limit, seedCategory, seedMood);
 
     if (req.user && books.length > 0) {
       await matchLibraryEntries(req.user.id, books);

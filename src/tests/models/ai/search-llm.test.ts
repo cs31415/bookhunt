@@ -1,4 +1,4 @@
-import { searchBooksWithClaude } from '../../../models/ai/search-claude';
+import { searchBooksWithLlm } from '../../../models/ai/search-llm';
 import { completeTextWithModel } from '../../../lib/llm/complete-text';
 import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 
@@ -15,7 +15,7 @@ function mockLlmResponse(text: string, model = defaultModel) {
   }));
 }
 
-describe('searchBooksWithClaude', () => {
+describe('searchBooksWithLlm', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -25,7 +25,7 @@ describe('searchBooksWithClaude', () => {
       '[{"title":"Grief Is the Thing with Feathers","author":"Max Porter","categories":["Fiction","Grief Lit"],"moods":["Devastating","Tender"]}]',
     );
 
-    const result = await searchBooksWithClaude('books about grief', 5);
+    const result = await searchBooksWithLlm('books about grief', 5);
 
     expect(result).toEqual([
       {
@@ -53,7 +53,7 @@ describe('searchBooksWithClaude', () => {
   it('defaults categories and moods to an empty array when the LLM omits them', async () => {
     mockLlmResponse('[{"title":"A Book","author":"An Author"}]');
 
-    const [book] = await searchBooksWithClaude('query', 5);
+    const [book] = await searchBooksWithLlm('query', 5);
     expect(book.categories).toEqual([]);
     expect(book.moods).toEqual([]);
   });
@@ -64,21 +64,21 @@ describe('searchBooksWithClaude', () => {
       model: 'claude-haiku-4-5',
     });
 
-    const [book] = await searchBooksWithClaude('query', 5);
+    const [book] = await searchBooksWithLlm('query', 5);
     expect(book.source).toBe('claude-haiku-4-5');
   });
 
   it('sets authors to an empty array when author is null', async () => {
     mockLlmResponse('[{"title":"Anonymous Work","author":null}]');
 
-    const [book] = await searchBooksWithClaude('anonymous books', 5);
+    const [book] = await searchBooksWithLlm('anonymous books', 5);
     expect(book.authors).toEqual([]);
   });
 
   it('parses a markdown-fenced JSON reply', async () => {
     mockLlmResponse('```json\n[{"title":"Fenced Book","author":"Someone"}]\n```');
 
-    const result = await searchBooksWithClaude('query', 5);
+    const result = await searchBooksWithLlm('query', 5);
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe('Fenced Book');
   });
@@ -86,7 +86,7 @@ describe('searchBooksWithClaude', () => {
   it('filters out entries with no title', async () => {
     mockLlmResponse('[{"title":"Has Title","author":"A"},{"author":"No Title"}]');
 
-    const result = await searchBooksWithClaude('query', 5);
+    const result = await searchBooksWithLlm('query', 5);
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe('Has Title');
   });
@@ -94,36 +94,36 @@ describe('searchBooksWithClaude', () => {
   it('returns [] when all LLM models fail', async () => {
     mockCompleteTextWithModel.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
 
-    expect(await searchBooksWithClaude('query', 5)).toEqual([]);
+    expect(await searchBooksWithLlm('query', 5)).toEqual([]);
   });
 
   it('returns [] when the response is not valid JSON', async () => {
     mockLlmResponse('not json at all');
 
-    expect(await searchBooksWithClaude('query', 5)).toEqual([]);
+    expect(await searchBooksWithLlm('query', 5)).toEqual([]);
   });
 
   it('includes the requested limit in the prompt, clamped between 1 and 20', async () => {
     mockLlmResponse('[]');
 
-    await searchBooksWithClaude('query', 100);
+    await searchBooksWithLlm('query', 100);
     expect(mockCompleteTextWithModel.mock.calls[0][0]).toContain('up to 20 books');
 
-    await searchBooksWithClaude('query', 0);
+    await searchBooksWithLlm('query', 0);
     expect(mockCompleteTextWithModel.mock.calls[1][0]).toContain('up to 1 books');
   });
 
   it('requests up to 2048 tokens', async () => {
     mockLlmResponse('[]');
 
-    await searchBooksWithClaude('query', 5);
+    await searchBooksWithLlm('query', 5);
     expect(mockCompleteTextWithModel.mock.calls[0][1].maxTokens).toBe(2048);
   });
 
   it('omits seed clauses from the prompt when seedCategory/seedMood are not provided', async () => {
     mockLlmResponse('[]');
 
-    await searchBooksWithClaude('query', 5);
+    await searchBooksWithLlm('query', 5);
     const prompt = mockCompleteTextWithModel.mock.calls[0][0];
     expect(prompt).not.toContain('must include');
   });
@@ -131,7 +131,7 @@ describe('searchBooksWithClaude', () => {
   it('instructs the LLM to include seedCategory verbatim in every categories array', async () => {
     mockLlmResponse('[]');
 
-    await searchBooksWithClaude('stoicism books', 5, 'Stoicism');
+    await searchBooksWithLlm('stoicism books', 5, 'Stoicism');
     const prompt = mockCompleteTextWithModel.mock.calls[0][0];
     expect(prompt).toContain('"categories" array must include "Stoicism" verbatim');
     expect(prompt).not.toContain('"moods" array must include');
@@ -140,7 +140,7 @@ describe('searchBooksWithClaude', () => {
   it('instructs the LLM to include seedMood verbatim in every moods array', async () => {
     mockLlmResponse('[]');
 
-    await searchBooksWithClaude('lyrical books', 5, undefined, 'Lyrical');
+    await searchBooksWithLlm('lyrical books', 5, undefined, 'Lyrical');
     const prompt = mockCompleteTextWithModel.mock.calls[0][0];
     expect(prompt).toContain('"moods" array must include "Lyrical" verbatim');
     expect(prompt).not.toContain('"categories" array must include');
