@@ -2,7 +2,7 @@ import { completeTextWithModel } from '../../lib/llm/complete-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { SearchResult } from './search';
 
-export async function searchBooksWithClaude(
+export async function searchBooksWithLlm(
   query: string,
   limit: number,
   seedCategory?: string,

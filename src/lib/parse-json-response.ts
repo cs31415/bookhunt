@@ -1,4 +1,4 @@
-// Claude sometimes wraps JSON replies in a ```json ... ``` fence despite being
+// LLMs sometimes wrap JSON replies in a ```json ... ``` fence despite being
 // asked for "ONLY valid JSON" -- strip it before parsing.
 export function parseJsonResponse<T>(rawText: string): T {
   const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);

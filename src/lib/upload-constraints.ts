@@ -1,5 +1,6 @@
-// Claude vision supports JPEG/PNG/GIF/WebP at up to 10 MB per image; we allow
-// the still formats we can verify by magic bytes. HEIC must be converted client-side.
+// Our configured vision models support JPEG/PNG/GIF/WebP at up to 10 MB per
+// image; we allow the still formats we can verify by magic bytes. HEIC must
+// be converted client-side.
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
 export type AllowedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
