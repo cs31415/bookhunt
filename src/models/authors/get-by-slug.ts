@@ -3,6 +3,7 @@ import { getAuthorDetailsWithFallback } from '../../lib/books/get-author-details
 import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-config';
 import { generateAuthorDetails } from '../ai/get-author-details';
 import { searchBooks, matchLibraryEntries, SearchResult } from '../ai/search';
+import { deslugify, slugifyName } from '../../lib/slug';
 
 export { getBooksByAuthor };
 
@@ -100,19 +101,6 @@ export async function getAuthorWorks(author: any, userId?: number): Promise<Auth
   }
 
   return [...works.filter((w) => w.inLibrary), ...works.filter((w) => !w.inLibrary)];
-}
-
-function deslugify(value: string): string {
-  return value.replace(/-/g, ' ').trim();
-}
-
-// Mirrors the frontend/backend slug convention so we can tell whether a
-// provider-credited author name is the one this slug actually refers to.
-function slugifyName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 function titleCase(value: string): string {

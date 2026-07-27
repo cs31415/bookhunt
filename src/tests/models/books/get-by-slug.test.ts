@@ -66,7 +66,12 @@ describe('resolveBookBySlug model', () => {
   });
 
   it('returns the catalog row with cataloged: true on an exact slug match', async () => {
-    mockGetBookBySlug.mockResolvedValue({ id: 4, slug: 'economics-in-one-lesson', title: 'Economics in One Lesson' });
+    mockGetBookBySlug.mockResolvedValue({
+      id: 4,
+      slug: 'economics-in-one-lesson',
+      title: 'Economics in One Lesson',
+      author_slug: 'henry-hazlitt',
+    });
 
     const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
 
@@ -74,10 +79,53 @@ describe('resolveBookBySlug model', () => {
       id: 4,
       slug: 'economics-in-one-lesson',
       title: 'Economics in One Lesson',
+      author_slug: 'henry-hazlitt',
       cataloged: true,
     });
     expect(mockSearchBooks).not.toHaveBeenCalled();
     expect(mockUpsertBook).not.toHaveBeenCalled();
+  });
+
+  it('ignores a catalog row whose author does not match the hint and resolves live instead', async () => {
+    // The reported bug: /books/anthem?a=ayn-rand returned a cataloged
+    // "Anthems and Anthem Composers" by an unrelated author that shares the slug.
+    mockGetBookBySlug
+      .mockResolvedValueOnce({
+        id: 135,
+        slug: 'anthem',
+        title: 'Anthems and Anthem Composers',
+        author_slug: 'myles-birket-foster',
+      })
+      .mockResolvedValueOnce({ ...CATALOG_ROW, slug: 'anthem', author_slug: 'ayn-rand' });
+    mockSearchBooks.mockResolvedValue([
+      { ...SEARCH_RESULT_MATCH, title: 'Anthem', authors: ['Ayn Rand'] },
+    ]);
+    mockUpsertBook.mockResolvedValue({ slug: 'anthem' });
+
+    const result = await resolveBookBySlug('anthem', 'ayn-rand');
+
+    // The slug-colliding catalog row is rejected; a live, author-narrowed
+    // search resolves and persists the correct book.
+    expect(mockSearchBooks).toHaveBeenCalledWith('anthem ayn rand', 5);
+    expect(mockUpsertBook).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Anthem', authorName: 'Ayn Rand' }),
+    );
+    expect(result).toEqual(expect.objectContaining({ author_slug: 'ayn-rand', cataloged: true }));
+  });
+
+  it('prefers a candidate credited to the hinted author over a higher-ranked one', async () => {
+    mockGetBookBySlug.mockResolvedValueOnce(null).mockResolvedValueOnce(CATALOG_ROW);
+    mockSearchBooks.mockResolvedValue([
+      { ...SEARCH_RESULT_MATCH, title: 'Economics Explained', authors: ['Robert Heilbroner'] },
+      SEARCH_RESULT_MATCH, // by Henry Hazlitt - matches the hint
+    ]);
+    mockUpsertBook.mockResolvedValue({ slug: 'economics-in-one-lesson' });
+
+    await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+    expect(mockUpsertBook).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Economics in One Lesson', authorName: 'Henry Hazlitt' }),
+    );
   });
 
   it('does a title-only provider search on a miss with no author hint, returning null when nothing matches', async () => {
@@ -123,7 +171,7 @@ describe('resolveBookBySlug model', () => {
 
     const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
 
-    expect(mockSearchBooks).toHaveBeenCalledWith('economics in one lesson henry hazlitt', 1);
+    expect(mockSearchBooks).toHaveBeenCalledWith('economics in one lesson henry hazlitt', 5);
     // The provider match is persisted via the shared upsert helper.
     expect(mockUpsertBook).toHaveBeenCalledWith({
       googleBooksId: 'gid',
@@ -213,7 +261,7 @@ describe('resolveBookBySlug model', () => {
         id: 'missing-id',
       });
 
-      expect(mockSearchBooks).toHaveBeenCalledWith('sapiens yuval noah harari', 1);
+      expect(mockSearchBooks).toHaveBeenCalledWith('sapiens yuval noah harari', 5);
       expect(result?.google_books_id).toBe('gid');
     });
 
