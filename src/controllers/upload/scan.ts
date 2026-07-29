@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { LlmUnavailableError } from '../../lib/llm/llm-errors';
 import { detectBooksFromImages } from '../../models/upload/scan';
 import { ImageValidationError } from '../../models/upload/validate-image-keys';
+import { MAX_IMAGES_PER_SCAN } from '../../lib/upload-constraints';
 
 /**
  * @swagger
@@ -21,9 +22,12 @@ import { ImageValidationError } from '../../models/upload/validate-image-keys';
  *             properties:
  *               imageKeys:
  *                 type: array
- *                 description: S3 keys returned from /upload/presign (1–10 items)
+ *                 description: |
+ *                   S3 keys returned from /upload/presign (1–40 items). The scan is split
+ *                   across several vision calls internally; results are deduplicated across
+ *                   every photo before being returned.
  *                 minItems: 1
- *                 maxItems: 10
+ *                 maxItems: 40
  *                 items: { type: string }
  *     responses:
  *       200:
@@ -60,8 +64,8 @@ export async function scan(req: Request, res: Response) {
       return;
     }
 
-    if (imageKeys.length > 10) {
-      res.status(400).json({ error: 'imageKeys must contain at most 10 items' });
+    if (imageKeys.length > MAX_IMAGES_PER_SCAN) {
+      res.status(400).json({ error: `imageKeys must contain at most ${MAX_IMAGES_PER_SCAN} items` });
       return;
     }
 

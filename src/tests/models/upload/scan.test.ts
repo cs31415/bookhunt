@@ -1,6 +1,7 @@
 import { detectBooksFromImages } from '../../../models/upload/scan';
 import * as uploadData from '../../../data/upload-data';
 import * as resolveDetected from '../../../models/upload/resolve-detected-book';
+import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: jest.fn(),
@@ -158,5 +159,124 @@ describe('detectBooksFromImages', () => {
     mockVisionResponse([]);
     await detectBooksFromImages(['uploads/7/a'], 7);
     expect(validateImageKeys).toHaveBeenCalledWith(['uploads/7/a'], 7);
+  });
+});
+
+describe('detectBooksFromImages chunking', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.S3_BUCKET_NAME = 'test-bucket';
+    process.env.AWS_REGION = 'us-east-1';
+    mockResolveDetectedBook.mockResolvedValue(null);
+    mockFindBookByTitle.mockResolvedValue(null);
+  });
+
+  function keys(n: number) {
+    return Array.from({ length: n }, (_, i) => `uploads/1/img${i}`);
+  }
+
+  /** Distinct signed URLs, so assertions can tell which chunk received which image. */
+  function signDistinctUrls() {
+    let i = 0;
+    mockGetSignedUrl.mockImplementation(async () => `https://s3.example.com/img${i++}`);
+  }
+
+  it('splits a batch into vision calls of at most IMAGES_PER_VISION_CALL', async () => {
+    signDistinctUrls();
+    mockVisionResponse([]);
+
+    await detectBooksFromImages(keys(20), 1);
+
+    expect(mockCompleteVision).toHaveBeenCalledTimes(3);
+    const sizes = mockCompleteVision.mock.calls.map((call) => call[0].length);
+    expect(sizes).toEqual([8, 8, 4]);
+  });
+
+  it('makes a single vision call when the batch fits in one chunk', async () => {
+    signDistinctUrls();
+    mockVisionResponse([]);
+
+    await detectBooksFromImages(keys(5), 1);
+
+    expect(mockCompleteVision).toHaveBeenCalledTimes(1);
+    expect(mockCompleteVision.mock.calls[0][0]).toHaveLength(5);
+  });
+
+  it('gives each chunk only its own image URLs, with none repeated or dropped', async () => {
+    signDistinctUrls();
+    mockVisionResponse([]);
+
+    await detectBooksFromImages(keys(20), 1);
+
+    const allUrls = mockCompleteVision.mock.calls.flatMap((call) => call[0]);
+    expect(allUrls).toHaveLength(20);
+    expect(new Set(allUrls).size).toBe(20);
+  });
+
+  it('deduplicates a book that appears in more than one chunk', async () => {
+    signDistinctUrls();
+    // Chunk 1 and chunk 2 both see Dune.
+    mockCompleteVision
+      .mockImplementationOnce(async (_urls, _prompt, options) =>
+        options.transform(JSON.stringify([{ title: 'Dune', author: 'Frank Herbert' }])),
+      )
+      .mockImplementationOnce(async (_urls, _prompt, options) =>
+        options.transform(
+          JSON.stringify([
+            { title: 'Dune', author: 'Frank Herbert' },
+            { title: 'Foundation', author: 'Isaac Asimov' },
+          ]),
+        ),
+      );
+
+    const result = await detectBooksFromImages(keys(16), 1);
+
+    expect(result.map((b) => b.title)).toEqual(['Dune', 'Foundation']);
+    expect(mockFindBookByTitle).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves detection order across chunks despite parallel resolution', async () => {
+    signDistinctUrls();
+    mockCompleteVision
+      .mockImplementationOnce(async (_urls, _prompt, options) =>
+        options.transform(JSON.stringify([{ title: 'First', author: 'A' }])),
+      )
+      .mockImplementationOnce(async (_urls, _prompt, options) =>
+        options.transform(
+          JSON.stringify([
+            { title: 'Second', author: 'B' },
+            { title: 'Third', author: 'C' },
+          ]),
+        ),
+      );
+    // Resolve out of order: the last book settles first.
+    mockFindBookByTitle.mockImplementation(async (title: string) => {
+      await new Promise((r) => setTimeout(r, title === 'First' ? 20 : 1));
+      return null;
+    });
+
+    const result = await detectBooksFromImages(keys(16), 1);
+
+    expect(result.map((b) => b.title)).toEqual(['First', 'Second', 'Third']);
+  });
+
+  it('fails the whole scan when any chunk exhausts its model chain', async () => {
+    signDistinctUrls();
+    mockCompleteVision
+      .mockImplementationOnce(async (_urls, _prompt, options) =>
+        options.transform(JSON.stringify([{ title: 'Dune', author: 'Frank Herbert' }])),
+      )
+      .mockRejectedValueOnce(new LlmUnavailableError('all models failed', []));
+
+    await expect(detectBooksFromImages(keys(16), 1)).rejects.toThrow(LlmUnavailableError);
+  });
+
+  it('signs every key in the batch', async () => {
+    signDistinctUrls();
+    mockVisionResponse([]);
+
+    await detectBooksFromImages(keys(20), 1);
+
+    expect(mockGetSignedUrl).toHaveBeenCalledTimes(20);
   });
 });

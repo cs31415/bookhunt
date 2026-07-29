@@ -1,7 +1,11 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { createPresignedUpload } from '../../models/upload/create-presigned-upload';
-import { ALLOWED_IMAGE_TYPES, isAllowedImageType } from '../../lib/upload-constraints';
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGES_PER_SCAN,
+  isAllowedImageType,
+} from '../../lib/upload-constraints';
 
 /**
  * @swagger
@@ -10,7 +14,7 @@ import { ALLOWED_IMAGE_TYPES, isAllowedImageType } from '../../lib/upload-constr
  *     tags: [Upload]
  *     summary: Get presigned S3 POST policies for direct image upload
  *     description: |
- *       Send `{ files: [{ contentType }, …] }` (1–10 items) and receive `[{ url, fields, key }, …]`.
+ *       Send `{ files: [{ contentType }, …] }` (1–40 items) and receive `[{ url, fields, key }, …]`.
  *       Upload each file with a multipart form POST to its `url`, including every `fields` entry
  *       plus the file itself as the `file` field (no auth header required for the S3 POST).
  *       S3 enforces the policy at upload time: max 10 MB per image and exact content-type match.
@@ -29,7 +33,7 @@ import { ALLOWED_IMAGE_TYPES, isAllowedImageType } from '../../lib/upload-constr
  *               files:
  *                 type: array
  *                 minItems: 1
- *                 maxItems: 10
+ *                 maxItems: 40
  *                 items:
  *                   type: object
  *                   required: [contentType]
@@ -63,8 +67,8 @@ export async function presign(req: Request, res: Response) {
       res.status(400).json({ error: 'files must be a non-empty array' });
       return;
     }
-    if (files.length > 10) {
-      res.status(400).json({ error: 'files must contain at most 10 items' });
+    if (files.length > MAX_IMAGES_PER_SCAN) {
+      res.status(400).json({ error: `files must contain at most ${MAX_IMAGES_PER_SCAN} items` });
       return;
     }
     if (!files.every((f) => typeof f?.contentType === 'string' && isAllowedImageType(f.contentType))) {
