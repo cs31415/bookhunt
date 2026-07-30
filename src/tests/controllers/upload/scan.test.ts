@@ -3,6 +3,7 @@ import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 import { scan } from '../../../controllers/upload/scan';
 import * as scanModel from '../../../models/upload/scan';
 import { ImageValidationError } from '../../../models/upload/validate-image-keys';
+import { MAX_IMAGES_PER_SCAN } from '../../../lib/upload-constraints';
 
 jest.mock('../../../models/upload/scan');
 
@@ -41,11 +42,20 @@ describe('scan controller', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'imageKeys must be a non-empty array' });
   });
 
-  it('returns 400 when imageKeys exceeds 10 items', async () => {
+  it('returns 400 when imageKeys exceeds the scan limit', async () => {
     const res = makeRes();
-    await scan(makeReq({ imageKeys: Array(11).fill('uploads/1/key') }), res);
+    await scan(makeReq({ imageKeys: Array(MAX_IMAGES_PER_SCAN + 1).fill('uploads/1/key') }), res);
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'imageKeys must contain at most 10 items' });
+    expect(res.json).toHaveBeenCalledWith({
+      error: `imageKeys must contain at most ${MAX_IMAGES_PER_SCAN} items`,
+    });
+  });
+
+  it('accepts a batch at exactly the scan limit', async () => {
+    mockDetect.mockResolvedValue([]);
+    const res = makeRes();
+    await scan(makeReq({ imageKeys: Array(MAX_IMAGES_PER_SCAN).fill('uploads/1/key') }), res);
+    expect(res.status).not.toHaveBeenCalledWith(400);
   });
 
   it('returns 400 when imageKeys contains non-string items', async () => {

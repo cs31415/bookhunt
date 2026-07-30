@@ -3,9 +3,23 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { completeVision } from '../../lib/llm/complete-vision';
 import { parseJsonResponse } from '../../lib/parse-json-response';
 import { getS3 } from '../../lib/s3';
+import { chunk, mapWithConcurrency } from '../../lib/map-with-concurrency';
+import {
+  IMAGES_PER_VISION_CALL,
+  RESOLUTION_CONCURRENCY,
+  VISION_CHUNK_CONCURRENCY,
+} from '../../lib/upload-constraints';
 import { findBookByTitle } from '../../data/upload-data';
 import { resolveDetectedBook } from './resolve-detected-book';
 import { validateImageKeys } from './validate-image-keys';
+
+interface SpineBook {
+  title: string;
+  author: string | null;
+}
+
+const PROMPT =
+  'Look at these bookshelf photos. List every book you can identify from the spines. Return ONLY a JSON array of objects with "title" and "author" fields. If you cannot identify the author, use null. Return ONLY valid JSON, no other text.';
 
 export async function detectBooksFromImages(imageKeys: string[], userId: number) {
   await validateImageKeys(imageKeys, userId);
@@ -18,37 +32,44 @@ export async function detectBooksFromImages(imageKeys: string[], userId: number)
     ),
   );
 
-  const books = await completeVision(
-    imageUrls,
-    'Look at these bookshelf photos. List every book you can identify from the spines. Return ONLY a JSON array of objects with "title" and "author" fields. If you cannot identify the author, use null. Return ONLY valid JSON, no other text.',
-    {
+  // Split across several vision calls rather than one large one: each call gets
+  // its own output-token budget, Gemini's adapter inlines images as base64 so a
+  // single request can't hold them all, and recall per photo is better when
+  // fewer share a prompt. A chunk that exhausts the model chain fails the whole
+  // scan, exactly as a single failed call does — chunking must not quietly
+  // downgrade a hard failure into partial results.
+  const groups = chunk(imageUrls, IMAGES_PER_VISION_CALL);
+  const perGroup = await mapWithConcurrency(groups, VISION_CHUNK_CONCURRENCY, (urls) =>
+    completeVision(urls, PROMPT, {
       maxTokens: 2048,
-      transform: (rawText) => parseJsonResponse<{ title: string; author: string | null }[]>(rawText),
-    },
+      transform: (rawText) => parseJsonResponse<SpineBook[]>(rawText),
+    }),
   );
 
+  // Dedupe across every chunk before resolving, so a book that appears in three
+  // photos costs one catalog lookup rather than three.
   const seen = new Set<string>();
-  const unique = books.filter((book) => {
+  const unique: SpineBook[] = [];
+  for (const book of perGroup.flat()) {
     const key = `${book.title.toLowerCase()}||${book.author}`;
-    if (seen.has(key)) return false;
+    if (seen.has(key)) continue;
     seen.add(key);
-    return true;
-  });
-
-  const detectedBooks = [];
-  for (const book of unique) {
-    const matchedBookId = await findBookByTitle(book.title);
-    if (matchedBookId) {
-      detectedBooks.push({ title: book.title, author: book.author, matchedBookId });
-    } else {
-      const resolvedBook = await resolveDetectedBook(book.title, book.author);
-      detectedBooks.push({
-        title: book.title,
-        author: book.author,
-        ...(resolvedBook && { resolvedBook }),
-      });
-    }
+    unique.push(book);
   }
 
-  return detectedBooks;
+  // Bounded concurrency, not a sequential loop: an unmatched book costs a DB
+  // query plus up to two provider searches, and a large scan has hundreds of
+  // them. mapWithConcurrency keeps detection order in the response.
+  return mapWithConcurrency(unique, RESOLUTION_CONCURRENCY, async (book) => {
+    const matchedBookId = await findBookByTitle(book.title);
+    if (matchedBookId) {
+      return { title: book.title, author: book.author, matchedBookId };
+    }
+    const resolvedBook = await resolveDetectedBook(book.title, book.author);
+    return {
+      title: book.title,
+      author: book.author,
+      ...(resolvedBook && { resolvedBook }),
+    };
+  });
 }

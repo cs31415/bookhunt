@@ -26,7 +26,9 @@ function fileHash(filePath) {
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
-const SCAN_TIMEOUT_MS = 120_000;
+// Matches Node's default server requestTimeout: a full 40-photo batch fans out
+// across several vision calls plus a few hundred catalog lookups.
+const SCAN_TIMEOUT_MS = 300_000;
 const BULK_TIMEOUT_MS = 60_000;
 
 function apiFetch(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { presign } from '../../../controllers/upload/presign';
 import * as presignModel from '../../../models/upload/create-presigned-upload';
+import { MAX_IMAGES_PER_SCAN } from '../../../lib/upload-constraints';
 
 jest.mock('../../../models/upload/create-presigned-upload');
 
@@ -49,11 +50,16 @@ describe('presign controller', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'files must be a non-empty array' });
   });
 
-  it('returns 400 when files exceeds 10 items', async () => {
+  it('returns 400 when files exceeds the scan limit', async () => {
     const res = makeRes();
-    await presign(makeReq({ files: Array(11).fill({ contentType: 'image/jpeg' }) }), res);
+    await presign(
+      makeReq({ files: Array(MAX_IMAGES_PER_SCAN + 1).fill({ contentType: 'image/jpeg' }) }),
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'files must contain at most 10 items' });
+    expect(res.json).toHaveBeenCalledWith({
+      error: `files must contain at most ${MAX_IMAGES_PER_SCAN} items`,
+    });
   });
 
   it('returns 400 when a file has a non-image contentType', async () => {
