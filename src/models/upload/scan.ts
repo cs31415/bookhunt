@@ -8,6 +8,7 @@ import {
   IMAGES_PER_VISION_CALL,
   RESOLUTION_CONCURRENCY,
   VISION_CHUNK_CONCURRENCY,
+  VISION_MAX_TOKENS,
 } from '../../lib/upload-constraints';
 import { findBookByTitle } from '../../data/upload-data';
 import { resolveDetectedBook } from './resolve-detected-book';
@@ -41,7 +42,7 @@ export async function detectBooksFromImages(imageKeys: string[], userId: number)
   const groups = chunk(imageUrls, IMAGES_PER_VISION_CALL);
   const perGroup = await mapWithConcurrency(groups, VISION_CHUNK_CONCURRENCY, (urls) =>
     completeVision(urls, PROMPT, {
-      maxTokens: 2048,
+      maxTokens: VISION_MAX_TOKENS,
       transform: (rawText) => parseJsonResponse<SpineBook[]>(rawText),
     }),
   );

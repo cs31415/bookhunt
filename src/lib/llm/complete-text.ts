@@ -8,7 +8,11 @@ export async function completeTextWithModel<T = string>(
 ): Promise<CompleteWithFallbackResult<T>> {
   const chain = parseModelConfig('LLM_TEXT_MODELS');
   const transform = options.transform ?? ((rawText: string) => rawText as unknown as T);
-  return completeWithFallback(chain, { prompt, maxTokens: options.maxTokens }, transform);
+  return completeWithFallback(
+    chain,
+    { prompt, maxTokens: options.maxTokens, tolerateTruncation: options.tolerateTruncation },
+    transform,
+  );
 }
 
 export async function completeText<T = string>(prompt: string, options: CompleteOptions<T>): Promise<T> {

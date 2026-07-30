@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { LlmTruncatedError } from './llm-errors';
 import { LlmRequest } from './llm-types';
 import { fetchImageAsBase64 } from './fetch-image-as-base64';
 
@@ -25,6 +26,10 @@ export async function completeWithGemini(model: string, request: LlmRequest): Pr
     contents: [{ role: 'user', parts }],
     config: { maxOutputTokens: request.maxTokens },
   });
+
+  if (!request.tolerateTruncation && response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+    throw new LlmTruncatedError('google', model, request.maxTokens);
+  }
 
   return response.text ?? '';
 }

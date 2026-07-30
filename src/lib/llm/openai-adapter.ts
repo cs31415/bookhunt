@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { LlmTruncatedError } from './llm-errors';
 import { LlmRequest } from './llm-types';
 
 let _openai: OpenAI | null = null;
@@ -26,6 +27,10 @@ export async function completeWithOpenAi(model: string, request: LlmRequest): Pr
     max_completion_tokens: request.maxTokens,
     messages: [{ role: 'user', content }],
   });
+
+  if (!request.tolerateTruncation && response.choices[0]?.finish_reason === 'length') {
+    throw new LlmTruncatedError('openai', model, request.maxTokens);
+  }
 
   return response.choices[0]?.message?.content ?? '';
 }

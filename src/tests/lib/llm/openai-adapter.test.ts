@@ -5,6 +5,7 @@ jest.mock('openai', () =>
 );
 
 import { completeWithOpenAi } from '../../../lib/llm/openai-adapter';
+import { LlmTruncatedError } from '../../../lib/llm/llm-errors';
 
 describe('completeWithOpenAi', () => {
   beforeEach(() => {
@@ -42,5 +43,23 @@ describe('completeWithOpenAi', () => {
     mockCreate.mockResolvedValue({ choices: [{ message: { content: null } }] });
 
     expect(await completeWithOpenAi('gpt-4o-mini', { prompt: 'hello', maxTokens: 256 })).toBe('');
+  });
+
+  it('throws LlmTruncatedError when finish_reason is length', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: '[{"title":"Dune"' }, finish_reason: 'length' }],
+    });
+
+    await expect(
+      completeWithOpenAi('gpt-4o-mini', { prompt: 'hello', maxTokens: 2048 }),
+    ).rejects.toThrow(LlmTruncatedError);
+  });
+
+  it('returns normally when finish_reason is stop', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: 'reply' }, finish_reason: 'stop' }],
+    });
+
+    expect(await completeWithOpenAi('gpt-4o-mini', { prompt: 'hello', maxTokens: 256 })).toBe('reply');
   });
 });

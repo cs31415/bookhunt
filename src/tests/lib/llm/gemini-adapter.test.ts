@@ -6,6 +6,7 @@ jest.mock('@google/genai', () => ({
 jest.mock('../../../lib/llm/fetch-image-as-base64');
 
 import { completeWithGemini } from '../../../lib/llm/gemini-adapter';
+import { LlmTruncatedError } from '../../../lib/llm/llm-errors';
 import { fetchImageAsBase64 } from '../../../lib/llm/fetch-image-as-base64';
 
 const mockFetchImageAsBase64 = fetchImageAsBase64 as jest.Mock;
@@ -52,5 +53,24 @@ describe('completeWithGemini', () => {
     mockGenerateContent.mockResolvedValue({ text: undefined });
 
     expect(await completeWithGemini('gemini-2.5-flash', { prompt: 'hello', maxTokens: 256 })).toBe('');
+  });
+
+  it('throws LlmTruncatedError when finishReason is MAX_TOKENS', async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: '[{"title":"Dune"',
+      candidates: [{ finishReason: 'MAX_TOKENS' }],
+    });
+
+    await expect(
+      completeWithGemini('gemini-2.5-flash', { prompt: 'hello', maxTokens: 2048 }),
+    ).rejects.toThrow(LlmTruncatedError);
+  });
+
+  it('returns normally when finishReason is STOP', async () => {
+    mockGenerateContent.mockResolvedValue({ text: 'reply', candidates: [{ finishReason: 'STOP' }] });
+
+    expect(await completeWithGemini('gemini-2.5-flash', { prompt: 'hello', maxTokens: 256 })).toBe(
+      'reply',
+    );
   });
 });
