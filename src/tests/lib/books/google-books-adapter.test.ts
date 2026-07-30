@@ -47,6 +47,26 @@ describe('searchGoogleBooks', () => {
     });
   });
 
+  it('exposes the single publisher as a one-item publishers list', async () => {
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ items: [googleItem] }) }));
+
+    const [book] = await searchGoogleBooks('cats', 5);
+
+    expect(book.publishers).toEqual(['CatPress']);
+  });
+
+  // Google omits publisher from search results even for the correct book, so an
+  // empty list means "unknown" and must not be scored as a mismatch (LOS-168).
+  it('leaves publishers empty when the volume omits a publisher', async () => {
+    const item = { id: 'nopub', volumeInfo: { title: 'Hong Kong Day by Day' } };
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ items: [item] }) }));
+
+    const [book] = await searchGoogleBooks('hong kong', 1);
+
+    expect(book.publishers).toEqual([]);
+    expect(book.publisher).toBeNull();
+  });
+
   it('strips embedded HTML from the description into blurb', async () => {
     const item = {
       id: 'h1',

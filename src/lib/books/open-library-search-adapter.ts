@@ -5,7 +5,11 @@ import { SearchResult } from './books-types';
 export async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
   await throttleOpenLibrary();
 
-  const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key,subject`;
+  // `publisher` is requested explicitly (LOS-168): it's the only provider field
+  // that can disambiguate books sharing a generic title, such as travel guides
+  // with no author. Open Library returns it as an array aggregated over every
+  // edition of the work.
+  const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key,subject,publisher`;
 
   let response: globalThis.Response;
   try {
@@ -34,13 +38,15 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
       ? `${OPENLIBRARY_COVERS_URL}/b/id/${doc.cover_i}-M.jpg`
       : null;
     const editionKeys: string[] = doc.edition_key || [];
+    const publishers: string[] = doc.publisher || [];
     return {
       googleBooksId: null,
       openLibraryId: editionKeys[0] || null,
       title: doc.title || '',
       authors: doc.author_name || [],
       year: doc.first_publish_year || null,
-      publisher: null,
+      publisher: publishers[0] || null,
+      publishers,
       pages: null,
       rating: null,
       coverUrl,

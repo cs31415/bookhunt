@@ -58,6 +58,47 @@ describe('searchOpenLibrary', () => {
     expect(url).toContain('fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key,subject');
   });
 
+  // Open Library is the only provider that reliably reports publisher, which is
+  // what makes generic-titled books (travel guides with no author) resolvable.
+  it('requests the publisher field', async () => {
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [olDoc] }) }));
+
+    await searchOpenLibrary('cats', 5);
+
+    const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    expect(url).toContain('publisher');
+  });
+
+  it('keeps every publisher the work lists, and uses the first as canonical', async () => {
+    // Real shape: aggregated across editions, with inconsistent naming.
+    const doc = { ...olDoc, publisher: ["Frommer's", 'Frommers', '*Frommers', 'Wiley'] };
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [doc] }) }));
+
+    const [book] = await searchOpenLibrary('hong kong', 5);
+
+    expect(book.publishers).toEqual(["Frommer's", 'Frommers', '*Frommers', 'Wiley']);
+    expect(book.publisher).toBe("Frommer's");
+  });
+
+  it('leaves publishers empty and publisher null when the work lists none', async () => {
+    const doc = { ...olDoc, publisher: undefined };
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [doc] }) }));
+
+    const [book] = await searchOpenLibrary('cats', 5);
+
+    expect(book.publishers).toEqual([]);
+    expect(book.publisher).toBeNull();
+  });
+
+  it('identifies itself with a User-Agent', async () => {
+    mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [] }) }));
+
+    await searchOpenLibrary('cats', 5);
+
+    const init = (global.fetch as jest.Mock).mock.calls[0][1];
+    expect(init.headers['User-Agent']).toContain('bookhunt');
+  });
+
   it('sets openLibraryId to null when doc has no edition_key', async () => {
     const doc = { ...olDoc, edition_key: undefined };
     mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [doc] }) }));

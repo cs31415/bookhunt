@@ -39,6 +39,11 @@ function mapGoogleBooksVolume(item: any): SearchResult {
     authors: info.authors || [],
     year: info.publishedDate ? parseInt(info.publishedDate.substring(0, 4), 10) : null,
     publisher: info.publisher || null,
+    // Google reports at most one publisher, and frequently omits it from search
+    // results even for the right book — it's dependable only via the volume
+    // detail endpoint (getEditionDetails). So an empty list here means "unknown",
+    // never "no publisher", and scoring must not treat it as a mismatch.
+    publishers: info.publisher ? [info.publisher] : [],
     pages: info.pageCount || null,
     rating: info.averageRating || null,
     coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
