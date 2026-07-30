@@ -114,6 +114,39 @@ describe('scoreCandidate', () => {
     expect(both).toBeGreaterThan(titleOnly);
   });
 
+  // Recall alone ties every title containing all the hint tokens, leaving the
+  // winner to whatever order the provider returned. Verified against live data:
+  // "Frommer's Hong Kong" and "Suzy Gershman's Born to Shop Hong Kong, Shanghai
+  // & Beijing" scored identically for the hint "Hong Kong" + "Frommer's".
+  it('prefers the tighter title when both contain every hint token', () => {
+    const hint = { title: 'Hong Kong', publisher: "Frommer's" };
+    const tight = scoreCandidate(
+      { title: "Frommer's Hong Kong", authors: [], publishers: ["Frommer's"] },
+      hint,
+    );
+    const sprawling = scoreCandidate(
+      {
+        title: "Suzy Gershman's Born to Shop Hong Kong, Shanghai & Beijing",
+        authors: [],
+        publishers: ['*Frommers'],
+      },
+      hint,
+    );
+
+    expect(tight).toBeGreaterThan(sprawling);
+  });
+
+  it('still ranks full recall above partial recall regardless of length', () => {
+    const hint = { title: 'Concise History of the World' };
+    const longButComplete = scoreCandidate(
+      { title: 'National Geographic Concise History of the World Illustrated', authors: [] },
+      hint,
+    );
+    const shortButPartial = scoreCandidate({ title: 'Concise History', authors: [] }, hint);
+
+    expect(longButComplete).toBeGreaterThan(shortButPartial);
+  });
+
   // Otherwise a wrong book with the right publisher could outrank the right book.
   it('never lets bonuses outweigh a better title match', () => {
     const rightTitleNoBonus = scoreCandidate(

@@ -33,6 +33,16 @@ function anyTokenMatches(hint: string, values: string[]): boolean {
   return tokenize(hint).some((t) => valueTokens.has(t));
 }
 
+/**
+ * Whether a publisher name refers to the same publisher as `hint`, under the
+ * same normalisation scoring uses — so "Frommer's", "Frommers" and "*Frommers"
+ * are one publisher. Exported so callers can pick which of a work's several
+ * publishers to display.
+ */
+export function isSamePublisher(publisher: string, hint: string): boolean {
+  return anyTokenMatches(hint, [publisher]);
+}
+
 export interface CandidateFields {
   title: string;
   authors: string[];
@@ -45,9 +55,19 @@ export interface MatchHint {
   publisher?: string | null;
 }
 
-/** Tie-breaker weights. Title overlap is the 0-1 base; these only reorder near-ties. */
+/** Tie-breaker weights. Title recall is the 0-1 base; these only reorder near-ties. */
 const AUTHOR_BONUS = 0.5;
 const PUBLISHER_BONUS = 0.5;
+
+/**
+ * Weight of title *precision* — how much of the candidate's title the hint
+ * accounts for. Recall alone cannot separate candidates that both contain every
+ * hint token: searching "Hong Kong" scores "Frommer's Hong Kong" and "Suzy
+ * Gershman's Born to Shop Hong Kong, Shanghai & Beijing" identically, and the
+ * winner is then decided by whatever order the provider happened to return.
+ * Kept small so a longer title never outranks a genuinely better match.
+ */
+const PRECISION_WEIGHT = 0.3;
 
 /**
  * How well a search result matches what we were looking for, as a number so
@@ -69,7 +89,14 @@ const PUBLISHER_BONUS = 0.5;
  * three to `frommers`.
  */
 export function scoreCandidate(candidate: CandidateFields, hint: MatchHint): number {
-  let score = titleOverlap(candidate.title, hint.title);
+  const hintTokens = tokenize(hint.title);
+  const candidateTokens = new Set(tokenize(candidate.title ?? ''));
+  const matched = hintTokens.filter((t) => candidateTokens.has(t)).length;
+
+  const recall = hintTokens.length > 0 ? matched / hintTokens.length : 0;
+  const precision = candidateTokens.size > 0 ? matched / candidateTokens.size : 0;
+
+  let score = recall + PRECISION_WEIGHT * precision;
 
   if (hint.author && candidate.authors.length > 0 && anyTokenMatches(hint.author, candidate.authors)) {
     score += AUTHOR_BONUS;
