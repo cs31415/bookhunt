@@ -46,7 +46,7 @@ BEGIN
             b.hue::VARCHAR,
             b.subjects,
             COALESCE(b.rating, 0)::NUMERIC AS score,
-            'Highly rated in the catalog'::TEXT AS reason
+            'Highly rated'::TEXT AS reason
         FROM books b
         JOIN authors a ON a.id = b.author_id
         WHERE NOT EXISTS (
