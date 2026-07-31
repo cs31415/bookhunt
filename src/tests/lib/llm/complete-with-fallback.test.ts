@@ -1,5 +1,5 @@
 import { completeWithFallback } from '../../../lib/llm/complete-with-fallback';
-import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
+import { LlmTruncatedError, LlmUnavailableError } from '../../../lib/llm/llm-errors';
 import { getLlmAdapter } from '../../../lib/llm/get-llm-adapter';
 import { hasLlmApiKey } from '../../../lib/llm/has-llm-api-key';
 import { ModelRef } from '../../../lib/llm/llm-types';
@@ -139,6 +139,37 @@ describe('completeWithFallback', () => {
       await expect(completeWithFallback(chain, request, (t) => t)).rejects.toThrow(LlmUnavailableError);
 
       expect(console.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('truncation', () => {
+    // Truncation used to be indistinguishable from a broken model, so the chain
+    // silently accepted the next model's shorter answer (LOS-167).
+    it('logs truncation distinctly rather than as a model failure', async () => {
+      const truncating = jest
+        .fn()
+        .mockRejectedValueOnce(new LlmTruncatedError('anthropic', 'claude-haiku-4-5', 100))
+        .mockResolvedValueOnce('short answer');
+      mockGetLlmAdapter.mockReturnValue(truncating);
+
+      await completeWithFallback(chain, request, (t) => t);
+
+      const logged = (console.error as jest.Mock).mock.calls.flat().join(' ');
+      expect(logged).toContain('TRUNCATED');
+      expect(logged).toContain('100');
+      expect(logged).not.toContain('trying next model');
+    });
+
+    it('carries the truncation error through as a cause when every model truncates', async () => {
+      const truncating = jest
+        .fn()
+        .mockRejectedValue(new LlmTruncatedError('anthropic', 'claude-haiku-4-5', 100));
+      mockGetLlmAdapter.mockReturnValue(truncating);
+
+      const error = await completeWithFallback(chain, request, (t) => t).catch((e) => e);
+
+      expect(error).toBeInstanceOf(LlmUnavailableError);
+      expect(error.causes[0]).toBeInstanceOf(LlmTruncatedError);
     });
   });
 });

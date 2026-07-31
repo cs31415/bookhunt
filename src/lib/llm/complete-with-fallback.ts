@@ -1,5 +1,5 @@
 import { LlmRequest, ModelRef } from './llm-types';
-import { LlmUnavailableError } from './llm-errors';
+import { LlmTruncatedError, LlmUnavailableError } from './llm-errors';
 import { getLlmAdapter } from './get-llm-adapter';
 import { hasLlmApiKey } from './has-llm-api-key';
 import { isLlmLoggingEnabled } from './is-llm-logging-enabled';
@@ -42,7 +42,18 @@ export async function completeWithFallback<T>(
       }
       return { result: transform(rawText), model: modelRef };
     } catch (error) {
-      console.error(`[llm] ${provider}:${model} failed, trying next model:`, error);
+      // Truncation is called out separately because the remedy is different:
+      // nothing is wrong with the provider, the request asked for more output
+      // than maxTokens could hold. Logged as a failure it looks like a broken
+      // model, and the next model's shorter answer gets accepted silently.
+      if (error instanceof LlmTruncatedError) {
+        console.error(
+          `[llm] ${provider}:${model} TRUNCATED at ${request.maxTokens} output tokens — ` +
+            `response discarded. Raise maxTokens or reduce the work per call.`,
+        );
+      } else {
+        console.error(`[llm] ${provider}:${model} failed, trying next model:`, error);
+      }
       causes.push(error);
     }
   }

@@ -2,6 +2,7 @@ import { detectBooksFromImages } from '../../../models/upload/scan';
 import * as uploadData from '../../../data/upload-data';
 import * as resolveDetected from '../../../models/upload/resolve-detected-book';
 import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
+import { IMAGES_PER_VISION_CALL, VISION_MAX_TOKENS } from '../../../lib/upload-constraints';
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: jest.fn(),
@@ -181,25 +182,40 @@ describe('detectBooksFromImages chunking', () => {
     mockGetSignedUrl.mockImplementation(async () => `https://s3.example.com/img${i++}`);
   }
 
+  // Derived from the constant rather than hardcoded, so tuning the chunk size
+  // for recall doesn't break the tests that describe chunking as a behaviour.
   it('splits a batch into vision calls of at most IMAGES_PER_VISION_CALL', async () => {
     signDistinctUrls();
     mockVisionResponse([]);
 
-    await detectBooksFromImages(keys(20), 1);
+    // A count that divides unevenly, so the trailing partial chunk is covered.
+    const count = IMAGES_PER_VISION_CALL * 3 + 1;
+    await detectBooksFromImages(keys(count), 1);
 
-    expect(mockCompleteVision).toHaveBeenCalledTimes(3);
     const sizes = mockCompleteVision.mock.calls.map((call) => call[0].length);
-    expect(sizes).toEqual([8, 8, 4]);
+    expect(sizes).toEqual([...Array(3).fill(IMAGES_PER_VISION_CALL), 1]);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(count);
   });
 
   it('makes a single vision call when the batch fits in one chunk', async () => {
     signDistinctUrls();
     mockVisionResponse([]);
 
-    await detectBooksFromImages(keys(5), 1);
+    await detectBooksFromImages(keys(IMAGES_PER_VISION_CALL), 1);
 
     expect(mockCompleteVision).toHaveBeenCalledTimes(1);
-    expect(mockCompleteVision.mock.calls[0][0]).toHaveLength(5);
+    expect(mockCompleteVision.mock.calls[0][0]).toHaveLength(IMAGES_PER_VISION_CALL);
+  });
+
+  it('asks for the full vision token budget, not a per-call fraction of it', async () => {
+    signDistinctUrls();
+    mockVisionResponse([]);
+
+    await detectBooksFromImages(keys(IMAGES_PER_VISION_CALL * 2), 1);
+
+    for (const call of mockCompleteVision.mock.calls) {
+      expect(call[2].maxTokens).toBe(VISION_MAX_TOKENS);
+    }
   });
 
   it('gives each chunk only its own image URLs, with none repeated or dropped', async () => {

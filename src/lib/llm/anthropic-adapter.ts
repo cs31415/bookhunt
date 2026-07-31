@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { extractResponseText } from '../extract-response-text';
+import { LlmTruncatedError } from './llm-errors';
 import { LlmRequest } from './llm-types';
 
 let _anthropic: Anthropic | null = null;
@@ -27,6 +28,10 @@ export async function completeWithAnthropic(model: string, request: LlmRequest):
     max_tokens: request.maxTokens,
     messages: [{ role: 'user', content }],
   });
+
+  if (!request.tolerateTruncation && response.stop_reason === 'max_tokens') {
+    throw new LlmTruncatedError('anthropic', model, request.maxTokens);
+  }
 
   return extractResponseText(response, '');
 }
