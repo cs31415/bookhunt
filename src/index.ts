@@ -15,6 +15,7 @@ import searchRoutes from './routes/search';
 import aiRoutes from './routes/ai';
 import recommendationRoutes from './routes/recommendations';
 import uploadRoutes from './routes/upload';
+import importRoutes from './routes/import';
 import { requestLogger } from './middleware/requestLogger';
 
 const app = express();
@@ -35,6 +36,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/import', importRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

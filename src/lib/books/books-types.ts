@@ -6,7 +6,16 @@ export interface SearchResult {
   title: string;
   authors: string[];
   year: number | null;
+  /** Single canonical publisher, as consumed by fn_upsert_book. */
   publisher: string | null;
+  /**
+   * Every publisher a provider reports for this work. Open Library aggregates
+   * across editions, so one work can list "Frommer's", "Frommers" and
+   * "*Frommers" — matching a supplied publisher hint needs all of them, not
+   * just the first. Google Books reports at most one, and often none at all in
+   * search results.
+   */
+  publishers?: string[];
   pages: number | null;
   rating: number | null;
   coverUrl: string | null;

@@ -1,5 +1,6 @@
 import { EditionDetails, SearchResult } from './books-types';
 import { loggedFetch } from './logged-fetch';
+import { BooksProviderError } from './books-provider-error';
 import { stripHtml } from '../text/strip-html';
 
 function withApiKey(url: string): string {
@@ -11,15 +12,17 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
     `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query.trim())}&maxResults=${limit}`,
   );
 
+  // Throws rather than returning [] so callers can tell a failed lookup from a
+  // book that genuinely isn't there — only the former is worth retrying.
   let response: globalThis.Response;
   try {
     response = await loggedFetch('google_books', url);
-  } catch {
-    return [];
+  } catch (error) {
+    throw new BooksProviderError('google_books', null, error);
   }
 
   if (!response.ok) {
-    return [];
+    throw new BooksProviderError('google_books', response.status);
   }
 
   const data: any = await response.json();
@@ -39,6 +42,11 @@ function mapGoogleBooksVolume(item: any): SearchResult {
     authors: info.authors || [],
     year: info.publishedDate ? parseInt(info.publishedDate.substring(0, 4), 10) : null,
     publisher: info.publisher || null,
+    // Google reports at most one publisher, and frequently omits it from search
+    // results even for the right book — it's dependable only via the volume
+    // detail endpoint (getEditionDetails). So an empty list here means "unknown",
+    // never "no publisher", and scoring must not treat it as a mismatch.
+    publishers: info.publisher ? [info.publisher] : [],
     pages: info.pageCount || null,
     rating: info.averageRating || null,
     coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
