@@ -4,6 +4,7 @@ import { searchBooks as searchCatalog } from '../../../models/search/search-book
 import { SearchResult } from '../../../lib/books/books-types';
 import { BooksProviderError } from '../../../lib/books/books-provider-error';
 import { primaryAttempts } from '../../../lib/books/books-retry-config';
+import { resetCircuits } from '../../../lib/books/provider-circuit';
 
 jest.mock('../../../lib/books/get-books-provider-adapter');
 jest.mock('../../../models/search/search-books');
@@ -41,6 +42,7 @@ function result(overrides: Partial<SearchResult>): SearchResult {
 describe('resolveImportRows', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetCircuits();
     googleSearch.mockResolvedValue([]);
     openLibrarySearch.mockResolvedValue([]);
     mockSearchCatalog.mockResolvedValue({ books: [] });
@@ -360,6 +362,43 @@ describe('resolveImportRows', () => {
         );
 
         expect(rows.map((r) => r.title)).toEqual(['First', 'Second', 'Third']);
+      });
+
+      // Google's free tier is 1,000 queries a day and a large import can spend
+      // it. Once it starts refusing, retrying every row would burn the rest of
+      // the budget learning the same thing.
+      it('stops asking Google for the rest of the batch once it rations us', async () => {
+        googleSearch.mockRejectedValue(new BooksProviderError('google_books', 429));
+        openLibrarySearch.mockResolvedValue([result({ openLibraryId: 'OL1M', title: 'x' })]);
+
+        const rows = Array.from({ length: 10 }, (_, i) => ({ title: `Book ${i}` }));
+        await resolveImportRows(rows, 1);
+
+        // Without the circuit this would be rows x primaryAttempts requests, all
+        // failing. The circuit opens partway through the first round, so even
+        // some of that round's rows never ask.
+        expect(googleSearch.mock.calls.length).toBeLessThanOrEqual(rows.length);
+        expect(googleSearch.mock.calls.length).toBeLessThan(rows.length * primaryAttempts());
+        // Every row still gets an answer from the fallback.
+        expect(openLibrarySearch).toHaveBeenCalledTimes(rows.length);
+      });
+
+      it('still returns fallback candidates while Google is rationing us', async () => {
+        googleSearch.mockRejectedValue(new BooksProviderError('google_books', 429));
+        openLibrarySearch.mockResolvedValue([result({ openLibraryId: 'OL1M', title: 'Dune' })]);
+
+        const [row] = await resolveImportRows([{ title: 'Dune' }], 1);
+
+        expect(row.candidates[0].openLibraryId).toBe('OL1M');
+      });
+
+      // A 503 is a blip, not a budget: those should still get their retries.
+      it('keeps retrying a non-429 failure', async () => {
+        googleSearch.mockRejectedValue(new BooksProviderError('google_books', 503));
+
+        await resolveImportRows([{ title: 'Dune' }], 1);
+
+        expect(googleSearch).toHaveBeenCalledTimes(primaryAttempts());
       });
 
       it('falls back for rows still failing after every round', async () => {

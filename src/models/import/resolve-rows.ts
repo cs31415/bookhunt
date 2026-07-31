@@ -1,5 +1,6 @@
 import { SearchResult } from '../../lib/books/books-types';
 import { BooksProviderError } from '../../lib/books/books-provider-error';
+import { isCircuitOpen, openCircuit } from '../../lib/books/provider-circuit';
 import { primaryAttempts, primaryBackoffMs } from '../../lib/books/books-retry-config';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
@@ -98,6 +99,9 @@ function delay(ms: number): Promise<void> {
  * blocking this row on its own backoff.
  */
 async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
+  // Already known to be out of capacity: don't spend a request learning it again.
+  if (isCircuitOpen('google_books')) return [];
+
   const google = getBooksProviderAdapter('google_books');
   const isbn = normalizeIsbn(hint.isbn);
 
@@ -223,6 +227,8 @@ export async function resolveImportRows(
   let pending = rows.map((hint, index) => ({ hint, index }));
 
   for (let round = 1; round <= attempts && pending.length > 0; round++) {
+    // No point retrying into a closed door; fall through to the secondary.
+    if (isCircuitOpen('google_books')) break;
     if (round > 1) await delay(primaryBackoffMs() * (round - 1));
 
     const failed: typeof pending = [];
@@ -233,6 +239,9 @@ export async function resolveImportRows(
         // Anything else is a bug in our own code, not a flaky network, and
         // swallowing it would hide it.
         if (!(error instanceof BooksProviderError)) throw error;
+        // 429 means the provider is rationing us, not that this row is unlucky.
+        // Retrying the batch would spend the rest of the budget on failures.
+        if (error.status === 429) openCircuit('google_books');
         failed.push({ hint, index });
       }
     });
