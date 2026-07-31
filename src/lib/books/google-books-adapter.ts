@@ -19,6 +19,9 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
   }
 
   if (!response.ok) {
+    // Logged, not silent: an exhausted-retry failure returning [] is otherwise
+    // indistinguishable from the book genuinely not existing.
+    console.warn(`[books:google_books] search failed with ${response.status}; treating as no results`);
     return [];
   }
 
