@@ -49,6 +49,67 @@ describe('resolveImportRows', () => {
     );
   });
 
+  describe('isbn', () => {
+    // An ISBN names one edition, so there is nothing to disambiguate and no
+    // reason to spend the fuzzy queries or Open Library's 1 req/sec throttle.
+    it('queries by ISBN and skips the fuzzy search when it lands', async () => {
+      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Dune' })]);
+
+      await resolveImportRows([{ title: 'Doon', isbn: '978-0-441-01359-3' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledTimes(1);
+      expect(googleSearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    it('falls back to Open Library by ISBN before trying the fuzzy search', async () => {
+      googleSearch.mockResolvedValue([]);
+      openLibrarySearch.mockResolvedValue([result({ openLibraryId: 'OL1M', title: 'Dune' })]);
+
+      await resolveImportRows([{ title: 'Dune', isbn: '9780441013593' }], 1);
+
+      expect(openLibrarySearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
+      expect(googleSearch).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls through to the fuzzy search when the ISBN finds nothing', async () => {
+      googleSearch.mockResolvedValue([]);
+      openLibrarySearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert', isbn: '9780441013593' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
+      expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune" inauthor:"Frank Herbert"', 5);
+    });
+
+    it('ignores an unparseable ISBN and searches normally', async () => {
+      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Dune' })]);
+
+      await resolveImportRows([{ title: 'Dune', isbn: 'n/a' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune"', 5);
+    });
+
+    it('echoes the normalised ISBN back on the row', async () => {
+      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Dune' })]);
+
+      const [row] = await resolveImportRows([{ title: 'Dune', isbn: '978-0-441-01359-3' }], 1);
+
+      expect(row.isbn).toBe('9780441013593');
+    });
+
+    it('ranks an ISBN match above a better-looking title match', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Dune', isbn13: '9999999999999' }),
+        result({ googleBooksId: 'g2', title: 'Dune Messiah', isbn13: '9780441013593' }),
+      ]);
+
+      const [row] = await resolveImportRows([{ title: 'Dune', isbn: '9780441013593' }], 1);
+
+      expect(row.candidates[0].googleBooksId).toBe('g2');
+    });
+  });
+
   it('sends a fielded Google query using every hint supplied', async () => {
     await resolveImportRows([{ title: 'Hong Kong', author: 'Reiber', publisher: "Frommer's" }], 1);
 

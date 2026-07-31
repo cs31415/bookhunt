@@ -72,7 +72,17 @@ describe('import resolve controller', () => {
     await resolve(makeReq({ rows: [{ title: '  Hong Kong  ', author: '  ', publisher: " Frommer's " }] }), res);
 
     expect(mockResolveRows).toHaveBeenCalledWith(
-      [{ title: 'Hong Kong', author: null, publisher: "Frommer's" }],
+      [{ title: 'Hong Kong', author: null, publisher: "Frommer's", isbn: null }],
+      1,
+    );
+  });
+
+  it('passes an ISBN through for exact matching', async () => {
+    const res = makeRes();
+    await resolve(makeReq({ rows: [{ title: 'Dune', isbn: ' 978-0-441-01359-3 ' }] }), res);
+
+    expect(mockResolveRows).toHaveBeenCalledWith(
+      [{ title: 'Dune', author: null, publisher: null, isbn: '978-0-441-01359-3' }],
       1,
     );
   });

@@ -3,18 +3,21 @@ import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adap
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
 import { RESOLUTION_CONCURRENCY } from '../../lib/upload-constraints';
 import { isSamePublisher, scoreCandidate } from '../upload/matches-detected-book';
+import { normalizeIsbn } from '../../lib/books/normalize-isbn';
 import { searchBooks as searchCatalog } from '../search/search-books';
 
 export interface ImportRowHint {
   title: string;
   author?: string | null;
   publisher?: string | null;
+  isbn?: string | null;
 }
 
 export interface ResolvedImportRow {
   title: string;
   author: string | null;
   publisher: string | null;
+  isbn: string | null;
   /** Set when the row already exists in the catalog. */
   matchedBookId?: number;
   /** Ranked best-first, so the client can preselect [0] and offer the rest. */
@@ -96,19 +99,37 @@ function withMatchedPublisher(book: SearchResult, hint: ImportRowHint): SearchRe
 async function resolveOne(hint: ImportRowHint, userId: number | null): Promise<ResolvedImportRow> {
   const google = getBooksProviderAdapter('google_books');
   const openLibrary = getBooksProviderAdapter('open_library');
+  const isbn = normalizeIsbn(hint.isbn);
 
-  const collected: SearchResult[] = await google
-    .search(googleQuery(hint), CANDIDATES_PER_ROW)
-    .catch(() => []);
+  const collected: SearchResult[] = [];
 
-  const needsOpenLibrary =
-    collected.length === 0 || (Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint)));
+  // An ISBN names one edition, so ask for it directly and stop if it lands.
+  // Both providers return a single result for `isbn:` — no ranking required and
+  // no reason to spend the fuzzy queries or the Open Library throttle on a row
+  // that is already answered.
+  if (isbn) {
+    const byIsbn = await google.search(`isbn:${isbn}`, CANDIDATES_PER_ROW).catch(() => []);
+    collected.push(...byIsbn);
+    if (collected.length === 0) {
+      const olByIsbn = await openLibrary.search(`isbn:${isbn}`, CANDIDATES_PER_ROW).catch(() => []);
+      collected.push(...olByIsbn);
+    }
+  }
 
-  if (needsOpenLibrary) {
-    const fromOpenLibrary = await openLibrary
-      .search(openLibraryQuery(hint), CANDIDATES_PER_ROW)
-      .catch(() => []);
-    collected.push(...fromOpenLibrary);
+  if (collected.length === 0) {
+    const fromGoogle = await google.search(googleQuery(hint), CANDIDATES_PER_ROW).catch(() => []);
+    collected.push(...fromGoogle);
+
+    const needsOpenLibrary =
+      collected.length === 0 ||
+      (Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint)));
+
+    if (needsOpenLibrary) {
+      const fromOpenLibrary = await openLibrary
+        .search(openLibraryQuery(hint), CANDIDATES_PER_ROW)
+        .catch(() => []);
+      collected.push(...fromOpenLibrary);
+    }
   }
 
   const byIdentity = new Map<string, SearchResult>();
@@ -128,6 +149,7 @@ async function resolveOne(hint: ImportRowHint, userId: number | null): Promise<R
     title: hint.title,
     author: hint.author ?? null,
     publisher: hint.publisher ?? null,
+    isbn,
     ...(matchedBookId !== null && { matchedBookId }),
     candidates,
   };
@@ -154,6 +176,7 @@ async function findCatalogMatch(hint: ImportRowHint, userId: number | null): Pro
           title: row.title,
           authors: row.author_name ? [row.author_name] : [],
           publishers: row.publisher ? [row.publisher] : [],
+          isbn13: row.isbn13,
         },
         hint,
       ),

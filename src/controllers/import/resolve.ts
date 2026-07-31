@@ -19,9 +19,12 @@ export const MAX_IMPORT_ROWS = 40;
  *       `{ title: "Hong Kong", publisher: "Frommer's" }` with no author matches dozens of
  *       identically-titled editions, so the caller picks rather than the server guessing.
  *
- *       Ranking weighs title overlap first, with author and publisher as tie-breakers. A field
- *       absent on either side never counts against a candidate — Google Books frequently omits
- *       publisher from search results even for the correct book.
+ *       An `isbn` identifies one edition outright: when supplied it is queried directly and
+ *       short-circuits the fuzzy search, sparing both the extra provider calls and Open
+ *       Library's throttle. Otherwise ranking weighs title overlap first, with author and
+ *       publisher as tie-breakers. A field absent on either side never counts against a
+ *       candidate — Google Books frequently omits publisher from search results even for the
+ *       correct book.
  *
  *       `matchedBookId` is set when the row already exists in the local catalog.
  *     security:
@@ -45,6 +48,7 @@ export const MAX_IMPORT_ROWS = 40;
  *                     title: { type: string }
  *                     author: { type: string, nullable: true }
  *                     publisher: { type: string, nullable: true }
+ *                     isbn: { type: string, nullable: true, description: "ISBN-10 or -13, punctuation ignored. When present it is matched exactly and outranks every other signal." }
  *     responses:
  *       200:
  *         description: One entry per requested row, in the same order
@@ -61,6 +65,7 @@ export const MAX_IMPORT_ROWS = 40;
  *                       title: { type: string }
  *                       author: { type: string, nullable: true }
  *                       publisher: { type: string, nullable: true }
+ *                       isbn: { type: string, nullable: true, description: "Normalised form of the supplied ISBN, or null if absent/unparseable" }
  *                       matchedBookId: { type: integer }
  *                       candidates:
  *                         type: array
@@ -90,10 +95,14 @@ export async function resolve(req: Request, res: Response) {
       return;
     }
 
+    const text = (value: unknown): string | null =>
+      typeof value === 'string' && value.trim() ? value.trim() : null;
+
     const hints: ImportRowHint[] = rows.map((row: ImportRowHint) => ({
       title: row.title.trim(),
-      author: typeof row.author === 'string' && row.author.trim() ? row.author.trim() : null,
-      publisher: typeof row.publisher === 'string' && row.publisher.trim() ? row.publisher.trim() : null,
+      author: text(row.author),
+      publisher: text(row.publisher),
+      isbn: text(row.isbn),
     }));
 
     res.json({ rows: await resolveImportRows(hints, req.user!.id) });

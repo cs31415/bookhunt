@@ -1,3 +1,5 @@
+import { isSameIsbn } from '../../lib/books/normalize-isbn';
+
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'by', 'with', 'from',
 ]);
@@ -47,12 +49,14 @@ export interface CandidateFields {
   title: string;
   authors: string[];
   publishers?: string[];
+  isbn13?: string | null;
 }
 
 export interface MatchHint {
   title: string;
   author?: string | null;
   publisher?: string | null;
+  isbn?: string | null;
 }
 
 /** Tie-breaker weights. Title recall is the 0-1 base; these only reorder near-ties. */
@@ -68,6 +72,14 @@ const PUBLISHER_BONUS = 0.5;
  * Kept small so a longer title never outranks a genuinely better match.
  */
 const PRECISION_WEIGHT = 0.3;
+
+/**
+ * An ISBN identifies one edition outright, so a match settles the question —
+ * this deliberately swamps every other signal, including a title that looks
+ * nothing alike. Title wording varies between a book's editions and its
+ * catalogue entries; its ISBN does not.
+ */
+const ISBN_BONUS = 10;
 
 /**
  * How well a search result matches what we were looking for, as a number so
@@ -98,6 +110,9 @@ export function scoreCandidate(candidate: CandidateFields, hint: MatchHint): num
 
   let score = recall + PRECISION_WEIGHT * precision;
 
+  if (isSameIsbn(hint.isbn, candidate.isbn13)) {
+    score += ISBN_BONUS;
+  }
   if (hint.author && candidate.authors.length > 0 && anyTokenMatches(hint.author, candidate.authors)) {
     score += AUTHOR_BONUS;
   }
