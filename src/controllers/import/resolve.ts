@@ -76,7 +76,7 @@ export const MAX_IMPORT_ROWS = 40;
  *       401:
  *         description: Authentication required
  *       429:
- *         description: Rate limited (20/min)
+ *         description: Rate limited (150/min)
  */
 export async function resolve(req: Request, res: Response) {
   try {
