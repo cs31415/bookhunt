@@ -64,14 +64,18 @@ describe('resolveImportRows', () => {
       expect(openLibrarySearch).not.toHaveBeenCalled();
     });
 
-    it('falls back to Open Library by ISBN before trying the fuzzy search', async () => {
+    // An ISBN that Google cannot match still gets Google's fuzzy query before
+    // the fallback: Google is the better provider, so it is worth a second ask
+    // before paying Open Library's throttle for a worse answer.
+    it('tries the fuzzy query then falls back by ISBN when the ISBN misses', async () => {
       googleSearch.mockResolvedValue([]);
       openLibrarySearch.mockResolvedValue([result({ openLibraryId: 'OL1M', title: 'Dune' })]);
 
       await resolveImportRows([{ title: 'Dune', isbn: '9780441013593' }], 1);
 
+      expect(googleSearch).toHaveBeenNthCalledWith(1, 'isbn:9780441013593', 5);
+      expect(googleSearch).toHaveBeenNthCalledWith(2, 'intitle:"Dune"', 5);
       expect(openLibrarySearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
-      expect(googleSearch).toHaveBeenCalledTimes(1);
     });
 
     it('falls through to the fuzzy search when the ISBN finds nothing', async () => {
@@ -310,6 +314,67 @@ describe('resolveImportRows', () => {
       googleSearch.mockRejectedValue(new TypeError('undefined is not a function'));
 
       await expect(resolveImportRows([{ title: 'Dune' }], 1)).rejects.toThrow(TypeError);
+    });
+
+    // Retries are batch-level: a failing row goes onto a list and the pass moves
+    // on, so healthy rows never wait behind a flaky one's backoff.
+    describe('batch level', () => {
+      it('retries only the rows that failed, not the whole batch', async () => {
+        googleSearch.mockImplementation(async (query: string) => {
+          if (!query.includes('Flaky')) return [result({ googleBooksId: 'ok', title: 'Fine' })];
+          throw new BooksProviderError('google_books', 503);
+        });
+
+        await resolveImportRows([{ title: 'Fine One' }, { title: 'Flaky' }, { title: 'Fine Two' }], 1);
+
+        const queried = googleSearch.mock.calls.map((c) => c[0] as string);
+        // Two healthy rows asked once each; the failing one asked every round.
+        expect(queried.filter((q) => q.includes('Fine One'))).toHaveLength(1);
+        expect(queried.filter((q) => q.includes('Fine Two'))).toHaveLength(1);
+        expect(queried.filter((q) => q.includes('Flaky'))).toHaveLength(primaryAttempts());
+      });
+
+      it('keeps a row that succeeds on a later round', async () => {
+        let attempts = 0;
+        googleSearch.mockImplementation(async () => {
+          attempts += 1;
+          if (attempts === 1) throw new BooksProviderError('google_books', 503);
+          return [result({ googleBooksId: 'g1', title: 'India: A History' })];
+        });
+
+        const [row] = await resolveImportRows([{ title: 'India: a history' }], 1);
+
+        expect(row.candidates[0].title).toBe('India: A History');
+        expect(openLibrarySearch).not.toHaveBeenCalled();
+      });
+
+      it('preserves input order even when rows resolve across different rounds', async () => {
+        googleSearch.mockImplementation(async (query: string) => {
+          if (query.includes('Second')) throw new BooksProviderError('google_books', 503);
+          return [result({ googleBooksId: 'ok', title: 'x' })];
+        });
+
+        const rows = await resolveImportRows(
+          [{ title: 'First' }, { title: 'Second' }, { title: 'Third' }],
+          1,
+        );
+
+        expect(rows.map((r) => r.title)).toEqual(['First', 'Second', 'Third']);
+      });
+
+      it('falls back for rows still failing after every round', async () => {
+        googleSearch.mockImplementation(async (query: string) => {
+          if (query.includes('Doomed')) throw new BooksProviderError('google_books', 503);
+          return [result({ googleBooksId: 'ok', title: 'Fine' })];
+        });
+        openLibrarySearch.mockResolvedValue([result({ openLibraryId: 'OL1M', title: 'Doomed' })]);
+
+        const rows = await resolveImportRows([{ title: 'Fine' }, { title: 'Doomed' }], 1);
+
+        // Only the doomed row reaches Open Library's 1 req/sec queue.
+        expect(openLibrarySearch).toHaveBeenCalledTimes(1);
+        expect(rows[1].candidates[0].openLibraryId).toBe('OL1M');
+      });
     });
   });
 

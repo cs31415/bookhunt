@@ -1,4 +1,4 @@
-import { BooksProviderAdapter, SearchResult } from '../../lib/books/books-types';
+import { SearchResult } from '../../lib/books/books-types';
 import { BooksProviderError } from '../../lib/books/books-provider-error';
 import { primaryAttempts, primaryBackoffMs } from '../../lib/books/books-retry-config';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
@@ -93,98 +93,57 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Searches the primary provider, retrying it before anyone reaches for the
- * fallback.
- *
- * Only *failures* are retried. A provider that answers "no results" is
- * believed, so an obscure title doesn't cost three round trips to learn what
- * the first one already said — which is the whole reason adapters now throw
- * instead of returning [].
- *
- * Worth retrying at all because the fallback is materially worse: Open Library
- * reports no publisher, doesn't strictly AND its query terms, and is throttled
- * to 1 req/sec. Falling back early costs match quality on every row it touches,
- * which is exactly what a single Google 503 did to "India: a history".
+ * One primary-provider lookup for a row. Lets BooksProviderError escape, so the
+ * caller can gather every failed row and retry them together rather than
+ * blocking this row on its own backoff.
  */
-async function searchPrimary(
-  adapter: BooksProviderAdapter,
-  query: string,
-): Promise<SearchResult[]> {
-  const attempts = primaryAttempts();
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      return await adapter.search(query, CANDIDATES_PER_ROW);
-    } catch (error) {
-      if (!(error instanceof BooksProviderError)) throw error;
-      if (attempt === attempts) {
-        console.warn(
-          `[import] ${adapter.provider} failed ${attempts}x for "${query}"; falling back`,
-          error.message,
-        );
-        return [];
-      }
-      console.warn(
-        `[import] ${adapter.provider} attempt ${attempt}/${attempts} failed for "${query}", retrying`,
-      );
-      await delay(primaryBackoffMs() * attempt);
-    }
+async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
+  const google = getBooksProviderAdapter('google_books');
+  const isbn = normalizeIsbn(hint.isbn);
+
+  // An ISBN names one edition, so ask for it directly and stop if it lands: no
+  // ranking required, and no reason to spend the fuzzy query on an answered row.
+  if (isbn) {
+    const byIsbn = await google.search(`isbn:${isbn}`, CANDIDATES_PER_ROW);
+    if (byIsbn.length > 0) return byIsbn;
   }
-  return [];
+  return google.search(googleQuery(hint), CANDIDATES_PER_ROW);
 }
 
-/** The fallback gets one go: if it fails too, there is nowhere else to look. */
-async function searchFallback(
-  adapter: BooksProviderAdapter,
-  query: string,
-): Promise<SearchResult[]> {
+/**
+ * The fallback gets a single attempt: if it fails too there is nowhere else to
+ * look, so retrying only delays an answer we already have.
+ */
+async function fallbackLookup(hint: ImportRowHint): Promise<SearchResult[]> {
+  const openLibrary = getBooksProviderAdapter('open_library');
+  const isbn = normalizeIsbn(hint.isbn);
+  const query = isbn ? `isbn:${isbn}` : openLibraryQuery(hint);
   try {
-    return await adapter.search(query, CANDIDATES_PER_ROW);
+    return await openLibrary.search(query, CANDIDATES_PER_ROW);
   } catch (error) {
-    console.warn(`[import] ${adapter.provider} failed for "${query}"`, error);
+    console.warn(`[import] open_library failed for "${query}"`, error);
     return [];
   }
 }
 
 /**
- * Resolve one CSV row to a ranked candidate list.
+ * Whether a row still needs the fallback provider.
  *
- * Google first: it filters on publisher precisely and is not rate-limited on our
- * side. Open Library is consulted only when Google came back empty or with
- * nothing confirming the publisher hint — it is the only provider that reliably
- * *reports* publisher, which is what makes a generic-titled travel guide
- * resolvable, but throttleOpenLibrary() is a process-wide 1 req/sec queue, so
- * asking it about every row would serialise a 40-row batch into 40+ seconds.
+ * Open Library is the only one that reliably reports publisher, which is what
+ * makes a generic-titled travel guide resolvable — but throttleOpenLibrary() is
+ * a process-wide 1 req/sec queue, so it stays off the common path.
  */
-async function resolveOne(hint: ImportRowHint, userId: number | null): Promise<ResolvedImportRow> {
-  const google = getBooksProviderAdapter('google_books');
-  const openLibrary = getBooksProviderAdapter('open_library');
-  const isbn = normalizeIsbn(hint.isbn);
+function needsFallback(collected: SearchResult[], hint: ImportRowHint): boolean {
+  if (collected.length === 0) return true;
+  return Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint));
+}
 
-  const collected: SearchResult[] = [];
-
-  // An ISBN names one edition, so ask for it directly and stop if it lands.
-  // Both providers return a single result for `isbn:` — no ranking required and
-  // no reason to spend the fuzzy queries or the Open Library throttle on a row
-  // that is already answered.
-  if (isbn) {
-    collected.push(...(await searchPrimary(google, `isbn:${isbn}`)));
-    if (collected.length === 0) {
-      collected.push(...(await searchFallback(openLibrary, `isbn:${isbn}`)));
-    }
-  }
-
-  if (collected.length === 0) {
-    collected.push(...(await searchPrimary(google, googleQuery(hint))));
-
-    const needsOpenLibrary =
-      collected.length === 0 ||
-      (Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint)));
-
-    if (needsOpenLibrary) {
-      collected.push(...(await searchFallback(openLibrary, openLibraryQuery(hint))));
-    }
-  }
-
+/** Turns whatever the providers returned into the row the client sees. */
+async function assembleRow(
+  hint: ImportRowHint,
+  collected: SearchResult[],
+  userId: number | null,
+): Promise<ResolvedImportRow> {
   const byIdentity = new Map<string, SearchResult>();
   for (const book of collected) {
     if (!byIdentity.has(identityOf(book))) byIdentity.set(identityOf(book), book);
@@ -202,7 +161,7 @@ async function resolveOne(hint: ImportRowHint, userId: number | null): Promise<R
     title: hint.title,
     author: hint.author ?? null,
     publisher: hint.publisher ?? null,
-    isbn,
+    isbn: normalizeIsbn(hint.isbn),
     ...(matchedBookId !== null && { matchedBookId }),
     candidates,
   };
@@ -239,10 +198,65 @@ async function findCatalogMatch(hint: ImportRowHint, userId: number | null): Pro
   return best.score >= CATALOG_MATCH_THRESHOLD ? Number(best.row.book_id) : null;
 }
 
-/** Resolve a batch of rows, preserving input order so the client can align them to CSV lines. */
-export function resolveImportRows(
+/**
+ * Resolve a batch of rows, preserving input order so the client can align them
+ * to CSV lines.
+ *
+ * Retries are batch-level rather than per-row. A row whose primary lookup fails
+ * goes onto a retry list and the pass moves on; the whole list is then retried
+ * together, once per round, up to BOOKS_PRIMARY_ATTEMPTS. Retrying inline
+ * instead would stall every healthy row behind a flaky one's backoff, and pay
+ * that backoff once per row rather than once per round — on a 40-row batch
+ * against a wobbling provider that is the difference between seconds and
+ * minutes.
+ *
+ * Only failures are retried. A provider that answers "no results" is believed,
+ * so an obscure title costs one round trip, not three.
+ */
+export async function resolveImportRows(
   rows: ImportRowHint[],
   userId: number | null,
 ): Promise<ResolvedImportRow[]> {
-  return mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, (row) => resolveOne(row, userId));
+  const collected: SearchResult[][] = rows.map(() => []);
+  const attempts = primaryAttempts();
+
+  let pending = rows.map((hint, index) => ({ hint, index }));
+
+  for (let round = 1; round <= attempts && pending.length > 0; round++) {
+    if (round > 1) await delay(primaryBackoffMs() * (round - 1));
+
+    const failed: typeof pending = [];
+    await mapWithConcurrency(pending, RESOLUTION_CONCURRENCY, async ({ hint, index }) => {
+      try {
+        collected[index] = await primaryLookup(hint);
+      } catch (error) {
+        // Anything else is a bug in our own code, not a flaky network, and
+        // swallowing it would hide it.
+        if (!(error instanceof BooksProviderError)) throw error;
+        failed.push({ hint, index });
+      }
+    });
+
+    if (failed.length > 0) {
+      const remaining = attempts - round;
+      console.warn(
+        `[import] google_books failed for ${failed.length}/${pending.length} rows on round ` +
+          `${round}/${attempts}` +
+          (remaining > 0 ? `, retrying those` : `; falling back for them`),
+      );
+    }
+    pending = failed;
+  }
+
+  // Rows that failed every round fall through with nothing from the primary,
+  // which sends them to the fallback below like any other empty result.
+  await mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, async (hint, index) => {
+    if (needsFallback(collected[index], hint)) {
+      collected[index] = [...collected[index], ...(await fallbackLookup(hint))];
+    }
+  });
+
+  return mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, (hint, index) =>
+    assembleRow(hint, collected[index], userId),
+  );
 }
