@@ -1,4 +1,5 @@
 import { searchOpenLibrary } from '../../../lib/books/open-library-search-adapter';
+import { BooksProviderError } from '../../../lib/books/books-provider-error';
 
 jest.mock('../../../lib/books/open-library-rate-limiter', () => ({
   throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
@@ -123,26 +124,27 @@ describe('searchOpenLibrary', () => {
     expect(book.isbn13).toBeNull();
   });
 
-  it('returns empty array when fetch throws', async () => {
+  it('throws BooksProviderError when fetch keeps failing', async () => {
     mockFetch(() => Promise.reject(new Error('network')));
-    expect(await searchOpenLibrary('cats', 5)).toEqual([]);
+    await expect(searchOpenLibrary('cats', 5)).rejects.toBeInstanceOf(BooksProviderError);
   });
 
-  it('returns empty array when response is non-ok', async () => {
-    mockFetch(() => Promise.resolve({ ok: false }));
-    expect(await searchOpenLibrary('cats', 5)).toEqual([]);
+  it('throws BooksProviderError when response is non-ok', async () => {
+    mockFetch(() => Promise.resolve({ ok: false, status: 400 }));
+    await expect(searchOpenLibrary('cats', 5)).rejects.toMatchObject({ provider: 'open_library' });
   });
 
-  it('returns empty array on malformed JSON', async () => {
+  it('throws BooksProviderError on malformed JSON', async () => {
     mockFetch(() =>
       Promise.resolve({
         ok: true,
+        status: 200,
         json: async () => {
           throw new SyntaxError('bad json');
         },
       }),
     );
-    expect(await searchOpenLibrary('cats', 5)).toEqual([]);
+    await expect(searchOpenLibrary('cats', 5)).rejects.toBeInstanceOf(BooksProviderError);
   });
 
   it('throttles calls via the rate limiter', async () => {

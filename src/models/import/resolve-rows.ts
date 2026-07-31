@@ -1,4 +1,6 @@
-import { SearchResult } from '../../lib/books/books-types';
+import { BooksProviderAdapter, SearchResult } from '../../lib/books/books-types';
+import { BooksProviderError } from '../../lib/books/books-provider-error';
+import { primaryAttempts, primaryBackoffMs } from '../../lib/books/books-retry-config';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
 import { RESOLUTION_CONCURRENCY } from '../../lib/upload-constraints';
@@ -86,6 +88,63 @@ function withMatchedPublisher(book: SearchResult, hint: ImportRowHint): SearchRe
   return matched ? { ...book, publisher: matched } : book;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Searches the primary provider, retrying it before anyone reaches for the
+ * fallback.
+ *
+ * Only *failures* are retried. A provider that answers "no results" is
+ * believed, so an obscure title doesn't cost three round trips to learn what
+ * the first one already said — which is the whole reason adapters now throw
+ * instead of returning [].
+ *
+ * Worth retrying at all because the fallback is materially worse: Open Library
+ * reports no publisher, doesn't strictly AND its query terms, and is throttled
+ * to 1 req/sec. Falling back early costs match quality on every row it touches,
+ * which is exactly what a single Google 503 did to "India: a history".
+ */
+async function searchPrimary(
+  adapter: BooksProviderAdapter,
+  query: string,
+): Promise<SearchResult[]> {
+  const attempts = primaryAttempts();
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await adapter.search(query, CANDIDATES_PER_ROW);
+    } catch (error) {
+      if (!(error instanceof BooksProviderError)) throw error;
+      if (attempt === attempts) {
+        console.warn(
+          `[import] ${adapter.provider} failed ${attempts}x for "${query}"; falling back`,
+          error.message,
+        );
+        return [];
+      }
+      console.warn(
+        `[import] ${adapter.provider} attempt ${attempt}/${attempts} failed for "${query}", retrying`,
+      );
+      await delay(primaryBackoffMs() * attempt);
+    }
+  }
+  return [];
+}
+
+/** The fallback gets one go: if it fails too, there is nowhere else to look. */
+async function searchFallback(
+  adapter: BooksProviderAdapter,
+  query: string,
+): Promise<SearchResult[]> {
+  try {
+    return await adapter.search(query, CANDIDATES_PER_ROW);
+  } catch (error) {
+    console.warn(`[import] ${adapter.provider} failed for "${query}"`, error);
+    return [];
+  }
+}
+
 /**
  * Resolve one CSV row to a ranked candidate list.
  *
@@ -108,27 +167,21 @@ async function resolveOne(hint: ImportRowHint, userId: number | null): Promise<R
   // no reason to spend the fuzzy queries or the Open Library throttle on a row
   // that is already answered.
   if (isbn) {
-    const byIsbn = await google.search(`isbn:${isbn}`, CANDIDATES_PER_ROW).catch(() => []);
-    collected.push(...byIsbn);
+    collected.push(...(await searchPrimary(google, `isbn:${isbn}`)));
     if (collected.length === 0) {
-      const olByIsbn = await openLibrary.search(`isbn:${isbn}`, CANDIDATES_PER_ROW).catch(() => []);
-      collected.push(...olByIsbn);
+      collected.push(...(await searchFallback(openLibrary, `isbn:${isbn}`)));
     }
   }
 
   if (collected.length === 0) {
-    const fromGoogle = await google.search(googleQuery(hint), CANDIDATES_PER_ROW).catch(() => []);
-    collected.push(...fromGoogle);
+    collected.push(...(await searchPrimary(google, googleQuery(hint))));
 
     const needsOpenLibrary =
       collected.length === 0 ||
       (Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint)));
 
     if (needsOpenLibrary) {
-      const fromOpenLibrary = await openLibrary
-        .search(openLibraryQuery(hint), CANDIDATES_PER_ROW)
-        .catch(() => []);
-      collected.push(...fromOpenLibrary);
+      collected.push(...(await searchFallback(openLibrary, openLibraryQuery(hint))));
     }
   }
 

@@ -1,4 +1,5 @@
 import { searchGoogleBooks, getGoogleBooksEditionDetails, getGoogleBooksById } from '../../../lib/books/google-books-adapter';
+import { BooksProviderError } from '../../../lib/books/books-provider-error';
 
 function mockFetch(handler: () => any) {
   global.fetch = jest.fn().mockImplementation(handler) as any;
@@ -94,14 +95,19 @@ describe('searchGoogleBooks', () => {
     expect(book.categories).toEqual([]);
   });
 
-  it('returns empty array when fetch throws', async () => {
+  // Throws rather than returning [], so a caller can tell a failed lookup from a
+  // book that genuinely isn't there — only the former is worth retrying.
+  it('throws BooksProviderError when fetch keeps failing', async () => {
     mockFetch(() => Promise.reject(new Error('network')));
-    expect(await searchGoogleBooks('cats', 5)).toEqual([]);
+    await expect(searchGoogleBooks('cats', 5)).rejects.toBeInstanceOf(BooksProviderError);
   });
 
-  it('returns empty array when response is non-ok', async () => {
-    mockFetch(() => Promise.resolve({ ok: false }));
-    expect(await searchGoogleBooks('cats', 5)).toEqual([]);
+  it('throws BooksProviderError when response is non-ok', async () => {
+    mockFetch(() => Promise.resolve({ ok: false, status: 400 }));
+    await expect(searchGoogleBooks('cats', 5)).rejects.toMatchObject({
+      provider: 'google_books',
+      status: 400,
+    });
   });
 
   it('returns empty array when items are missing', async () => {

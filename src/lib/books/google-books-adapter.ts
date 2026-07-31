@@ -1,5 +1,6 @@
 import { EditionDetails, SearchResult } from './books-types';
 import { loggedFetch } from './logged-fetch';
+import { BooksProviderError } from './books-provider-error';
 import { stripHtml } from '../text/strip-html';
 
 function withApiKey(url: string): string {
@@ -11,18 +12,17 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
     `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query.trim())}&maxResults=${limit}`,
   );
 
+  // Throws rather than returning [] so callers can tell a failed lookup from a
+  // book that genuinely isn't there — only the former is worth retrying.
   let response: globalThis.Response;
   try {
     response = await loggedFetch('google_books', url);
-  } catch {
-    return [];
+  } catch (error) {
+    throw new BooksProviderError('google_books', null, error);
   }
 
   if (!response.ok) {
-    // Logged, not silent: an exhausted-retry failure returning [] is otherwise
-    // indistinguishable from the book genuinely not existing.
-    console.warn(`[books:google_books] search failed with ${response.status}; treating as no results`);
-    return [];
+    throw new BooksProviderError('google_books', response.status);
   }
 
   const data: any = await response.json();

@@ -2,6 +2,8 @@ import { resolveImportRows } from '../../../models/import/resolve-rows';
 import { getBooksProviderAdapter } from '../../../lib/books/get-books-provider-adapter';
 import { searchBooks as searchCatalog } from '../../../models/search/search-books';
 import { SearchResult } from '../../../lib/books/books-types';
+import { BooksProviderError } from '../../../lib/books/books-provider-error';
+import { primaryAttempts } from '../../../lib/books/books-retry-config';
 
 jest.mock('../../../lib/books/get-books-provider-adapter');
 jest.mock('../../../models/search/search-books');
@@ -257,13 +259,58 @@ describe('resolveImportRows', () => {
     expect(rows.map((r) => r.title)).toEqual(['First', 'Second', 'Third']);
   });
 
-  it('survives a provider throwing', async () => {
-    googleSearch.mockRejectedValue(new Error('google down'));
+  describe('primary provider retries', () => {
+    // A single transient 503 used to demote a lookup to Open Library and return
+    // a visibly worse match for a book Google had all along ("India: a history").
+    it('retries Google before falling back, and uses the retry that succeeds', async () => {
+      googleSearch
+        .mockRejectedValueOnce(new BooksProviderError('google_books', 503))
+        .mockResolvedValueOnce([result({ googleBooksId: 'g1', title: 'India: A History' })]);
 
-    const [row] = await resolveImportRows([{ title: 'Dune' }], 1);
+      const [row] = await resolveImportRows([{ title: 'India: a history' }], 1);
 
-    expect(row.candidates).toEqual([]);
-    expect(openLibrarySearch).toHaveBeenCalled();
+      expect(googleSearch).toHaveBeenCalledTimes(2);
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+      expect(row.candidates[0].title).toBe('India: A History');
+    });
+
+    it('falls back only after the configured attempts are spent', async () => {
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 503));
+
+      const [row] = await resolveImportRows([{ title: 'Dune' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledTimes(primaryAttempts());
+      expect(openLibrarySearch).toHaveBeenCalled();
+      expect(row.candidates).toEqual([]);
+    });
+
+    // An obscure title genuinely absent shouldn't cost N round trips to learn
+    // what the first answer already said.
+    it('does not retry when the provider legitimately found nothing', async () => {
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Nonexistent Xyzzy' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledTimes(1);
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+
+    it('gives the fallback a single attempt', async () => {
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 503));
+      openLibrarySearch.mockRejectedValue(new BooksProviderError('open_library', 500));
+
+      const [row] = await resolveImportRows([{ title: 'Dune' }], 1);
+
+      expect(openLibrarySearch).toHaveBeenCalledTimes(1);
+      expect(row.candidates).toEqual([]);
+    });
+
+    // A non-provider error is a bug in our own code, not a flaky network.
+    it('does not swallow an unexpected error', async () => {
+      googleSearch.mockRejectedValue(new TypeError('undefined is not a function'));
+
+      await expect(resolveImportRows([{ title: 'Dune' }], 1)).rejects.toThrow(TypeError);
+    });
   });
 
   describe('catalog matching', () => {

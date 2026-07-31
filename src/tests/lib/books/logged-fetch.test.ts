@@ -1,4 +1,8 @@
 import { loggedFetch } from '../../../lib/books/logged-fetch';
+import { httpAttempts } from '../../../lib/books/books-retry-config';
+
+// Derived, so tuning the default doesn't break tests describing the behaviour.
+const ATTEMPTS = httpAttempts();
 
 function mockFetch(handler: (attempt: number) => any) {
   let attempt = 0;
@@ -50,13 +54,13 @@ describe('loggedFetch', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('gives up after three attempts and returns the last failure', async () => {
+  it('gives up after the configured attempts and returns the last failure', async () => {
     mockFetch(() => Promise.resolve({ ok: false, status: 503 }));
 
     const response = await loggedFetch('google_books', 'https://example.test/');
 
     expect(response.status).toBe(503);
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(global.fetch).toHaveBeenCalledTimes(ATTEMPTS);
   });
 
   it('does not retry a client error that will not change', async () => {
@@ -83,7 +87,7 @@ describe('loggedFetch', () => {
     mockFetch(() => Promise.reject(new Error('ECONNRESET')));
 
     await expect(loggedFetch('open_library', 'https://example.test/')).rejects.toThrow('ECONNRESET');
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(global.fetch).toHaveBeenCalledTimes(ATTEMPTS);
   });
 
   it('warns on each retry so flaky providers are visible', async () => {

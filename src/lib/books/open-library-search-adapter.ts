@@ -1,5 +1,6 @@
 import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
 import { loggedFetch } from './logged-fetch';
+import { BooksProviderError } from './books-provider-error';
 import { SearchResult } from './books-types';
 
 export async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
@@ -11,25 +12,24 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
   // edition of the work.
   const url = `${OPENLIBRARY_API_URL}/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&fields=key,title,author_name,cover_i,first_publish_year,isbn,edition_key,subject,publisher`;
 
+  // Throws rather than returning [] so callers can tell a failed lookup from a
+  // book that genuinely isn't there — only the former is worth retrying.
   let response: globalThis.Response;
   try {
     response = await loggedFetch('open_library', url);
-  } catch {
-    return [];
+  } catch (error) {
+    throw new BooksProviderError('open_library', null, error);
   }
 
   if (!response.ok) {
-    // Logged, not silent: an exhausted-retry failure returning [] is otherwise
-    // indistinguishable from the book genuinely not existing.
-    console.warn(`[books:open_library] search failed with ${response.status}; treating as no results`);
-    return [];
+    throw new BooksProviderError('open_library', response.status);
   }
 
   let data: any;
   try {
     data = await response.json();
-  } catch {
-    return [];
+  } catch (error) {
+    throw new BooksProviderError('open_library', response.status, error);
   }
 
   const docs: any[] = data.docs || [];

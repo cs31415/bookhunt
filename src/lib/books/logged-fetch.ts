@@ -1,5 +1,6 @@
 import { BooksProvider } from './books-types';
 import { isBooksProviderLoggingEnabled } from './is-books-provider-logging-enabled';
+import { httpAttempts, httpBackoffMs } from './books-retry-config';
 
 // Open Library asks callers to identify themselves and throttles anonymous
 // traffic more aggressively; sending nothing risks being lumped in with bots.
@@ -11,8 +12,6 @@ const HEADERS = { 'User-Agent': 'bookhunt/1.0 (+https://github.com/cs31415/bookh
  * produced a visibly worse match for a book Google had all along.
  */
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
-const MAX_ATTEMPTS = 3;
-const BACKOFF_MS = 250;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,20 +27,22 @@ function delay(ms: number): Promise<void> {
  */
 export async function loggedFetch(provider: BooksProvider, url: string): Promise<globalThis.Response> {
   const logging = isBooksProviderLoggingEnabled();
+  const maxAttempts = httpAttempts();
+  const backoff = httpBackoffMs();
   const start = Date.now();
 
   let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await fetch(url, { headers: HEADERS });
 
-      if (RETRYABLE.has(response.status) && attempt < MAX_ATTEMPTS) {
+      if (RETRYABLE.has(response.status) && attempt < maxAttempts) {
         // Always logged, not just when provider logging is on: a silent retry
         // that eventually succeeds still says something about provider health.
         console.warn(
-          `[books:${provider}] ${response.status} on attempt ${attempt}/${MAX_ATTEMPTS}, retrying`,
+          `[books:${provider}] ${response.status} on attempt ${attempt}/${maxAttempts}, retrying`,
         );
-        await delay(BACKOFF_MS * attempt);
+        await delay(backoff * attempt);
         continue;
       }
 
@@ -51,12 +52,12 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
       return response;
     } catch (error) {
       lastError = error;
-      if (attempt < MAX_ATTEMPTS) {
+      if (attempt < maxAttempts) {
         console.warn(
-          `[books:${provider}] request failed on attempt ${attempt}/${MAX_ATTEMPTS}, retrying:`,
+          `[books:${provider}] request failed on attempt ${attempt}/${maxAttempts}, retrying:`,
           error,
         );
-        await delay(BACKOFF_MS * attempt);
+        await delay(backoff * attempt);
         continue;
       }
       if (logging) {
