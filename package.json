@@ -20,6 +20,7 @@
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "openai": "^6.45.0",
     "pg": "^8.13.0",

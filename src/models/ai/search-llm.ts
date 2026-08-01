@@ -1,6 +1,23 @@
 import { completeTextWithModel } from '../../lib/llm/complete-text';
 import { parseJsonResponse } from '../../lib/parse-json-response';
+import { cacheGet } from '../../lib/cache/cache-get';
+import { cacheSet } from '../../lib/cache/cache-set';
+import { cacheKey } from '../../lib/cache/cache-key';
 import { SearchResult } from './search';
+
+/**
+ * Bump when the prompt below changes — that is how old answers get retired,
+ * since nothing purges keys.
+ */
+const CACHE_VERSION = 1;
+
+/** Suggestions for a given phrasing do not go stale in any meaningful way. */
+const CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/** Folds "Carl Sagan", "carl sagan " and "Carl  Sagan" onto one entry. */
+function normalizeQuery(query: string): string {
+  return query.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 export async function searchBooksWithLlm(
   query: string,
@@ -21,6 +38,14 @@ export async function searchBooksWithLlm(
     .join(' ');
   const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title", "author" (can be null if unknown), "categories" (2-4 genre tags like 'Popular Science', 'Memoir'), and "moods" (2-4 reader mood/feel tags like 'Mind-expanding', 'Rigorous') fields.${seedClauses ? ` ${seedClauses}` : ''} Return ONLY valid JSON, no other text.`;
 
+  // Keyed on everything the prompt is built from, so two callers only share an
+  // answer when they would have sent the same words. The result cached here is
+  // the pure LLM answer -- library matching happens per user, in the controller,
+  // outside this function, and caching it would leak one shelf into another.
+  const key = cacheKey('ai:search', CACHE_VERSION, normalizeQuery(query), maxResults, seedCategory, seedMood);
+  const cached = await cacheGet<SearchResult[]>(key);
+  if (cached) return cached;
+
   try {
     const { result: suggestions, model } = await completeTextWithModel(prompt, {
       maxTokens: 2048,
@@ -30,7 +55,7 @@ export async function searchBooksWithLlm(
         ),
     });
 
-    return suggestions
+    const results = suggestions
       .filter((s) => s && s.title)
       .map((s) => ({
         googleBooksId: null,
@@ -51,6 +76,12 @@ export async function searchBooksWithLlm(
         libraryStatus: null,
         source: model.model,
       }));
+
+    // Only a real answer is worth keeping. An empty one means the model gave us
+    // nothing usable, and storing that would serve the failure for 30 days.
+    if (results.length > 0) await cacheSet(key, results, CACHE_TTL_SECONDS);
+
+    return results;
   } catch (error) {
     console.error('[llm] search failed, caller should fall back:', error);
     return [];

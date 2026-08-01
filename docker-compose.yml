@@ -1,0 +1,24 @@
+# Local Redis for the response cache (LOS-185).
+#
+# Optional: with REDIS_URL unset the API runs exactly as it did before the cache
+# existed, so nothing here is needed to develop or to run the tests. Bring it up
+# when you want to exercise the cached paths:
+#
+#   docker compose up -d redis
+#   REDIS_URL=redis://localhost:6379 npm run dev
+#
+# Postgres is deliberately not here — the dev database is a local install, and
+# adding a second one would invite pointing at the wrong data.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    # A cache is disposable by definition, so no persistence and a bounded size:
+    # allkeys-lru evicts rather than erroring once the limit is reached.
+    command: redis-server --save '' --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
