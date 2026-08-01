@@ -59,6 +59,12 @@ export interface MatchHint {
   isbn?: string | null;
 }
 
+/**
+ * Title overlap at which two titles are taken to name the same book. Shared by
+ * matchesDetectedBook() and matchesTitleAndAuthor() so the two cannot drift.
+ */
+const TITLE_CONFIRM_OVERLAP = 0.75;
+
 /** Tie-breaker weights. Title recall is the 0-1 base; these only reorder near-ties. */
 const AUTHOR_BONUS = 0.5;
 const PUBLISHER_BONUS = 0.5;
@@ -127,6 +133,24 @@ export function scoreCandidate(candidate: CandidateFields, hint: MatchHint): num
 }
 
 /**
+ * Whether a candidate agrees with the hint on both title and author — enough to
+ * say it is the same book, not merely a plausible ranking.
+ *
+ * Deliberately stricter than matchesDetectedBook(), which treats an author
+ * missing on either side as matching: that is right for a noisy photo spine,
+ * where absence is the norm and a match cannot be disproved, and wrong here,
+ * where the caller is asking whether the author *confirms* the identification.
+ * So a hint with no author, or a candidate listing none, is never a match.
+ */
+export function matchesTitleAndAuthor(candidate: CandidateFields, hint: MatchHint): boolean {
+  if (!hint.author || candidate.authors.length === 0) return false;
+  return (
+    titleOverlap(candidate.title, hint.title) >= TITLE_CONFIRM_OVERLAP &&
+    anyTokenMatches(hint.author, candidate.authors)
+  );
+}
+
+/**
  * Whether a search result plausibly is the book detected in a photo. Vision
  * titles are noisy (misread spines), so this checks token overlap rather than
  * equality: accept when nearly all detected title words appear in the result
@@ -149,5 +173,5 @@ export function matchesDetectedBook(
     result.authors.length === 0 ||
     anyTokenMatches(detectedAuthor, result.authors);
 
-  return overlap >= 0.75 || (overlap >= 0.6 && authorMatches);
+  return overlap >= TITLE_CONFIRM_OVERLAP || (overlap >= 0.6 && authorMatches);
 }
