@@ -8,7 +8,7 @@ jest.mock('../../../lib/llm/complete-text');
 const mockFetchBookContext = aiData.fetchBookContext as jest.Mock;
 const mockGetBookGenresThemes = aiData.getBookGenresThemes as jest.Mock;
 const mockUpdateBookAiMetadata = aiData.updateBookAiMetadata as jest.Mock;
-const mockGetThemeVocabulary = aiData.getThemeVocabulary as jest.Mock;
+const mockGetTagVocabulary = aiData.getTagVocabulary as jest.Mock;
 const mockCompleteText = completeText as jest.Mock;
 
 function mockLlmResponse(text: string) {
@@ -20,7 +20,7 @@ function mockLlmResponse(text: string) {
 describe('generateThemes model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetThemeVocabulary.mockResolvedValue([]);
+    mockGetTagVocabulary.mockResolvedValue([]);
   });
 
   it('returns null when the book does not exist', async () => {
@@ -60,17 +60,36 @@ describe('generateThemes model', () => {
     expect(result).toEqual({ genres: ['Popular Science'], themes: ['units of selection'], moods: ['Rigorous'] });
   });
 
-  it('folds a generated theme onto the spelling the catalog already uses', async () => {
+  // Each kind folds against its own vocabulary, so a theme can never be
+  // rewritten to a category that happens to be spelled like it.
+  it('folds every kind onto the spelling the catalog already uses', async () => {
     mockFetchBookContext.mockResolvedValue({ title: 'A Book', author_name: 'Author' });
     mockGetBookGenresThemes.mockResolvedValue(null);
-    mockGetThemeVocabulary.mockResolvedValue(['Sociopolitical evolution']);
-    mockLlmResponse('{"genres":["History"],"themes":["Socio-political evolution"],"moods":["Scholarly"]}');
+    mockGetTagVocabulary.mockImplementation(async (kind: string) =>
+      ({
+        subjects: ['Popular Science'],
+        themes: ['Sociopolitical evolution'],
+        moods: ['Mind-expanding'],
+      })[kind],
+    );
+    mockLlmResponse(
+      '{"genres":["popular science"],"themes":["Socio-political evolution"],"moods":["mind expanding"]}',
+    );
 
     const result = await generateThemes(1);
 
-    // Persisted and returned as one theme, not two near-identical ones.
-    expect(mockUpdateBookAiMetadata).toHaveBeenCalledWith(1, ['History'], ['Sociopolitical evolution'], ['Scholarly']);
-    expect(result?.themes).toEqual(['Sociopolitical evolution']);
+    // Each persisted as one tag, not two near-identical ones.
+    expect(mockUpdateBookAiMetadata).toHaveBeenCalledWith(
+      1,
+      ['Popular Science'],
+      ['Sociopolitical evolution'],
+      ['Mind-expanding'],
+    );
+    expect(result).toEqual({
+      genres: ['Popular Science'],
+      themes: ['Sociopolitical evolution'],
+      moods: ['Mind-expanding'],
+    });
   });
 
   it('re-generates over stored metadata when forced', async () => {

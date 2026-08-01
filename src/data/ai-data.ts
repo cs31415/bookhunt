@@ -52,11 +52,13 @@ export async function getBookGenresThemes(bookId: number) {
   return null;
 }
 
-// Most-used first -- see fn_theme_vocabulary for why that order matters to both
+export type TagKind = 'subjects' | 'themes' | 'moods';
+
+// Most-used first -- see fn_tag_vocabulary for why that order matters to both
 // callers (the prompt slice, and picking the canonical spelling when folding).
-export async function getThemeVocabulary(limit: number): Promise<string[]> {
-  const result = await pool.query('SELECT * FROM fn_theme_vocabulary($1)', [limit]);
-  return result.rows.map((row) => row.theme as string);
+export async function getTagVocabulary(kind: TagKind, limit: number): Promise<string[]> {
+  const result = await pool.query('SELECT * FROM fn_tag_vocabulary($1, $2)', [kind, limit]);
+  return result.rows.map((row) => row.tag as string);
 }
 
 export async function updateBookAiMetadata(bookId: number, genres: string[], themes: string[], moods: string[]) {

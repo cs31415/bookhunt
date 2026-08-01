@@ -35,33 +35,29 @@ describe('generateThemesExternal model', () => {
     expect(result).toEqual({ genres: ['Memoir'], themes: ['resilience'], moods: ['Reflective'] });
   });
 
-  it('shows the model the existing vocabulary and asks it to reuse equivalent tags', async () => {
+  // All three kinds, not just themes: genres fragmented identically without a
+  // vocabulary -- 94 across the library, 10 on more than one book (LOS-193).
+  // The wording of the reuse instruction is asserted in
+  // build-vocabulary-clause.test.ts, which owns it.
+  it('shows the model the existing vocabulary for categories, themes and moods', async () => {
     mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}');
 
-    await generateThemesExternal('A Book', 'Some Author', ['Cultural History', 'Human condition']);
+    await generateThemesExternal('A Book', 'Some Author', {
+      categories: ['Popular Science'],
+      themes: ['Cultural History', 'Human condition'],
+      moods: ['Rigorous'],
+    });
 
     const prompt = mockCompleteText.mock.calls[0][0];
-    expect(prompt).toContain('Cultural History, Human condition');
-    expect(prompt).toContain('means the same thing as the theme you chose');
+    expect(prompt).toContain('Categories already in use: Popular Science.');
+    expect(prompt).toContain('Themes already in use: Cultural History, Human condition.');
+    expect(prompt).toContain('Moods already in use: Rigorous.');
   });
 
-  // The prompt has to hold the line against anchoring on the list -- a loose
-  // "prefer these" wording replaced 155 of 321 themes in a 64-book run.
-  it('tells the model that a related or broader tag is not a match', async () => {
+  it('omits the vocabulary clause when the catalog has no tags yet', async () => {
     mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}');
 
-    await generateThemesExternal('A Book', 'Some Author', ['Individual Agency']);
-
-    const prompt = mockCompleteText.mock.calls[0][0];
-    expect(prompt).toContain("Decide this book's themes on their own merits first");
-    expect(prompt).toContain('NOT a match');
-    expect(prompt).toContain('most books need at least one theme that is not on it');
-  });
-
-  it('omits the vocabulary clause when the catalog has no themes yet', async () => {
-    mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}');
-
-    await generateThemesExternal('A Book', 'Some Author', []);
+    await generateThemesExternal('A Book', 'Some Author', {});
 
     // An empty list is a confusing hint, not a weaker one.
     expect(mockCompleteText.mock.calls[0][0]).not.toContain('already in use');

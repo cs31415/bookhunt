@@ -3,13 +3,18 @@ import { parseJsonResponse } from '../../lib/parse-json-response';
 import { cacheGet } from '../../lib/cache/cache-get';
 import { cacheSet } from '../../lib/cache/cache-set';
 import { cacheKey } from '../../lib/cache/cache-key';
+import { getTagVocabulary } from '../../data/ai-data';
+import { buildVocabularyClause } from './build-vocabulary-clause';
 import { SearchResult } from './search';
 
 /**
  * Bump when the prompt below changes — that is how old answers get retired,
  * since nothing purges keys.
  */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
+
+/** Matches generate-themes: enough to find a fit without crowding the query. */
+const VOCABULARY_LIMIT = 150;
 
 /** Suggestions for a given phrasing do not go stale in any meaningful way. */
 const CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -36,15 +41,28 @@ export async function searchBooksWithLlm(
   ]
     .filter(Boolean)
     .join(' ');
-  const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title", "author" (can be null if unknown), "categories" (2-4 genre tags like 'Popular Science', 'Memoir'), and "moods" (2-4 reader mood/feel tags like 'Mind-expanding', 'Rigorous') fields.${seedClauses ? ` ${seedClauses}` : ''} Return ONLY valid JSON, no other text.`;
-
-  // Keyed on everything the prompt is built from, so two callers only share an
-  // answer when they would have sent the same words. The result cached here is
-  // the pure LLM answer -- library matching happens per user, in the controller,
-  // outside this function, and caching it would leak one shelf into another.
+  // Keyed on the caller's own inputs, so two callers only share an answer when
+  // they asked the same question. The catalog vocabulary also goes into the
+  // prompt but is deliberately left out of the key: it shifts every time a book
+  // is tagged, so keying on it would miss the cache almost every call to chase
+  // a difference that only nudges tag wording. The cost is that a cached answer
+  // may carry tags from an older vocabulary, which the next categorization of
+  // those books corrects anyway. Bump CACHE_VERSION to retire them wholesale.
+  //
+  // The result cached here is the pure LLM answer -- library matching happens
+  // per user, in the controller, outside this function, and caching it would
+  // leak one shelf into another.
   const key = cacheKey('ai:search', CACHE_VERSION, normalizeQuery(query), maxResults, seedCategory, seedMood);
   const cached = await cacheGet<SearchResult[]>(key);
   if (cached) return cached;
+
+  // After the cache check, so a hit never pays for the lookups.
+  const [categories, moods] = await Promise.all([
+    getTagVocabulary('subjects', VOCABULARY_LIMIT),
+    getTagVocabulary('moods', VOCABULARY_LIMIT),
+  ]);
+
+  const prompt = `Suggest up to ${maxResults} books that best match this search: "${query.trim()}". Return ONLY a JSON array of objects with "title", "author" (can be null if unknown), "categories" (2-4 genre tags like 'Popular Science', 'Memoir'), and "moods" (2-4 reader mood/feel tags like 'Mind-expanding', 'Rigorous') fields.${seedClauses ? ` ${seedClauses}` : ''}${buildVocabularyClause({ categories, moods })} Return ONLY valid JSON, no other text.`;
 
   try {
     const { result: suggestions, model } = await completeTextWithModel(prompt, {
