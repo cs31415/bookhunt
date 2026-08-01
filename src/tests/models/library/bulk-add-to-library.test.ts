@@ -1,13 +1,16 @@
 import { bulkAddToLibrary } from '../../../models/library/bulk-add-to-library';
 import * as libraryData from '../../../data/library-data';
 import { resolveEditionFields } from '../../../models/library/resolve-edition-fields';
+import { categorizeBooks } from '../../../models/ai/categorize-books';
 
 jest.mock('../../../data/library-data');
 jest.mock('../../../models/library/resolve-edition-fields');
+jest.mock('../../../models/ai/categorize-books');
 
 const mockUpsertBook = libraryData.upsertBook as jest.Mock;
 const mockAddToLibrary = libraryData.addToLibrary as jest.Mock;
 const mockResolveEditionFields = resolveEditionFields as jest.Mock;
+const mockCategorizeBooks = categorizeBooks as jest.Mock;
 
 const book1 = { googleBooksId: 'gid1', slug: 'book-one', title: 'Book One', authorName: 'Author A' };
 const book2 = { googleBooksId: 'gid2', slug: 'book-two', title: 'Book Two', authorName: 'Author B' };
@@ -18,6 +21,7 @@ describe('bulkAddToLibrary model', () => {
     mockResolveEditionFields.mockImplementation((params) =>
       Promise.resolve({ blurb: params.blurb, publisher: params.publisher, pages: params.pages }),
     );
+    mockCategorizeBooks.mockResolvedValue([]);
   });
 
   it('calls upsertBook and addToLibrary for each book', async () => {
@@ -91,5 +95,43 @@ describe('bulkAddToLibrary model', () => {
 
     expect(entries).toHaveLength(2);
     expect(errors).toHaveLength(0);
+  });
+
+  // One call for the whole request, not one per book: the model can only group
+  // books it sees together.
+  it('categorizes the whole request in a single call', async () => {
+    mockUpsertBook.mockResolvedValueOnce({ id: 10 }).mockResolvedValueOnce({ id: 11 });
+    mockAddToLibrary.mockResolvedValueOnce({ id: 10 }).mockResolvedValueOnce({ id: 11 });
+
+    await bulkAddToLibrary(1, [book1, book2]);
+
+    expect(mockCategorizeBooks).toHaveBeenCalledTimes(1);
+    expect(mockCategorizeBooks).toHaveBeenCalledWith([
+      { id: 10, title: 'Book One', authorName: 'Author A' },
+      { id: 11, title: 'Book Two', authorName: 'Author B' },
+    ]);
+  });
+
+  // An untagged book in the library is recoverable by the backfill; a 500 on
+  // "add to library" loses the add with no explanation.
+  it('still returns the entries when categorization throws', async () => {
+    mockUpsertBook.mockResolvedValueOnce({ id: 10 }).mockResolvedValueOnce({ id: 11 });
+    mockAddToLibrary.mockResolvedValueOnce({ id: 10 }).mockResolvedValueOnce({ id: 11 });
+    mockCategorizeBooks.mockRejectedValue(new Error('llm down'));
+
+    const { entries, errors } = await bulkAddToLibrary(1, [book1, book2]);
+
+    expect(entries).toHaveLength(2);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('does not call the categorizer when every book failed to upsert', async () => {
+    mockUpsertBook.mockRejectedValue(new Error('upsert failed'));
+
+    const { entries, errors } = await bulkAddToLibrary(1, [book1, book2]);
+
+    expect(entries).toHaveLength(0);
+    expect(errors).toHaveLength(2);
+    expect(mockCategorizeBooks).not.toHaveBeenCalled();
   });
 });
