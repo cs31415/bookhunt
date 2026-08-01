@@ -28,9 +28,11 @@ export const MAX_IMPORT_ROWS = 40;
  *       candidate — Google Books frequently omits publisher from search results even for the
  *       correct book.
  *
- *       `matchedBookId` is set when the row already exists in the local catalog. When that book is
- *       also already in the caller's library the row comes back with no candidates at all: it is
- *       not addable, so no provider lookup is spent on alternatives nobody can choose.
+ *       `matchedBookId` is set when the row already exists in the local catalog, with `matchedBook`
+ *       carrying that book ready to render — the catalog search already returned its cover, slug and
+ *       author, so no follow-up `GET /books` is needed. When the book is also already in the caller's
+ *       library the row comes back with no candidates at all: it is not addable, so no provider
+ *       lookup is spent on alternatives nobody can choose.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -71,6 +73,19 @@ export const MAX_IMPORT_ROWS = 40;
  *                       publisher: { type: string, nullable: true }
  *                       isbn: { type: string, nullable: true, description: "Normalised form of the supplied ISBN, or null if absent/unparseable" }
  *                       matchedBookId: { type: integer }
+ *                       matchedBook:
+ *                         type: object
+ *                         description: The matched catalog book, in the shape GET /books returns
+ *                         properties:
+ *                           id: { type: integer }
+ *                           slug: { type: string }
+ *                           title: { type: string }
+ *                           authorName: { type: string }
+ *                           authorSlug: { type: string }
+ *                           year: { type: integer, nullable: true }
+ *                           rating: { type: number, nullable: true }
+ *                           coverUrl: { type: string, nullable: true }
+ *                           hue: { type: string }
  *                       candidates:
  *                         type: array
  *                         description: Ranked best-first, at most 5
