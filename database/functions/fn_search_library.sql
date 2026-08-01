@@ -83,22 +83,7 @@ BEGIN
             b.cover_url,
             b.hue,
             (
-                COALESCE((
-                    SELECT SUM(
-                        CASE WHEN b.title ILIKE '%' || t || '%' THEN 6 ELSE 0 END +
-                        CASE WHEN a.name ILIKE '%' || t || '%' THEN 5 ELSE 0 END +
-                        CASE WHEN EXISTS (SELECT 1 FROM unnest(b.subjects) x WHERE x ILIKE '%' || t || '%') THEN 3 ELSE 0 END +
-                        CASE WHEN EXISTS (SELECT 1 FROM unnest(b.genres)   x WHERE x ILIKE '%' || t || '%') THEN 3 ELSE 0 END +
-                        CASE WHEN EXISTS (SELECT 1 FROM unnest(b.themes)   x WHERE x ILIKE '%' || t || '%') THEN 3 ELSE 0 END +
-                        CASE WHEN EXISTS (SELECT 1 FROM unnest(b.moods)    x WHERE x ILIKE '%' || t || '%') THEN 2 ELSE 0 END +
-                        CASE WHEN (
-                            b.title || ' ' || a.name || ' ' || COALESCE(b.publisher, '') || ' ' || COALESCE(b.year::TEXT, '') ||
-                            ' ' || array_to_string(b.subjects, ' ') || ' ' || array_to_string(b.moods, ' ') ||
-                            ' ' || array_to_string(b.genres, ' ') || ' ' || array_to_string(b.themes, ' ') || ' ' || COALESCE(b.blurb, '')
-                        ) ILIKE '%' || t || '%' THEN 1 ELSE 0 END
-                    )
-                    FROM unnest(p_terms) AS t
-                ), 0)
+                COALESCE(scores.term_score, 0)
                 +
                 CASE WHEN p_phrase IS NOT NULL AND LENGTH(p_phrase) > 3 AND (
                     b.title || ' ' || a.name || ' ' || COALESCE(b.publisher, '') || ' ' || COALESCE(b.year::TEXT, '') ||
@@ -106,10 +91,35 @@ BEGIN
                     ' ' || array_to_string(b.genres, ' ') || ' ' || array_to_string(b.themes, ' ') || ' ' || COALESCE(b.blurb, '')
                 ) ILIKE '%' || p_phrase || '%'
                 THEN 4 ELSE 0 END
-            )::NUMERIC AS relevance
+            )::NUMERIC AS relevance,
+            COALESCE(scores.matched_terms, 0) AS matched_terms
         FROM library_entries le
         JOIN books   b ON b.id = le.book_id
         JOIN authors a ON a.id = b.author_id
+        -- Per term rather than one SUM, so the count of terms that actually hit
+        -- something is available alongside the total. Ranking needs the total;
+        -- deciding whether a book qualifies at all needs the count.
+        CROSS JOIN LATERAL (
+            SELECT
+                SUM(scored_term.score)                                  AS term_score,
+                COUNT(*) FILTER (WHERE scored_term.score > 0)::INT      AS matched_terms
+            FROM unnest(p_terms) AS t
+            CROSS JOIN LATERAL (
+                SELECT (
+                    CASE WHEN b.title ILIKE '%' || t || '%' THEN 6 ELSE 0 END +
+                    CASE WHEN a.name ILIKE '%' || t || '%' THEN 5 ELSE 0 END +
+                    CASE WHEN EXISTS (SELECT 1 FROM unnest(b.subjects) x WHERE x ILIKE '%' || t || '%') THEN 3 ELSE 0 END +
+                    CASE WHEN EXISTS (SELECT 1 FROM unnest(b.genres)   x WHERE x ILIKE '%' || t || '%') THEN 3 ELSE 0 END +
+                    CASE WHEN EXISTS (SELECT 1 FROM unnest(b.themes)   x WHERE x ILIKE '%' || t || '%') THEN 3 ELSE 0 END +
+                    CASE WHEN EXISTS (SELECT 1 FROM unnest(b.moods)    x WHERE x ILIKE '%' || t || '%') THEN 2 ELSE 0 END +
+                    CASE WHEN (
+                        b.title || ' ' || a.name || ' ' || COALESCE(b.publisher, '') || ' ' || COALESCE(b.year::TEXT, '') ||
+                        ' ' || array_to_string(b.subjects, ' ') || ' ' || array_to_string(b.moods, ' ') ||
+                        ' ' || array_to_string(b.genres, ' ') || ' ' || array_to_string(b.themes, ' ') || ' ' || COALESCE(b.blurb, '')
+                    ) ILIKE '%' || t || '%' THEN 1 ELSE 0 END
+                ) AS score
+            ) AS scored_term
+        ) AS scores
         WHERE le.user_id = p_user_id
           AND (p_status IS NULL OR le.status = p_status)
     )
@@ -121,7 +131,13 @@ BEGIN
         s.relevance,
         COUNT(*) OVER ()::BIGINT AS total_count
     FROM scored s
-    WHERE (p_terms IS NULL OR CARDINALITY(p_terms) = 0 OR s.relevance > 0)
+    -- Every term has to hit something, not just one of them. Relevance is a sum,
+    -- so `relevance > 0` let a single stray tag carry a book: "popular science
+    -- books on astronomy" returned The Two Towers on the strength of the subjects
+    -- "Popular Carousel" and "Science-fiction anglaise", with nothing matching
+    -- astronomy at all. Each word narrows, which is both what a search box is
+    -- expected to do and what the library page's own filter already does.
+    WHERE (p_terms IS NULL OR CARDINALITY(p_terms) = 0 OR s.matched_terms = CARDINALITY(p_terms))
     ORDER BY
         -- 'added' is the library's own default ordering (fn_get_user_library),
         -- and the sort a query-less browse falls back to; the rest mirror
