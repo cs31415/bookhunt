@@ -11,8 +11,8 @@ import {
   scoreCandidate,
 } from '../upload/matches-detected-book';
 import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
-import { searchBooks as searchCatalog } from '../search/search-books';
-import { formatCatalogBook } from '../../lib/books/format-catalog-book';
+import { findCatalogMatches } from './find-catalog-matches';
+import type { CatalogMatch } from './find-catalog-matches';
 import type { CatalogBookSummary } from '../../lib/books/format-catalog-book';
 
 export interface ImportRowHint {
@@ -244,55 +244,6 @@ function assembleRow(
   };
 }
 
-interface CatalogMatch {
-  bookId: number;
-  /** Whether the caller already holds this book, which is what lets the row skip the providers. */
-  inLibrary: boolean;
-  /** The row fn_search_books already returned, so the client needn't fetch it back. */
-  book: CatalogBookSummary;
-}
-
-/**
- * Best-scoring catalog row above the threshold, or null.
- *
- * Deliberately not findBookByTitle (src/data/upload-data.ts): that is
- * `LIKE '%title%'` with no author or publisher check, returning an arbitrary
- * first row — which for a title like "Hong Kong" is a coin flip. fn_search_books
- * ranks properly and returns the publisher, so the same scoring used for
- * provider candidates applies here too.
- */
-async function findCatalogMatch(
-  hint: ImportRowHint,
-  userId: number | null,
-): Promise<CatalogMatch | null> {
-  const { books } = await searchCatalog({ q: hint.title, limit: CANDIDATES_PER_ROW }, userId);
-  if (books.length === 0) return null;
-
-  const best = books
-    .map((row: any) => ({
-      row,
-      score: scoreCandidate(
-        {
-          title: row.title,
-          authors: row.author_name ? [row.author_name] : [],
-          publishers: row.publisher ? [row.publisher] : [],
-          isbn13: row.isbn13,
-        },
-        hint,
-      ),
-    }))
-    .sort((a, b) => b.score - a.score)[0];
-
-  if (best.score < CATALOG_MATCH_THRESHOLD) return null;
-  // fn_search_books already annotates each row with the caller's library status,
-  // and returns the cover, slug and author the client needs to render it.
-  return {
-    bookId: Number(best.row.book_id),
-    inLibrary: Boolean(best.row.in_library),
-    book: formatCatalogBook(best.row),
-  };
-}
-
 /**
  * Resolve a batch of rows, preserving input order so the client can align them
  * to CSV lines.
@@ -308,12 +259,12 @@ async function findCatalogMatch(
  * Only failures are retried. A provider that answers "no results" is believed,
  * so an obscure title costs one round trip, not three.
  *
- * The catalog lookup runs first, ahead of any provider call. A row the caller
- * already owns is answered outright: the client renders it inert and never
- * reads its candidates, so looking any up is work spent on something nobody
- * will see. On the case this exists to serve — re-importing an export against a
- * library that already holds most of it — that skips the providers for the
- * bulk of the file.
+ * The catalog lookup runs first, ahead of any provider call, and takes the whole
+ * batch in one query. A row the caller already owns is answered outright: the
+ * client drops it from the review list and never reads its candidates, so
+ * looking any up is work spent on something nobody will see. On the case this
+ * exists to serve — re-importing an export against a library that already holds
+ * most of it — that skips the providers for the bulk of the file.
  */
 export async function resolveImportRows(
   rows: ImportRowHint[],
@@ -322,9 +273,7 @@ export async function resolveImportRows(
   const collected: SearchResult[][] = rows.map(() => []);
   const attempts = primaryAttempts();
 
-  const catalogMatches = await mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, (hint) =>
-    findCatalogMatch(hint, userId),
-  );
+  const catalogMatches = await findCatalogMatches(rows, userId);
   const alreadyOwned = (index: number) => catalogMatches[index]?.inLibrary === true;
 
   let pending = rows

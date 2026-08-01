@@ -35,6 +35,9 @@ BEGIN;
 \ir functions/fn_search_books.sql
 \ir functions/fn_search_facets.sql
 
+-- import
+\ir functions/fn_match_import_rows.sql
+
 -- recommendations
 \ir functions/fn_recommendations.sql
 

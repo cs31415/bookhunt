@@ -1,16 +1,21 @@
 import { resolveImportRows } from '../../../models/import/resolve-rows';
 import { getBooksProviderAdapter } from '../../../lib/books/get-books-provider-adapter';
-import { searchBooks as searchCatalog } from '../../../models/search/search-books';
+import { matchImportRows } from '../../../data/import-data';
 import { SearchResult } from '../../../lib/books/books-types';
 import { BooksProviderError } from '../../../lib/books/books-provider-error';
 import { primaryAttempts } from '../../../lib/books/books-retry-config';
 import { resetCircuits } from '../../../lib/books/provider-circuit';
 
 jest.mock('../../../lib/books/get-books-provider-adapter');
-jest.mock('../../../models/search/search-books');
+jest.mock('../../../data/import-data');
 
 const mockGetAdapter = getBooksProviderAdapter as jest.Mock;
-const mockSearchCatalog = searchCatalog as jest.Mock;
+const mockMatchRows = matchImportRows as jest.Mock;
+
+/** Catalog rows come back tagged with the row they belong to. */
+function forRow(index: number, rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({ row_index: index, ...row }));
+}
 
 const googleSearch = jest.fn();
 const openLibrarySearch = jest.fn();
@@ -45,7 +50,7 @@ describe('resolveImportRows', () => {
     resetCircuits();
     googleSearch.mockResolvedValue([]);
     openLibrarySearch.mockResolvedValue([]);
-    mockSearchCatalog.mockResolvedValue({ books: [] });
+    mockMatchRows.mockResolvedValue([]);
     mockGetAdapter.mockImplementation((provider: string) =>
       provider === 'google_books'
         ? { provider, search: googleSearch }
@@ -550,9 +555,9 @@ describe('resolveImportRows', () => {
 
   describe('catalog matching', () => {
     it('sets matchedBookId when a catalog row matches well', async () => {
-      mockSearchCatalog.mockResolvedValue({
-        books: [{ book_id: 42, title: 'Dune', author_name: 'Frank Herbert', publisher: 'Ace' }],
-      });
+      mockMatchRows.mockResolvedValue(
+        forRow(0, [{ book_id: 42, title: 'Dune', author_name: 'Frank Herbert', publisher: 'Ace' }]),
+      );
 
       const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
 
@@ -562,8 +567,8 @@ describe('resolveImportRows', () => {
     // The catalog search already returned everything needed to render the book,
     // so a client holding only the id would have to ask for it straight back.
     it('returns the matched book ready to render', async () => {
-      mockSearchCatalog.mockResolvedValue({
-        books: [
+      mockMatchRows.mockResolvedValue(
+        forRow(0, [
           {
             book_id: 42,
             slug: 'dune',
@@ -576,8 +581,8 @@ describe('resolveImportRows', () => {
             hue: '#6f7a55',
             publisher: 'Ace',
           },
-        ],
-      });
+        ]),
+      );
 
       const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
 
@@ -595,7 +600,7 @@ describe('resolveImportRows', () => {
     });
 
     it('omits the matched book when nothing in the catalog matches', async () => {
-      mockSearchCatalog.mockResolvedValue({ books: [] });
+      mockMatchRows.mockResolvedValue([]);
 
       const [row] = await resolveImportRows([{ title: 'Dune' }], 1);
 
@@ -604,9 +609,9 @@ describe('resolveImportRows', () => {
     });
 
     it('leaves matchedBookId unset when the best catalog row is a weak match', async () => {
-      mockSearchCatalog.mockResolvedValue({
-        books: [{ book_id: 7, title: 'A History of Everything Else', author_name: 'Someone' }],
-      });
+      mockMatchRows.mockResolvedValue(
+        forRow(0, [{ book_id: 7, title: 'A History of Everything Else', author_name: 'Someone' }]),
+      );
 
       const [row] = await resolveImportRows([{ title: 'Hong Kong' }], 1);
 
@@ -614,12 +619,12 @@ describe('resolveImportRows', () => {
     });
 
     it('prefers the publisher-matching catalog row among same-titled ones', async () => {
-      mockSearchCatalog.mockResolvedValue({
-        books: [
+      mockMatchRows.mockResolvedValue(
+        forRow(0, [
           { book_id: 1, title: 'Hong Kong', author_name: 'Piera Chen', publisher: 'Lonely Planet' },
           { book_id: 2, title: 'Hong Kong', author_name: 'Beth Reiber', publisher: "Frommer's" },
-        ],
-      });
+        ]),
+      );
 
       const [row] = await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], 1);
 
@@ -640,7 +645,7 @@ describe('resolveImportRows', () => {
     };
 
     it('skips both providers entirely', async () => {
-      mockSearchCatalog.mockResolvedValue({ books: [owned] });
+      mockMatchRows.mockResolvedValue(forRow(0, [owned]));
 
       const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
 
@@ -651,7 +656,7 @@ describe('resolveImportRows', () => {
     });
 
     it('still looks up a catalog match the caller does not own', async () => {
-      mockSearchCatalog.mockResolvedValue({ books: [{ ...owned, in_library: false }] });
+      mockMatchRows.mockResolvedValue(forRow(0, [{ ...owned, in_library: false }]));
 
       const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
 
@@ -662,9 +667,8 @@ describe('resolveImportRows', () => {
     // The client aligns results to CSV lines by index, so skipping a row must
     // not shift the ones around it.
     it('keeps unowned rows resolved and in position around a skipped one', async () => {
-      mockSearchCatalog.mockImplementation(async (query: { q: string }) =>
-        query.q === 'Dune' ? { books: [owned] } : { books: [] },
-      );
+      // One call for the batch, so the owned book is tagged as row 1 of three.
+      mockMatchRows.mockResolvedValue(forRow(1, [owned]));
       googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Hyperion' })]);
 
       const rows = await resolveImportRows(
