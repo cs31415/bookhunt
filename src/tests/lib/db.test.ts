@@ -64,6 +64,29 @@ describe('db pool query logging', () => {
       expect(console.log).not.toHaveBeenCalled();
     });
 
+    it('suppresses the per-query log inside a scope, which reports its own totals', async () => {
+      process.env.LOG_DB_QUERIES = 'true';
+      mockQuery.mockResolvedValue({ rows: [{ id: 1 }], rowCount: 1 });
+      const { pool } = await import('../../lib/db');
+      const { runWithCallStats } = await import('../../lib/stats/run-with-call-stats');
+
+      const { stats, result } = runWithCallStats(() => pool.query('SELECT 1'));
+      await result;
+
+      expect(console.log).not.toHaveBeenCalled();
+      expect(stats.dbRowCounts).toEqual([1]);
+    });
+
+    it('still logs per query outside a scope', async () => {
+      process.env.LOG_DB_QUERIES = 'true';
+      mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+      const { pool } = await import('../../lib/db');
+
+      await pool.query('SELECT 1');
+
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('[db] query'));
+    });
+
     it('falls back to the row array when the driver reports no rowCount', async () => {
       mockQuery.mockResolvedValue({ rows: [{ id: 1 }] });
       const { pool } = await import('../../lib/db');

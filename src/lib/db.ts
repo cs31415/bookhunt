@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { recordDbCall } from './stats/record-db-call';
+import { isCallStatsScopeActive } from './stats/call-stats-store';
 
 let _pool: Pool;
 
@@ -29,7 +30,9 @@ export const pool = new Proxy({} as Pool, {
       // the caller opened a stats scope, and a route that reports its own cost
       // shouldn't need LOG_DB_QUERIES turned on to do it.
       recordDbCall(result?.rowCount ?? result?.rows?.length ?? 0);
-      if (isDbLoggingEnabled()) {
+      // Suppressed inside a stats scope: that request reports its own totals,
+      // and a per-row query log would bury them.
+      if (isDbLoggingEnabled() && !isCallStatsScopeActive()) {
         const [text, params] = args;
         const sql = typeof text === 'string' ? text : (text as { text: string }).text;
         console.log(`[db] query "${sql}"${params ? ` params: ${JSON.stringify(params)}` : ''}, ${Date.now() - start}ms`);

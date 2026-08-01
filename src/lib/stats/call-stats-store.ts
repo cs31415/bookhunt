@@ -27,6 +27,20 @@ export function currentCallStats(): CallStats | undefined {
   return storage.getStore();
 }
 
+/**
+ * Whether the caller is already accounting for its external calls.
+ *
+ * Inside such a scope the per-call `[db]` and `[books:*]` lines are redundant
+ * and actively harmful: one 40-row import batch emits ~80 of them, burying the
+ * summary that says the same thing in one line. So a scope suppresses them, and
+ * LOG_DB_QUERIES / LOG_BOOKS_PROVIDER_QUERIES keep their existing meaning
+ * everywhere else. Failure and retry warnings are not affected — those report
+ * trouble, not routine traffic.
+ */
+export function isCallStatsScopeActive(): boolean {
+  return storage.getStore() !== undefined;
+}
+
 export function runInCallStatsScope<T>(stats: CallStats, fn: () => T): T {
   return storage.run(stats, fn);
 }
