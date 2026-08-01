@@ -81,6 +81,35 @@ describe('search controller', () => {
     expect(res.json).toHaveBeenCalledWith({ books: [bookNotInLibrary], query: 'cats' });
   });
 
+  // The suites above assert with fixtures carrying a googleBooksId, which the
+  // real LLM path never produces. This one uses the shape searchBooksWithLlm
+  // actually returns — no ids — so inLibraryOnly can only pass if
+  // matchLibraryEntries flagged the book by title and author.
+  it('filters id-less LLM results to the ones matchLibraryEntries flagged', async () => {
+    const owned = {
+      googleBooksId: null,
+      isbn13: null,
+      title: 'Cosmos',
+      authors: ['Carl Sagan'],
+      inLibrary: false,
+      libraryStatus: null,
+      source: 'gemini-3.1-flash-lite',
+    };
+    const notOwned = { ...owned, title: 'Contact', inLibrary: false };
+    mockSearchBooksWithLlm.mockResolvedValue([notOwned, owned]);
+    mockMatchLibraryEntries.mockImplementation(async (_userId: number, books: any[]) => {
+      const match = books.find((b) => b.title === 'Cosmos');
+      match.inLibrary = true;
+      match.libraryStatus = 'read';
+    });
+    const res = makeRes();
+
+    await search(makeReq({ query: 'sagan', inLibraryOnly: true }, { id: 1, email: 'a@b.com' }), res);
+
+    expect(res.json).toHaveBeenCalledWith({ books: [owned], query: 'sagan' });
+    expect(owned.inLibrary).toBe(true);
+  });
+
   it('uses provided limit when calling searchBooksWithLlm', async () => {
     const res = makeRes();
     await search(makeReq({ query: 'dogs', limit: 5 }), res);

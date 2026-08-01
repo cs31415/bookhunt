@@ -8,6 +8,7 @@ jest.mock('../../../lib/books/search-with-fallback');
 jest.mock('../../../lib/books/parse-books-provider-config');
 
 const mockMatchData = aiData.matchLibraryEntries as jest.Mock;
+const mockMatchByTitleData = aiData.matchLibraryEntriesByTitle as jest.Mock;
 const mockSearchWithFallback = searchWithFallback as jest.Mock;
 const mockParseBooksProviderConfig = parseBooksProviderConfig as jest.Mock;
 
@@ -44,6 +45,11 @@ describe('searchBooks', () => {
 });
 
 describe('matchLibraryEntries', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockMatchByTitleData.mockResolvedValue([]);
+  });
+
   it('marks books as inLibrary when matched by googleBooksId', async () => {
     mockMatchData.mockResolvedValue([
       { google_books_id: 'gid1', isbn13: null, status: 'read' },
@@ -99,5 +105,166 @@ describe('matchLibraryEntries', () => {
     ];
     await matchLibraryEntries(1, books);
     expect(mockMatchData).toHaveBeenCalledWith(1, [], ['9789999999999']);
+  });
+
+  // LLM suggestions arrive with no ids at all — the shape the id-only match
+  // could never answer for, which is what took "In my library only" down.
+  const llmBook = (title: string, author: string | null) => ({
+    googleBooksId: null,
+    isbn13: null,
+    title,
+    authors: author ? [author] : [],
+    inLibrary: false,
+    libraryStatus: null,
+    source: 'gemini-3.1-flash-lite',
+  });
+
+  it('marks an id-less book as inLibrary when title and author match a library entry', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      { row_index: 0, book_id: 7, title: 'Cosmos', author_name: 'Carl Sagan', isbn13: null, status: 'read' },
+    ]);
+    const books: any[] = [llmBook('Cosmos', 'Carl Sagan')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(true);
+    expect(books[0].libraryStatus).toBe('read');
+  });
+
+  it('skips the id query entirely when no book carries an id', async () => {
+    const books: any[] = [llmBook('Cosmos', 'Carl Sagan')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(mockMatchData).not.toHaveBeenCalled();
+    expect(mockMatchByTitleData).toHaveBeenCalledWith({
+      userId: 1,
+      terms: ['cosmos'],
+      phrases: ['cosmos'],
+      limit: 5,
+    });
+  });
+
+  it('matches when the LLM supplies a subtitle the catalog row omits', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      {
+        row_index: 0,
+        book_id: 339,
+        title: "Broca's Brain",
+        author_name: 'Carl Sagan',
+        isbn13: null,
+        status: 'queued',
+      },
+    ]);
+    const books: any[] = [
+      llmBook("Broca's Brain: Reflections on the Romance of Science", 'Carl Sagan'),
+    ];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(true);
+    expect(books[0].libraryStatus).toBe('queued');
+  });
+
+  it('does not match when the author disagrees', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      { row_index: 0, book_id: 9, title: 'Contact', author_name: 'Jodie Foster', isbn13: null, status: 'read' },
+    ]);
+    const books: any[] = [llmBook('Contact', 'Carl Sagan')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(false);
+    expect(books[0].libraryStatus).toBeNull();
+  });
+
+  it('does not match when the titles are only loosely similar', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      {
+        row_index: 0,
+        book_id: 11,
+        title: 'The Demon-Haunted World',
+        author_name: 'Carl Sagan',
+        isbn13: null,
+        status: 'read',
+      },
+    ]);
+    const books: any[] = [llmBook('The Dragons of Eden', 'Carl Sagan')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(false);
+  });
+
+  it('does not match an id-less book whose author the LLM left out', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      { row_index: 0, book_id: 7, title: 'Cosmos', author_name: 'Carl Sagan', isbn13: null, status: 'read' },
+    ]);
+    const books: any[] = [llmBook('Cosmos', null)];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(false);
+  });
+
+  it('picks the best-scoring confirmed candidate among several', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      {
+        row_index: 0,
+        book_id: 1,
+        title: 'Cosmos: A Personal Voyage Companion',
+        author_name: 'Carl Sagan',
+        isbn13: null,
+        status: 'queued',
+      },
+      { row_index: 0, book_id: 2, title: 'Cosmos', author_name: 'Carl Sagan', isbn13: null, status: 'read' },
+    ]);
+    const books: any[] = [llmBook('Cosmos', 'Carl Sagan')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].libraryStatus).toBe('read');
+  });
+
+  it('keeps row alignment when only some books need the title pass', async () => {
+    mockMatchData.mockResolvedValue([{ google_books_id: 'gid1', isbn13: null, status: 'reading' }]);
+    mockMatchByTitleData.mockResolvedValue([
+      { row_index: 1, book_id: 7, title: 'Contact', author_name: 'Carl Sagan', isbn13: null, status: 'read' },
+    ]);
+    const books: any[] = [
+      { ...llmBook('Cosmos', 'Carl Sagan'), googleBooksId: 'gid1' },
+      llmBook('Pale Blue Dot', 'Carl Sagan'),
+      llmBook('Contact', 'Carl Sagan'),
+    ];
+
+    await matchLibraryEntries(1, books);
+
+    // The matched-by-id book is left out of the title pass, so row_index 1 is
+    // the third book, not the second.
+    expect(mockMatchByTitleData).toHaveBeenCalledWith(
+      expect.objectContaining({ phrases: ['pale blue dot', 'contact'] }),
+    );
+    expect(books[0].libraryStatus).toBe('reading');
+    expect(books[1].inLibrary).toBe(false);
+    expect(books[2].libraryStatus).toBe('read');
+  });
+
+  it('marks a library entry with no status as owned', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      { row_index: 0, book_id: 7, title: 'Cosmos', author_name: 'Carl Sagan', isbn13: null, status: null },
+    ]);
+    const books: any[] = [llmBook('Cosmos', 'Carl Sagan')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(true);
+    expect(books[0].libraryStatus).toBeNull();
+  });
+
+  it('issues no queries at all for an empty batch', async () => {
+    await matchLibraryEntries(1, []);
+
+    expect(mockMatchData).not.toHaveBeenCalled();
+    expect(mockMatchByTitleData).not.toHaveBeenCalled();
   });
 });

@@ -151,6 +151,35 @@ export function matchesTitleAndAuthor(candidate: CandidateFields, hint: MatchHin
 }
 
 /**
+ * Whether candidate and hint name the same book when either side may be the one
+ * carrying a subtitle.
+ *
+ * matchesTitleAndAuthor measures overlap in one direction only — how much of the
+ * *hint's* title the candidate covers — which is right wherever the hint is the
+ * terse side, as a photographed spine or a CSV cell is. It is wrong when the
+ * hint is the verbose side: an LLM answers with "Broca's Brain: Reflections on
+ * the Romance of Science" for a catalog row titled "Broca's Brain", and every
+ * catalog token is present but only a third of the LLM's, so the one-way test
+ * rejects a book the reader plainly owns. Trying it both ways accepts either
+ * side omitting a subtitle.
+ *
+ * The cost is that a short title now matches any longer one containing it —
+ * "Chronicle" against "The Wind-Up Bird Chronicle" — bounded by the author
+ * having to agree as well. Worth it where the two sides are a catalog row and a
+ * model's answer, both describing books someone already owns; not worth it for
+ * the one-directional callers, which keep matchesTitleAndAuthor.
+ */
+export function matchesTitleAndAuthorEitherWay(candidate: CandidateFields, hint: MatchHint): boolean {
+  return (
+    matchesTitleAndAuthor(candidate, hint) ||
+    matchesTitleAndAuthor(
+      { title: hint.title, authors: hint.author ? [hint.author] : [] },
+      { title: candidate.title, author: candidate.authors[0] ?? null },
+    )
+  );
+}
+
+/**
  * Whether a search result plausibly is the book detected in a photo. Vision
  * titles are noisy (misread spines), so this checks token overlap rather than
  * equality: accept when nearly all detected title words appear in the result
