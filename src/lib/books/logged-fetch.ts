@@ -3,6 +3,10 @@ import { isBooksProviderLoggingEnabled } from './is-books-provider-logging-enabl
 import { httpAttempts, httpBackoffMs } from './books-retry-config';
 import { recordProviderCall } from '../stats/record-provider-call';
 import { isCallStatsScopeActive } from '../stats/call-stats-store';
+import { cacheGet } from '../cache/cache-get';
+import { isCacheEnabled } from '../cache/redis-client';
+import { cacheSet } from '../cache/cache-set';
+import { cacheKey } from '../cache/cache-key';
 
 // Open Library asks callers to identify themselves and throttles anonymous
 // traffic more aggressively; sending nothing risks being lumped in with bots.
@@ -14,6 +18,27 @@ const HEADERS = { 'User-Agent': 'bookhunt/1.0 (+https://github.com/cs31415/bookh
  * produced a visibly worse match for a book Google had all along.
  */
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+
+/** Bump if the cached shape below changes. */
+const CACHE_VERSION = 1;
+
+/**
+ * A specific volume or edition is effectively immutable; a search can pick up
+ * newly indexed books, so it is held for a day rather than a week.
+ */
+const EDITION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const SEARCH_TTL_SECONDS = 24 * 60 * 60;
+
+interface CachedResponse {
+  status: number;
+  body: string;
+}
+
+function ttlFor(url: string): number {
+  return url.includes('/volumes/') || url.includes('/books/') || url.includes('/works/')
+    ? EDITION_TTL_SECONDS
+    : SEARCH_TTL_SECONDS;
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,6 +61,25 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   const backoff = httpBackoffMs();
   const start = Date.now();
 
+  // Imports and photo scans resolve overlapping titles, and every book detail
+  // view re-resolves the same volume id, so this is where the quota actually
+  // goes: Google's free tier is 1,000 queries/day and Open Library serializes
+  // callers at 1/sec.
+  const caching = isCacheEnabled();
+  const key = cacheKey('books:fetch', CACHE_VERSION, url);
+  const cached = caching ? await cacheGet<CachedResponse>(key) : null;
+  if (cached) {
+    if (logging) {
+      console.log(`[books:${provider}] ${url} -> ${cached.status} (cached), ${Date.now() - start}ms`);
+    }
+    // Deliberately not counted by recordProviderCall: no request left the
+    // process, and counting it would overstate real quota consumption.
+    return new globalThis.Response(cached.body, {
+      status: cached.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -57,6 +101,22 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
       if (logging) {
         console.log(`[books:${provider}] ${url} -> ${response.status}, ${Date.now() - start}ms`);
       }
+
+      // Only successes, and never anything in RETRYABLE: those are exactly the
+      // transient failures the loop above exists to paper over, and caching one
+      // would keep serving it for the whole TTL. Reading the body consumes it,
+      // so the caller gets a fresh Response over the same text -- which is also
+      // why this is gated on the cache being configured at all, rather than
+      // rebuilding every response for a store that would discard it.
+      if (caching && response.ok) {
+        const body = await response.text();
+        await cacheSet(key, { status: response.status, body }, ttlFor(url));
+        return new globalThis.Response(body, {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       return response;
     } catch (error) {
       lastError = error;

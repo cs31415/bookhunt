@@ -1,10 +1,16 @@
 import { searchBooksWithLlm } from '../../../models/ai/search-llm';
 import { completeTextWithModel } from '../../../lib/llm/complete-text';
 import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
+import { cacheGet } from '../../../lib/cache/cache-get';
+import { cacheSet } from '../../../lib/cache/cache-set';
 
 jest.mock('../../../lib/llm/complete-text');
+jest.mock('../../../lib/cache/cache-get');
+jest.mock('../../../lib/cache/cache-set');
 
 const mockCompleteTextWithModel = completeTextWithModel as jest.Mock;
+const mockCacheGet = cacheGet as jest.Mock;
+const mockCacheSet = cacheSet as jest.Mock;
 
 const defaultModel = { provider: 'google', model: 'gemini-3.1-flash-lite' };
 
@@ -144,5 +150,77 @@ describe('searchBooksWithLlm', () => {
     const prompt = mockCompleteTextWithModel.mock.calls[0][0];
     expect(prompt).toContain('"moods" array must include "Lyrical" verbatim');
     expect(prompt).not.toContain('"categories" array must include');
+  });
+});
+
+// The suggestions for a phrasing are the same every time, and the call is the
+// slowest thing on the search path (LOS-185).
+describe('searchBooksWithLlm caching', () => {
+  const suggestions = '[{"title":"Cosmos","author":"Carl Sagan","categories":["Science"],"moods":["Awe-inspiring"]}]';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockResolvedValue(undefined);
+  });
+
+  it('returns a cached answer without calling the model', async () => {
+    const cached = [{ title: 'Cosmos', authors: ['Carl Sagan'] }];
+    mockCacheGet.mockResolvedValue(cached);
+
+    const result = await searchBooksWithLlm('sagan', 5);
+
+    expect(result).toBe(cached);
+    expect(mockCompleteTextWithModel).not.toHaveBeenCalled();
+  });
+
+  it('caches a real answer under a versioned, namespaced key', async () => {
+    mockLlmResponse(suggestions);
+
+    await searchBooksWithLlm('sagan', 5);
+
+    expect(mockCacheSet).toHaveBeenCalledTimes(1);
+    const [key, value, ttl] = mockCacheSet.mock.calls[0];
+    expect(key).toMatch(/^ai:search:v1:/);
+    expect(value).toHaveLength(1);
+    expect(ttl).toBe(30 * 24 * 60 * 60);
+  });
+
+  // Otherwise a transient outage is served for the next 30 days.
+  it('does not cache an empty answer', async () => {
+    mockLlmResponse('[]');
+
+    await searchBooksWithLlm('sagan', 5);
+
+    expect(mockCacheSet).not.toHaveBeenCalled();
+  });
+
+  it('does not cache when the model call fails outright', async () => {
+    mockCompleteTextWithModel.mockRejectedValue(new LlmUnavailableError('All configured LLM models failed', []));
+
+    await expect(searchBooksWithLlm('sagan', 5)).resolves.toEqual([]);
+    expect(mockCacheSet).not.toHaveBeenCalled();
+  });
+
+  it('folds case and spacing onto one key', async () => {
+    mockLlmResponse(suggestions);
+
+    await searchBooksWithLlm('Carl Sagan', 5);
+    await searchBooksWithLlm('  carl   sagan  ', 5);
+
+    expect(mockCacheGet.mock.calls[0][0]).toBe(mockCacheGet.mock.calls[1][0]);
+  });
+
+  // Each of these changes the prompt, so each has to change the key.
+  it('separates keys by limit and by seed tags', async () => {
+    mockLlmResponse(suggestions);
+
+    await searchBooksWithLlm('sagan', 5);
+    await searchBooksWithLlm('sagan', 20);
+    await searchBooksWithLlm('sagan', 5, 'Popular Science');
+    await searchBooksWithLlm('sagan', 5, undefined, 'Rigorous');
+
+    const keys = mockCacheGet.mock.calls.map(([key]) => key);
+    expect(new Set(keys).size).toBe(4);
   });
 });
