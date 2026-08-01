@@ -1,11 +1,5 @@
 import { searchBooks as searchBooksData } from '../../data/search-data';
-
-// Ported from the prototype's localSearch (assets/lib.jsx) for scoring parity.
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'of', 'for', 'on', 'in', 'to', 'and', 'or', 'with',
-  'about', 'best', 'good', 'some', 'that', 'i', 'can', 'my', 'me', 'is',
-  'are', 'books', 'book', 'read', 'reading', 'novel', 'stories',
-]);
+import { tokenizeQuery } from './tokenize-query';
 
 const VALID_SORTS = ['relevance', 'rating', 'newest', 'oldest', 'title'];
 const DEFAULT_LIMIT = 24;
@@ -16,12 +10,6 @@ function toArray(value: unknown): string[] | null {
   const arr = Array.isArray(value) ? value : [value];
   const cleaned = arr.map((v) => String(v).trim()).filter(Boolean);
   return cleaned.length > 0 ? cleaned : null;
-}
-
-function tokenize(query: string): string[] {
-  const terms = query.split(/[\s,]+/).filter(Boolean);
-  const content = terms.filter((t) => !STOP_WORDS.has(t));
-  return content.length > 0 ? content : terms;
 }
 
 export interface SearchQuery {
@@ -39,7 +27,7 @@ export interface SearchQuery {
 
 export async function searchBooks(query: SearchQuery, userId: number | null) {
   const q = typeof query.q === 'string' ? query.q.trim() : '';
-  const terms = q ? tokenize(q.toLowerCase()) : null;
+  const terms = q ? tokenizeQuery(q.toLowerCase()) : null;
   const phrase = q ? q.toLowerCase() : null;
 
   const decadeNum = query.decade !== undefined ? parseInt(String(query.decade), 10) : NaN;
