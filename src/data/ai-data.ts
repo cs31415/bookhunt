@@ -52,6 +52,13 @@ export async function getBookGenresThemes(bookId: number) {
   return null;
 }
 
+// Most-used first -- see fn_theme_vocabulary for why that order matters to both
+// callers (the prompt slice, and picking the canonical spelling when folding).
+export async function getThemeVocabulary(limit: number): Promise<string[]> {
+  const result = await pool.query('SELECT * FROM fn_theme_vocabulary($1)', [limit]);
+  return result.rows.map((row) => row.theme as string);
+}
+
 export async function updateBookAiMetadata(bookId: number, genres: string[], themes: string[], moods: string[]) {
   await pool.query('SELECT fn_update_book_ai_metadata($1, $2, $3, $4)', [bookId, genres, themes, moods]);
 }

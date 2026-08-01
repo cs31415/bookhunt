@@ -35,6 +35,25 @@ describe('generateThemesExternal model', () => {
     expect(result).toEqual({ genres: ['Memoir'], themes: ['resilience'], moods: ['Reflective'] });
   });
 
+  it('shows the model the existing vocabulary and asks it to prefer those tags', async () => {
+    mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}');
+
+    await generateThemesExternal('A Book', 'Some Author', ['Cultural History', 'Human condition']);
+
+    const prompt = mockCompleteText.mock.calls[0][0];
+    expect(prompt).toContain('Cultural History, Human condition');
+    expect(prompt).toContain('Prefer a theme from that list');
+  });
+
+  it('omits the vocabulary clause when the catalog has no themes yet', async () => {
+    mockLlmResponse('{"genres":["Memoir"],"themes":["resilience"],"moods":["Reflective"]}');
+
+    await generateThemesExternal('A Book', 'Some Author', []);
+
+    // An empty list is a confusing hint, not a weaker one.
+    expect(mockCompleteText.mock.calls[0][0]).not.toContain('already in use');
+  });
+
   it('propagates errors from the LLM call', async () => {
     mockCompleteText.mockRejectedValue(new Error('llm down'));
 
