@@ -5,7 +5,11 @@ import { primaryAttempts, primaryBackoffMs } from '../../lib/books/books-retry-c
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
 import { RESOLUTION_CONCURRENCY } from '../../lib/upload-constraints';
-import { isSamePublisher, scoreCandidate } from '../upload/matches-detected-book';
+import {
+  isSamePublisher,
+  matchesTitleAndAuthor,
+  scoreCandidate,
+} from '../upload/matches-detected-book';
 import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
 import { searchBooks as searchCatalog } from '../search/search-books';
 
@@ -137,21 +141,50 @@ function pinnedByIsbn(collected: SearchResult[], hint: ImportRowHint): boolean {
 }
 
 /**
+ * Whether a candidate agrees on both title and author, which identifies the book
+ * the way an ISBN does — leaving the publisher nothing to disambiguate.
+ *
+ * A candidate naming a *different* publisher deliberately does not reopen the
+ * question. Google's publisher on search results is unreliable and routinely
+ * names another edition of the right book, so treating disagreement as doubt
+ * would spend a throttle slot on most rows to re-answer a question already
+ * settled — and the reader still picks from the ranked candidates, where a
+ * publisher match scores ahead of one that mismatches.
+ */
+function pinnedByAuthor(collected: SearchResult[], hint: ImportRowHint): boolean {
+  return collected.some((book) => matchesTitleAndAuthor(book, hint));
+}
+
+/**
  * Whether a row still needs the fallback provider.
  *
  * Open Library is the only one that reliably reports publisher, which is what
  * makes a generic-titled travel guide resolvable — but throttleOpenLibrary() is
- * a process-wide 1 req/sec queue, so it stays off the common path.
+ * a process-wide 1 req/sec queue, so every row sent there costs a full second of
+ * the import's wall clock. It has to earn that second.
  *
- * An ISBN already names one edition, so a candidate carrying it settles the row:
- * there is nothing for the publisher to disambiguate, and no reason to spend a
- * throttle slot confirming what the ISBN said. Without this, a Goodreads export
- * — every row an ISBN *and* a publisher, which Google routinely omits from
- * search results — serialises its whole length through the 1 req/sec queue.
+ * It earns it only when the publisher is what identifies the book. Two things
+ * already identify it, and neither leaves the publisher anything to do:
+ *
+ * - An ISBN names one edition outright, so a candidate carrying it settles the
+ *   row. Without this a Goodreads export — every row an ISBN *and* a publisher,
+ *   which Google routinely omits from search results — serialises its whole
+ *   length through the queue.
+ * - A title-and-author agreement names the book. Measured on a 372-row import:
+ *   Google and Open Library call counts came back equal batch after batch, ~50
+ *   throttled calls and ~50 of the 55 second wall clock, because a file with
+ *   publishers and no ISBNs failed the publisher test on nearly every row —
+ *   including "Cosmos / Carl Sagan / Ballantine", which no second opinion was
+ *   going to identify any better.
+ *
+ * What is left is the case the fallback exists for (LOS-168): a generic title
+ * with no author, where the publisher is the only thing telling dozens of
+ * identically-titled editions apart.
  */
 function needsFallback(collected: SearchResult[], hint: ImportRowHint): boolean {
   if (collected.length === 0) return true;
   if (pinnedByIsbn(collected, hint)) return false;
+  if (pinnedByAuthor(collected, hint)) return false;
   return Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint));
 }
 

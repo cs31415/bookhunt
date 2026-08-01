@@ -206,6 +206,89 @@ describe('resolveImportRows', () => {
     expect(openLibrarySearch).not.toHaveBeenCalled();
   });
 
+  // Every row sent to Open Library costs a second of the import's wall clock, so
+  // it goes only where the publisher is what identifies the book. A title and
+  // author agreeing already identify it.
+  describe('rows the author settles', () => {
+    const cosmos = { title: 'Cosmos', author: 'Carl Sagan', publisher: 'Ballantine Books' };
+
+    it('does not consult Open Library when title and author both match', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Cosmos', authors: ['Carl Sagan'] }),
+      ]);
+
+      await resolveImportRows([cosmos], 1);
+
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    // Google's publisher on search results routinely names another edition of
+    // the right book, so a disagreement is not evidence of a wrong match.
+    it('does not consult Open Library when the candidate names a different publisher', async () => {
+      googleSearch.mockResolvedValue([
+        result({
+          googleBooksId: 'g1',
+          title: 'Cosmos',
+          authors: ['Carl Sagan'],
+          publishers: ['Random House'],
+        }),
+      ]);
+
+      await resolveImportRows([cosmos], 1);
+
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    // The case the fallback exists for (LOS-168): dozens of editions share the
+    // title, and with no author only the publisher tells them apart.
+    it('still consults Open Library for an author-less row', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Hong Kong', publishers: ['Lonely Planet'] }),
+      ]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], 1);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+
+    it('still consults Open Library when no candidate confirms the author', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Cosmos', authors: ['Ann Druyan'] }),
+      ]);
+
+      await resolveImportRows([cosmos], 1);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+
+    it('still consults Open Library when the candidate lists no author', async () => {
+      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Cosmos' })]);
+
+      await resolveImportRows([cosmos], 1);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+
+    it('still consults Open Library when the titles barely overlap', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Chronicle', authors: ['Haruki Murakami'] }),
+      ]);
+
+      await resolveImportRows(
+        [
+          {
+            title: 'The Wind-Up Bird Chronicle',
+            author: 'Haruki Murakami',
+            publisher: 'Vintage',
+          },
+        ],
+        1,
+      );
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+  });
+
   it('ranks the publisher-matching candidate first', async () => {
     googleSearch.mockResolvedValue([
       result({ googleBooksId: 'g1', title: 'Hong Kong', publishers: ['Lonely Planet'] }),
