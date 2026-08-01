@@ -50,11 +50,28 @@ function quoted(value: string): string {
  * API, where `intitle:"Hong Kong" inpublisher:"Frommer's"` returns exactly the
  * right book. Open Library accepts the same shape but does not strictly AND
  * terms, so its results need the same re-ranking everything else gets.
+ *
+ * That precision cuts both ways, which is why `inpublisher` is added only when
+ * there is no author. Google matches it against one publisher string per volume,
+ * and a file naming a different-but-correct one excludes the book outright:
+ *
+ *   intitle:"Tools of Titans" inauthor:"Tim Ferriss" inpublisher:"HMH"  -> 0
+ *   intitle:"Tools of Titans" inauthor:"Tim Ferriss"                    -> 5
+ *
+ * "HMH" is Houghton Mifflin Harcourt, and the book is theirs. Six of twenty
+ * authored rows sampled from a real import came back empty for exactly this
+ * reason, leaving them to the throttled fallback or to nothing at all.
+ *
+ * An author narrows the search perfectly well on its own, and scoreCandidate
+ * then ranks the results by publisher far more forgivingly — by token, so
+ * "Frommer's" and "Frommers" agree. Without an author the qualifier is the only
+ * thing narrowing a generic title, so it stays: that is the case it was added
+ * for (LOS-168).
  */
 function googleQuery(hint: ImportRowHint): string {
   const parts = [`intitle:${quoted(hint.title)}`];
   if (hint.author) parts.push(`inauthor:${quoted(hint.author)}`);
-  if (hint.publisher) parts.push(`inpublisher:${quoted(hint.publisher)}`);
+  else if (hint.publisher) parts.push(`inpublisher:${quoted(hint.publisher)}`);
   return parts.join(' ');
 }
 

@@ -153,11 +153,24 @@ describe('resolveImportRows', () => {
     });
   });
 
-  it('sends a fielded Google query using every hint supplied', async () => {
+  // Google matches inpublisher against one publisher string per volume, so a
+  // file naming a different-but-correct one excludes the book outright:
+  // intitle:"Tools of Titans" inauthor:"Tim Ferriss" inpublisher:"HMH" returns
+  // nothing, while the same query without the qualifier returns five. An author
+  // narrows the search on its own, and scoreCandidate ranks by publisher after.
+  it('narrows by author and leaves the publisher to local ranking', async () => {
     await resolveImportRows([{ title: 'Hong Kong', author: 'Reiber', publisher: "Frommer's" }], 1);
 
+    expect(googleSearch).toHaveBeenCalledWith('intitle:"Hong Kong" inauthor:"Reiber"', 5);
+  });
+
+  // Without an author it is the only thing narrowing a generic title, which is
+  // the case it was added for (LOS-168).
+  it('narrows by publisher when the row has no author', async () => {
+    await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], 1);
+
     expect(googleSearch).toHaveBeenCalledWith(
-      'intitle:"Hong Kong" inauthor:"Reiber" inpublisher:"Frommer\'s"',
+      'intitle:"Hong Kong" inpublisher:"Frommer\'s"',
       5,
     );
   });
