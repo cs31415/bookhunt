@@ -1,7 +1,7 @@
 import {
   fetchBookContext,
   getBookGenresThemes,
-  getThemeVocabulary,
+  getTagVocabulary,
   updateBookAiMetadata,
 } from '../../data/ai-data';
 import { foldThemes } from './fold-themes';
@@ -9,7 +9,7 @@ import { generateThemesExternal } from './generate-themes-external';
 
 // Enough of the catalog's vocabulary for the model to find a fit, without the
 // prompt turning into a list the book itself has to compete with. At three or
-// four words a theme, 150 is a few hundred tokens.
+// four words a tag, 150 per kind is a few hundred tokens.
 const VOCABULARY_LIMIT = 150;
 
 export interface GenerateThemesOptions {
@@ -30,13 +30,27 @@ export async function generateThemes(bookId: number, options: GenerateThemesOpti
   // Read fresh per book rather than once per process: each generated book feeds
   // the next one's prompt, which is how the vocabulary converges instead of
   // every book independently inventing its own phrasing.
-  const vocabulary = await getThemeVocabulary(VOCABULARY_LIMIT);
-  const parsed = await generateThemesExternal(book.title, book.author_name, vocabulary);
+  const [categories, themeVocabulary, moods] = await Promise.all([
+    getTagVocabulary('subjects', VOCABULARY_LIMIT),
+    getTagVocabulary('themes', VOCABULARY_LIMIT),
+    getTagVocabulary('moods', VOCABULARY_LIMIT),
+  ]);
+
+  const parsed = await generateThemesExternal(book.title, book.author_name, {
+    categories,
+    themes: themeVocabulary,
+    moods,
+  });
+
   // The prompt asks for reuse; folding is what enforces it when the model
-  // paraphrases a tag it was shown.
-  const themes = foldThemes(parsed.themes ?? [], vocabulary);
+  // paraphrases a tag it was shown. Each kind folds against its own vocabulary.
+  const folded = {
+    genres: foldThemes(parsed.genres ?? [], categories),
+    themes: foldThemes(parsed.themes ?? [], themeVocabulary),
+    moods: foldThemes(parsed.moods ?? [], moods),
+  };
 
-  await updateBookAiMetadata(bookId, parsed.genres, themes, parsed.moods);
+  await updateBookAiMetadata(bookId, folded.genres, folded.themes, folded.moods);
 
-  return { ...parsed, themes };
+  return folded;
 }

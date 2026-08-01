@@ -3,14 +3,17 @@ import { completeTextWithModel } from '../../../lib/llm/complete-text';
 import { LlmUnavailableError } from '../../../lib/llm/llm-errors';
 import { cacheGet } from '../../../lib/cache/cache-get';
 import { cacheSet } from '../../../lib/cache/cache-set';
+import { getTagVocabulary } from '../../../data/ai-data';
 
 jest.mock('../../../lib/llm/complete-text');
 jest.mock('../../../lib/cache/cache-get');
 jest.mock('../../../lib/cache/cache-set');
+jest.mock('../../../data/ai-data');
 
 const mockCompleteTextWithModel = completeTextWithModel as jest.Mock;
 const mockCacheGet = cacheGet as jest.Mock;
 const mockCacheSet = cacheSet as jest.Mock;
+const mockGetTagVocabulary = getTagVocabulary as jest.Mock;
 
 const defaultModel = { provider: 'google', model: 'gemini-3.1-flash-lite' };
 
@@ -24,6 +27,7 @@ function mockLlmResponse(text: string, model = defaultModel) {
 describe('searchBooksWithLlm', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetTagVocabulary.mockResolvedValue([]);
   });
 
   it('maps title/author/categories/moods suggestions into placeholder SearchResults with source: <model name>', async () => {
@@ -119,6 +123,23 @@ describe('searchBooksWithLlm', () => {
     expect(mockCompleteTextWithModel.mock.calls[1][0]).toContain('up to 1 books');
   });
 
+  // Suggestions carry categories and moods like any other tag-producing call,
+  // so they answer in the catalog's vocabulary rather than inventing a parallel
+  // one (LOS-193).
+  it('shows the model the catalog vocabulary for categories and moods', async () => {
+    mockGetTagVocabulary.mockImplementation(async (kind: string) =>
+      kind === 'subjects' ? ['Popular Science'] : ['Rigorous'],
+    );
+    mockLlmResponse('[]');
+
+    await searchBooksWithLlm('evolution', 5);
+
+    const prompt = mockCompleteTextWithModel.mock.calls[0][0];
+    expect(prompt).toContain('Categories already in use: Popular Science.');
+    expect(prompt).toContain('Moods already in use: Rigorous.');
+    expect(mockGetTagVocabulary).not.toHaveBeenCalledWith('themes', expect.anything());
+  });
+
   it('requests up to 2048 tokens', async () => {
     mockLlmResponse('[]');
 
@@ -160,8 +181,19 @@ describe('searchBooksWithLlm caching', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetTagVocabulary.mockResolvedValue([]);
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockResolvedValue(undefined);
+  });
+
+  // The vocabulary is in the prompt but deliberately not in the key, so a hit
+  // must not pay for the lookups either.
+  it('does not read the vocabulary when the answer is cached', async () => {
+    mockCacheGet.mockResolvedValue([{ title: 'Cached', authors: [], categories: [], moods: [] }]);
+
+    await searchBooksWithLlm('anything', 5);
+
+    expect(mockGetTagVocabulary).not.toHaveBeenCalled();
   });
 
   it('returns a cached answer without calling the model', async () => {
@@ -181,7 +213,7 @@ describe('searchBooksWithLlm caching', () => {
 
     expect(mockCacheSet).toHaveBeenCalledTimes(1);
     const [key, value, ttl] = mockCacheSet.mock.calls[0];
-    expect(key).toMatch(/^ai:search:v1:/);
+    expect(key).toMatch(/^ai:search:v2:/);
     expect(value).toHaveLength(1);
     expect(ttl).toBe(30 * 24 * 60 * 60);
   });
