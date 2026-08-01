@@ -8,6 +8,7 @@ jest.mock('../../../lib/llm/complete-text');
 const mockFetchBookContext = aiData.fetchBookContext as jest.Mock;
 const mockGetBookGenresThemes = aiData.getBookGenresThemes as jest.Mock;
 const mockUpdateBookAiMetadata = aiData.updateBookAiMetadata as jest.Mock;
+const mockGetThemeVocabulary = aiData.getThemeVocabulary as jest.Mock;
 const mockCompleteText = completeText as jest.Mock;
 
 function mockLlmResponse(text: string) {
@@ -19,6 +20,7 @@ function mockLlmResponse(text: string) {
 describe('generateThemes model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetThemeVocabulary.mockResolvedValue([]);
   });
 
   it('returns null when the book does not exist', async () => {
@@ -56,5 +58,29 @@ describe('generateThemes model', () => {
     const result = await generateThemes(1);
 
     expect(result).toEqual({ genres: ['Popular Science'], themes: ['units of selection'], moods: ['Rigorous'] });
+  });
+
+  it('folds a generated theme onto the spelling the catalog already uses', async () => {
+    mockFetchBookContext.mockResolvedValue({ title: 'A Book', author_name: 'Author' });
+    mockGetBookGenresThemes.mockResolvedValue(null);
+    mockGetThemeVocabulary.mockResolvedValue(['Sociopolitical evolution']);
+    mockLlmResponse('{"genres":["History"],"themes":["Socio-political evolution"],"moods":["Scholarly"]}');
+
+    const result = await generateThemes(1);
+
+    // Persisted and returned as one theme, not two near-identical ones.
+    expect(mockUpdateBookAiMetadata).toHaveBeenCalledWith(1, ['History'], ['Sociopolitical evolution'], ['Scholarly']);
+    expect(result?.themes).toEqual(['Sociopolitical evolution']);
+  });
+
+  it('re-generates over stored metadata when forced', async () => {
+    mockFetchBookContext.mockResolvedValue({ title: 'A Book', author_name: 'Author' });
+    mockGetBookGenresThemes.mockResolvedValue({ genres: ['Sci-Fi'], themes: ['Isolation'], moods: ['Bleak'] });
+    mockLlmResponse('{"genres":["History"],"themes":["Cultural History"],"moods":["Scholarly"]}');
+
+    const result = await generateThemes(1, { force: true });
+
+    expect(mockCompleteText).toHaveBeenCalled();
+    expect(result?.themes).toEqual(['Cultural History']);
   });
 });
