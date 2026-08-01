@@ -18,6 +18,11 @@
 --
 -- Returns fn_get_user_library's exact column set plus relevance, so callers --
 -- and the frontend's normalizeLibraryEntry -- can treat the two interchangeably.
+--
+-- DROP is required because adding a column changes the RETURNS TABLE row type,
+-- which CREATE OR REPLACE cannot do in place -- same reason fn_get_user_library
+-- carries one.
+DROP FUNCTION IF EXISTS fn_search_library(INT, TEXT[], TEXT, reading_status, TEXT, INT, INT);
 CREATE OR REPLACE FUNCTION fn_search_library(
     p_user_id INT,
     p_terms   TEXT[]         DEFAULT NULL,
@@ -45,6 +50,7 @@ CREATE OR REPLACE FUNCTION fn_search_library(
     rating       NUMERIC,
     subjects     TEXT[],
     moods        TEXT[],
+    themes       TEXT[],
     cover_url    VARCHAR,
     hue          VARCHAR,
     relevance    NUMERIC,
@@ -73,6 +79,7 @@ BEGIN
             b.rating,
             b.subjects,
             b.moods,
+            b.themes,
             b.cover_url,
             b.hue,
             (
@@ -110,7 +117,7 @@ BEGIN
         s.user_id, s.book_id, s.status, s.date_added, s.date_read,
         s.user_rating, s.review, s.notes, s.user_related,
         s.title, s.book_slug, s.author_name, s.author_slug,
-        s.year, s.pages, s.rating, s.subjects, s.moods, s.cover_url, s.hue,
+        s.year, s.pages, s.rating, s.subjects, s.moods, s.themes, s.cover_url, s.hue,
         s.relevance,
         COUNT(*) OVER ()::BIGINT AS total_count
     FROM scored s

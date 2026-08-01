@@ -3,6 +3,7 @@
 -- DROP is required because adding a column changes the RETURNS TABLE row
 -- type, which CREATE OR REPLACE cannot do in place.
 DROP FUNCTION IF EXISTS fn_get_user_library(INT);
+DROP FUNCTION IF EXISTS fn_get_user_library(INT, INT, INT);
 CREATE OR REPLACE FUNCTION fn_get_user_library(
     p_user_id INT,
     p_limit   INT DEFAULT 24,
@@ -26,6 +27,7 @@ CREATE OR REPLACE FUNCTION fn_get_user_library(
     rating       NUMERIC,
     subjects     TEXT[],
     moods        TEXT[],
+    themes       TEXT[],
     cover_url    VARCHAR,
     hue          VARCHAR,
     total_count  BIGINT
@@ -52,6 +54,7 @@ BEGIN
         b.rating,
         b.subjects,
         b.moods,
+        b.themes,
         b.cover_url,
         b.hue,
         COUNT(*) OVER ()::BIGINT AS total_count
