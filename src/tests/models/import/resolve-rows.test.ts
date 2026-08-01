@@ -116,6 +116,41 @@ describe('resolveImportRows', () => {
 
       expect(row.candidates[0].googleBooksId).toBe('g2');
     });
+
+    // Every row of a Goodreads export carries both an ISBN and a publisher, and
+    // Google routinely omits publisher from search results — so without this the
+    // whole file serialises through Open Library's 1 req/sec throttle.
+    it('does not consult Open Library to confirm a publisher the ISBN already settled', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Dune', isbn13: '9780441013593' }),
+      ]);
+
+      await resolveImportRows([{ title: 'Dune', publisher: 'Ace', isbn: '9780441013593' }], 1);
+
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    it('tolerates the ISBN-10/13 split when deciding the row is settled', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Dune', isbn13: '9780441013593' }),
+      ]);
+
+      await resolveImportRows([{ title: 'Dune', publisher: 'Ace', isbn: '0441013597' }], 1);
+
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    // A row whose ISBN nothing came back for is still unsettled: the publisher
+    // is the only signal left, so it earns its throttle slot.
+    it('still consults Open Library when no candidate carries the supplied ISBN', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Dune', isbn13: '9999999999999' }),
+      ]);
+
+      await resolveImportRows([{ title: 'Dune', publisher: 'Ace', isbn: '9780441013593' }], 1);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
   });
 
   it('sends a fielded Google query using every hint supplied', async () => {
@@ -449,6 +484,59 @@ describe('resolveImportRows', () => {
       const [row] = await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], 1);
 
       expect(row.matchedBookId).toBe(2);
+    });
+  });
+
+  // Re-importing an export against a library that already holds most of it is
+  // the case this exists to serve: those rows render inert in the review list,
+  // so any lookup spent on them is spent on something nobody will ever see.
+  describe('rows already in the library', () => {
+    const owned = {
+      book_id: 42,
+      title: 'Dune',
+      author_name: 'Frank Herbert',
+      publisher: 'Ace',
+      in_library: true,
+    };
+
+    it('skips both providers entirely', async () => {
+      mockSearchCatalog.mockResolvedValue({ books: [owned] });
+
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
+
+      expect(googleSearch).not.toHaveBeenCalled();
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+      expect(row.matchedBookId).toBe(42);
+      expect(row.candidates).toEqual([]);
+    });
+
+    it('still looks up a catalog match the caller does not own', async () => {
+      mockSearchCatalog.mockResolvedValue({ books: [{ ...owned, in_library: false }] });
+
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
+
+      expect(googleSearch).toHaveBeenCalled();
+      expect(row.matchedBookId).toBe(42);
+    });
+
+    // The client aligns results to CSV lines by index, so skipping a row must
+    // not shift the ones around it.
+    it('keeps unowned rows resolved and in position around a skipped one', async () => {
+      mockSearchCatalog.mockImplementation(async (query: { q: string }) =>
+        query.q === 'Dune' ? { books: [owned] } : { books: [] },
+      );
+      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Hyperion' })]);
+
+      const rows = await resolveImportRows(
+        [{ title: 'Hyperion' }, { title: 'Dune' }, { title: 'Hyperion' }],
+        1,
+      );
+
+      expect(googleSearch).toHaveBeenCalledTimes(2);
+      expect(rows.map((row) => row.title)).toEqual(['Hyperion', 'Dune', 'Hyperion']);
+      expect(rows[0].candidates).toHaveLength(1);
+      expect(rows[1].candidates).toEqual([]);
+      expect(rows[2].candidates).toHaveLength(1);
     });
   });
 });

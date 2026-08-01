@@ -26,7 +26,9 @@ export const MAX_IMPORT_ROWS = 40;
  *       candidate — Google Books frequently omits publisher from search results even for the
  *       correct book.
  *
- *       `matchedBookId` is set when the row already exists in the local catalog.
+ *       `matchedBookId` is set when the row already exists in the local catalog. When that book is
+ *       also already in the caller's library the row comes back with no candidates at all: it is
+ *       not addable, so no provider lookup is spent on alternatives nobody can choose.
  *     security:
  *       - bearerAuth: []
  *     requestBody:

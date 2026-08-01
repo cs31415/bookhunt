@@ -6,7 +6,7 @@ import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adap
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
 import { RESOLUTION_CONCURRENCY } from '../../lib/upload-constraints';
 import { isSamePublisher, scoreCandidate } from '../upload/matches-detected-book';
-import { normalizeIsbn } from '../../lib/books/normalize-isbn';
+import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
 import { searchBooks as searchCatalog } from '../search/search-books';
 
 export interface ImportRowHint {
@@ -130,24 +130,37 @@ async function fallbackLookup(hint: ImportRowHint): Promise<SearchResult[]> {
   }
 }
 
+/** Whether the supplied ISBN is already answered by one of the candidates. */
+function pinnedByIsbn(collected: SearchResult[], hint: ImportRowHint): boolean {
+  if (!normalizeIsbn(hint.isbn)) return false;
+  return collected.some((book) => isSameIsbn(book.isbn13, hint.isbn));
+}
+
 /**
  * Whether a row still needs the fallback provider.
  *
  * Open Library is the only one that reliably reports publisher, which is what
  * makes a generic-titled travel guide resolvable — but throttleOpenLibrary() is
  * a process-wide 1 req/sec queue, so it stays off the common path.
+ *
+ * An ISBN already names one edition, so a candidate carrying it settles the row:
+ * there is nothing for the publisher to disambiguate, and no reason to spend a
+ * throttle slot confirming what the ISBN said. Without this, a Goodreads export
+ * — every row an ISBN *and* a publisher, which Google routinely omits from
+ * search results — serialises its whole length through the 1 req/sec queue.
  */
 function needsFallback(collected: SearchResult[], hint: ImportRowHint): boolean {
   if (collected.length === 0) return true;
+  if (pinnedByIsbn(collected, hint)) return false;
   return Boolean(hint.publisher) && !collected.some((b) => confirmsPublisher(b, hint));
 }
 
 /** Turns whatever the providers returned into the row the client sees. */
-async function assembleRow(
+function assembleRow(
   hint: ImportRowHint,
   collected: SearchResult[],
-  userId: number | null,
-): Promise<ResolvedImportRow> {
+  catalogMatch: CatalogMatch | null,
+): ResolvedImportRow {
   const byIdentity = new Map<string, SearchResult>();
   for (const book of collected) {
     if (!byIdentity.has(identityOf(book))) byIdentity.set(identityOf(book), book);
@@ -159,16 +172,20 @@ async function assembleRow(
     .slice(0, CANDIDATES_PER_ROW)
     .map(({ book }) => withMatchedPublisher(book, hint));
 
-  const matchedBookId = await findCatalogMatch(hint, userId);
-
   return {
     title: hint.title,
     author: hint.author ?? null,
     publisher: hint.publisher ?? null,
     isbn: normalizeIsbn(hint.isbn),
-    ...(matchedBookId !== null && { matchedBookId }),
+    ...(catalogMatch !== null && { matchedBookId: catalogMatch.bookId }),
     candidates,
   };
+}
+
+interface CatalogMatch {
+  bookId: number;
+  /** Whether the caller already holds this book, which is what lets the row skip the providers. */
+  inLibrary: boolean;
 }
 
 /**
@@ -180,7 +197,10 @@ async function assembleRow(
  * ranks properly and returns the publisher, so the same scoring used for
  * provider candidates applies here too.
  */
-async function findCatalogMatch(hint: ImportRowHint, userId: number | null): Promise<number | null> {
+async function findCatalogMatch(
+  hint: ImportRowHint,
+  userId: number | null,
+): Promise<CatalogMatch | null> {
   const { books } = await searchCatalog({ q: hint.title, limit: CANDIDATES_PER_ROW }, userId);
   if (books.length === 0) return null;
 
@@ -199,7 +219,9 @@ async function findCatalogMatch(hint: ImportRowHint, userId: number | null): Pro
     }))
     .sort((a, b) => b.score - a.score)[0];
 
-  return best.score >= CATALOG_MATCH_THRESHOLD ? Number(best.row.book_id) : null;
+  if (best.score < CATALOG_MATCH_THRESHOLD) return null;
+  // fn_search_books already annotates each row with the caller's library status.
+  return { bookId: Number(best.row.book_id), inLibrary: Boolean(best.row.in_library) };
 }
 
 /**
@@ -216,6 +238,13 @@ async function findCatalogMatch(hint: ImportRowHint, userId: number | null): Pro
  *
  * Only failures are retried. A provider that answers "no results" is believed,
  * so an obscure title costs one round trip, not three.
+ *
+ * The catalog lookup runs first, ahead of any provider call. A row the caller
+ * already owns is answered outright: the client renders it inert and never
+ * reads its candidates, so looking any up is work spent on something nobody
+ * will see. On the case this exists to serve — re-importing an export against a
+ * library that already holds most of it — that skips the providers for the
+ * bulk of the file.
  */
 export async function resolveImportRows(
   rows: ImportRowHint[],
@@ -224,7 +253,14 @@ export async function resolveImportRows(
   const collected: SearchResult[][] = rows.map(() => []);
   const attempts = primaryAttempts();
 
-  let pending = rows.map((hint, index) => ({ hint, index }));
+  const catalogMatches = await mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, (hint) =>
+    findCatalogMatch(hint, userId),
+  );
+  const alreadyOwned = (index: number) => catalogMatches[index]?.inLibrary === true;
+
+  let pending = rows
+    .map((hint, index) => ({ hint, index }))
+    .filter(({ index }) => !alreadyOwned(index));
 
   for (let round = 1; round <= attempts && pending.length > 0; round++) {
     // No point retrying into a closed door; fall through to the secondary.
@@ -258,14 +294,14 @@ export async function resolveImportRows(
   }
 
   // Rows that failed every round fall through with nothing from the primary,
-  // which sends them to the fallback below like any other empty result.
+  // which sends them to the fallback below like any other empty result — but an
+  // owned row has no empty result to explain, it was never looked up at all.
   await mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, async (hint, index) => {
+    if (alreadyOwned(index)) return;
     if (needsFallback(collected[index], hint)) {
       collected[index] = [...collected[index], ...(await fallbackLookup(hint))];
     }
   });
 
-  return mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, (hint, index) =>
-    assembleRow(hint, collected[index], userId),
-  );
+  return rows.map((hint, index) => assembleRow(hint, collected[index], catalogMatches[index]));
 }
