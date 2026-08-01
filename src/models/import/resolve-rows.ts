@@ -12,6 +12,8 @@ import {
 } from '../upload/matches-detected-book';
 import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
 import { searchBooks as searchCatalog } from '../search/search-books';
+import { formatCatalogBook } from '../../lib/books/format-catalog-book';
+import type { CatalogBookSummary } from '../../lib/books/format-catalog-book';
 
 export interface ImportRowHint {
   title: string;
@@ -27,6 +29,13 @@ export interface ResolvedImportRow {
   isbn: string | null;
   /** Set when the row already exists in the catalog. */
   matchedBookId?: number;
+  /**
+   * The matched catalog book, ready to render. Sent alongside the id because the
+   * search that found it already returned the cover, slug and author, and a
+   * client that had only the id would have to ask for them back — one extra
+   * request per batch for data the response was in a position to carry.
+   */
+  matchedBook?: CatalogBookSummary;
   /** Ranked best-first, so the client can preselect [0] and offer the rest. */
   candidates: SearchResult[];
 }
@@ -227,7 +236,10 @@ function assembleRow(
     author: hint.author ?? null,
     publisher: hint.publisher ?? null,
     isbn: normalizeIsbn(hint.isbn),
-    ...(catalogMatch !== null && { matchedBookId: catalogMatch.bookId }),
+    ...(catalogMatch !== null && {
+      matchedBookId: catalogMatch.bookId,
+      matchedBook: catalogMatch.book,
+    }),
     candidates,
   };
 }
@@ -236,6 +248,8 @@ interface CatalogMatch {
   bookId: number;
   /** Whether the caller already holds this book, which is what lets the row skip the providers. */
   inLibrary: boolean;
+  /** The row fn_search_books already returned, so the client needn't fetch it back. */
+  book: CatalogBookSummary;
 }
 
 /**
@@ -270,8 +284,13 @@ async function findCatalogMatch(
     .sort((a, b) => b.score - a.score)[0];
 
   if (best.score < CATALOG_MATCH_THRESHOLD) return null;
-  // fn_search_books already annotates each row with the caller's library status.
-  return { bookId: Number(best.row.book_id), inLibrary: Boolean(best.row.in_library) };
+  // fn_search_books already annotates each row with the caller's library status,
+  // and returns the cover, slug and author the client needs to render it.
+  return {
+    bookId: Number(best.row.book_id),
+    inLibrary: Boolean(best.row.in_library),
+    book: formatCatalogBook(best.row),
+  };
 }
 
 /**

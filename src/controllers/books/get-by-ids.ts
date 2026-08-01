@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getBooksByIds as getBooksByIdsModel } from '../../models/books/get-by-ids';
 import { getBooksByGoogleIds as getBooksByGoogleIdsModel } from '../../models/books/get-by-google-ids';
+import { formatCatalogBook } from '../../lib/books/format-catalog-book';
 
 const MAX_IDS = 40;
 
@@ -54,7 +55,7 @@ export async function getByIds(req: Request, res: Response) {
       }
 
       const rows = await getBooksByGoogleIdsModel(googleBooksIds);
-      res.json({ books: rows.map(formatRow) });
+      res.json({ books: rows.map(formatCatalogBook) });
       return;
     }
 
@@ -74,24 +75,9 @@ export async function getByIds(req: Request, res: Response) {
     const capped = [...new Set(ids)].slice(0, MAX_IDS);
     const rows = await getBooksByIdsModel(capped);
 
-    res.json({ books: rows.map(formatRow) });
+    res.json({ books: rows.map(formatCatalogBook) });
   } catch (error) {
     console.error('Error fetching books by ids:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-}
-
-function formatRow(row: any) {
-  return {
-    id: row.book_id,
-    slug: row.slug,
-    title: row.title,
-    authorName: row.author_name,
-    authorSlug: row.author_slug,
-    year: row.year,
-    rating: row.rating,
-    coverUrl: row.cover_url,
-    hue: row.hue,
-    ...(row.google_books_id !== undefined ? { googleBooksId: row.google_books_id } : {}),
-  };
 }

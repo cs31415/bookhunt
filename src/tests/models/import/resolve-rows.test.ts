@@ -559,6 +559,50 @@ describe('resolveImportRows', () => {
       expect(row.matchedBookId).toBe(42);
     });
 
+    // The catalog search already returned everything needed to render the book,
+    // so a client holding only the id would have to ask for it straight back.
+    it('returns the matched book ready to render', async () => {
+      mockSearchCatalog.mockResolvedValue({
+        books: [
+          {
+            book_id: 42,
+            slug: 'dune',
+            title: 'Dune',
+            author_name: 'Frank Herbert',
+            author_slug: 'frank-herbert',
+            year: 1965,
+            rating: '4.5',
+            cover_url: 'https://example.test/dune.jpg',
+            hue: '#6f7a55',
+            publisher: 'Ace',
+          },
+        ],
+      });
+
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
+
+      expect(row.matchedBook).toEqual({
+        id: 42,
+        slug: 'dune',
+        title: 'Dune',
+        authorName: 'Frank Herbert',
+        authorSlug: 'frank-herbert',
+        year: 1965,
+        rating: '4.5',
+        coverUrl: 'https://example.test/dune.jpg',
+        hue: '#6f7a55',
+      });
+    });
+
+    it('omits the matched book when nothing in the catalog matches', async () => {
+      mockSearchCatalog.mockResolvedValue({ books: [] });
+
+      const [row] = await resolveImportRows([{ title: 'Dune' }], 1);
+
+      expect(row.matchedBook).toBeUndefined();
+      expect(row.matchedBookId).toBeUndefined();
+    });
+
     it('leaves matchedBookId unset when the best catalog row is a weak match', async () => {
       mockSearchCatalog.mockResolvedValue({
         books: [{ book_id: 7, title: 'A History of Everything Else', author_name: 'Someone' }],
