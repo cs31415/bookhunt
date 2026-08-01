@@ -14,6 +14,23 @@ export async function getUserLibrary(userId: number, { limit, offset }: GetUserL
   return result.rows;
 }
 
+export interface SearchUserLibraryParams {
+  terms: string[] | null;
+  phrase: string | null;
+  status: string | null;
+  sort: string;
+  limit: number;
+  offset: number;
+}
+
+export async function searchUserLibrary(userId: number, params: SearchUserLibraryParams) {
+  const result = await pool.query(
+    'SELECT * FROM fn_search_library($1, $2, $3, $4, $5, $6, $7)',
+    [userId, params.terms, params.phrase, params.status, params.sort, params.limit, params.offset],
+  );
+  return result.rows;
+}
+
 export async function getLibraryStats(userId: number) {
   const result = await pool.query('SELECT * FROM fn_library_stats($1)', [userId]);
   return result.rows[0].fn_library_stats;
@@ -39,7 +56,6 @@ export interface UpsertBookParams {
 }
 
 export async function upsertBook(params: UpsertBookParams) {
-  const sql = 'SELECT * FROM fn_upsert_book($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)';
   const args = [
     params.googleBooksId ?? null,
     params.slug,
@@ -58,18 +74,18 @@ export async function upsertBook(params: UpsertBookParams) {
     params.openLibraryId ?? null,
     params.source ?? 'google_books',
   ];
-  console.log(`[sql] ${sql}`);
-  console.log(`[sql] args:`, JSON.stringify(args));
-  const result = await pool.query(sql, args);
+  const result = await pool.query(
+    'SELECT * FROM fn_upsert_book($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)',
+    args,
+  );
   return result.rows[0];
 }
 
 export async function addToLibrary(userId: number, bookId: number, status: string) {
-  const sql = 'SELECT * FROM fn_add_to_library($1, $2, $3)';
-  const args = [userId, bookId, status];
-  console.log(`[sql] ${sql}`);
-  console.log(`[sql] args:`, JSON.stringify(args));
-  const result = await pool.query(sql, args);
+  const result = await pool.query(
+    'SELECT * FROM fn_add_to_library($1, $2, $3)',
+    [userId, bookId, status],
+  );
   return result.rows[0];
 }
 
