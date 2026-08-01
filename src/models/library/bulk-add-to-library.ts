@@ -1,5 +1,7 @@
 import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
 import { resolveEditionFields } from './resolve-edition-fields';
+import { categorizeAddedBooks } from './categorize-added-books';
+import { BookToCategorize } from '../ai/categorize-books';
 import { BooksProvider } from '../../lib/books/books-types';
 
 interface BulkAddParams {
@@ -41,6 +43,7 @@ export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
 
   const entries: unknown[] = [];
   const errors: BulkAddError[] = [];
+  const added: BookToCategorize[] = [];
 
   for (let i = 0; i < deduped.length; i++) {
     const params = deduped[i];
@@ -52,6 +55,7 @@ export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
       const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
       console.log(`[bulk-add model] [${i + 1}/${deduped.length}] done`);
       entries.push(entry);
+      added.push({ id: book.id, title: params.title, authorName: params.authorName });
     } catch (err) {
       console.error(`[bulk-add model] [${i + 1}/${deduped.length}] error:`, err);
       errors.push({
@@ -62,6 +66,10 @@ export async function bulkAddToLibrary(userId: number, books: BulkAddParams[]) {
       });
     }
   }
+
+  // One call for the whole request, after the upserts: the model needs to see
+  // the books together to group them, and it cannot do that one at a time.
+  await categorizeAddedBooks(added);
 
   return { entries, errors };
 }

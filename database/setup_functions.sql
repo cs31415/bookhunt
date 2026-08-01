@@ -22,6 +22,7 @@ BEGIN;
 \ir functions/fn_get_related_books.sql
 \ir functions/fn_update_book_ai_metadata.sql
 \ir functions/fn_tag_vocabulary.sql
+\ir functions/fn_append_book_subjects.sql
 
 -- library
 \ir functions/fn_get_user_library.sql

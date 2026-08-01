@@ -61,6 +61,13 @@ export async function getTagVocabulary(kind: TagKind, limit: number): Promise<st
   return result.rows.map((row) => row.tag as string);
 }
 
+// Adds to books.subjects rather than replacing it -- see fn_append_book_subjects
+// for why the provider's tags have to survive.
+export async function appendBookSubjects(bookId: number, subjects: string[]) {
+  if (subjects.length === 0) return;
+  await pool.query('SELECT fn_append_book_subjects($1, $2)', [bookId, subjects]);
+}
+
 export async function updateBookAiMetadata(bookId: number, genres: string[], themes: string[], moods: string[]) {
   await pool.query('SELECT fn_update_book_ai_metadata($1, $2, $3, $4)', [bookId, genres, themes, moods]);
 }
