@@ -1,5 +1,6 @@
 import { loggedFetch } from '../../../lib/books/logged-fetch';
 import { httpAttempts } from '../../../lib/books/books-retry-config';
+import { runWithCallStats } from '../../../lib/stats/run-with-call-stats';
 
 // Derived, so tuning the default doesn't break tests describing the behaviour.
 const ATTEMPTS = httpAttempts();
@@ -98,5 +99,91 @@ describe('loggedFetch', () => {
     await loggedFetch('google_books', 'https://example.test/');
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('retrying'));
+  });
+
+  describe('call stats', () => {
+    // Per request rather than per lookup: a retry spends another slice of the
+    // provider's quota, so counting it once would understate what a batch cost.
+    it('counts every attempt, retries included', async () => {
+      mockFetch((attempt) =>
+        Promise.resolve(attempt === 1 ? { ok: false, status: 503 } : { ok: true, status: 200 }),
+      );
+
+      const { stats, result } = runWithCallStats(() =>
+        loggedFetch('google_books', 'https://example.test/'),
+      );
+      await result;
+
+      expect(stats.providerCalls.get('google_books')).toBe(2);
+    });
+
+    it('attributes the count to the provider that was called', async () => {
+      mockFetch(() => Promise.resolve({ ok: true, status: 200 }));
+
+      const { stats, result } = runWithCallStats(() =>
+        loggedFetch('open_library', 'https://example.test/'),
+      );
+      await result;
+
+      expect(stats.providerCalls.get('open_library')).toBe(1);
+      expect(stats.providerCalls.get('google_books')).toBeUndefined();
+    });
+
+    describe('per-call logging', () => {
+      const original = process.env.LOG_BOOKS_PROVIDER_QUERIES;
+
+      beforeEach(() => {
+        process.env.LOG_BOOKS_PROVIDER_QUERIES = 'true';
+      });
+
+      afterEach(() => {
+        if (original === undefined) delete process.env.LOG_BOOKS_PROVIDER_QUERIES;
+        else process.env.LOG_BOOKS_PROVIDER_QUERIES = original;
+      });
+
+      it('is suppressed inside a scope, which reports its own totals', async () => {
+        mockFetch(() => Promise.resolve({ ok: true, status: 200 }));
+
+        const { stats, result } = runWithCallStats(() =>
+          loggedFetch('google_books', 'https://example.test/'),
+        );
+        await result;
+
+        expect(console.log).not.toHaveBeenCalled();
+        expect(stats.providerCalls.get('google_books')).toBe(1);
+      });
+
+      it('still logs outside a scope', async () => {
+        mockFetch(() => Promise.resolve({ ok: true, status: 200 }));
+
+        await loggedFetch('google_books', 'https://example.test/');
+
+        expect(console.log).toHaveBeenCalledWith(expect.stringContaining('[books:google_books]'));
+      });
+
+      it('keeps warning about retries, which report a provider misbehaving', async () => {
+        mockFetch((attempt) =>
+          Promise.resolve(attempt === 1 ? { ok: false, status: 503 } : { ok: true, status: 200 }),
+        );
+
+        const { result } = runWithCallStats(() =>
+          loggedFetch('google_books', 'https://example.test/'),
+        );
+        await result;
+
+        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('retrying'));
+      });
+    });
+
+    it('counts the attempts a failed lookup spent before throwing', async () => {
+      mockFetch(() => Promise.reject(new Error('ECONNRESET')));
+
+      const { stats, result } = runWithCallStats(() =>
+        loggedFetch('google_books', 'https://example.test/'),
+      );
+      await expect(result).rejects.toThrow('ECONNRESET');
+
+      expect(stats.providerCalls.get('google_books')).toBe(ATTEMPTS);
+    });
   });
 });

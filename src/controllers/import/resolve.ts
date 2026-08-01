@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { resolveImportRows } from '../../models/import/resolve-rows';
 import type { ImportRowHint } from '../../models/import/resolve-rows';
+import { runWithCallStats } from '../../lib/stats/run-with-call-stats';
+import { formatCallStats } from '../../lib/stats/format-call-stats';
 
 /** Rows per request. Each fans out to up to two provider calls, so this bounds the work. */
 export const MAX_IMPORT_ROWS = 40;
@@ -107,7 +109,16 @@ export async function resolve(req: Request, res: Response) {
       isbn: text(row.isbn),
     }));
 
-    res.json({ rows: await resolveImportRows(hints, req.user!.id) });
+    // How much a batch costs externally depends on how many rows the caller
+    // already owns, carry an ISBN, or need the fallback provider — none of which
+    // is visible from the request or the response. The summary is logged in a
+    // finally so a batch that fails halfway still reports what it spent.
+    const { stats, result } = runWithCallStats(() => resolveImportRows(hints, req.user!.id));
+    try {
+      res.json({ rows: await result });
+    } finally {
+      console.log(formatCallStats('import', stats, hints.length));
+    }
   } catch (error) {
     console.error('Error resolving import rows:', error);
     res.status(500).json({ error: 'Internal server error' });

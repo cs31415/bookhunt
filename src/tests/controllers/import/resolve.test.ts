@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { resolve, MAX_IMPORT_ROWS } from '../../../controllers/import/resolve';
 import * as resolveModel from '../../../models/import/resolve-rows';
+import { recordProviderCall } from '../../../lib/stats/record-provider-call';
+import { recordDbCall } from '../../../lib/stats/record-db-call';
 
 jest.mock('../../../models/import/resolve-rows');
 
@@ -112,5 +114,53 @@ describe('import resolve controller', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+  });
+
+  // What a batch costs externally depends on how many rows are already owned,
+  // carry an ISBN, or need the fallback — none of it visible in the response.
+  describe('call stats logging', () => {
+    it('logs one summary line per batch', async () => {
+      await resolve(makeReq({ rows: [{ title: 'Dune' }, { title: 'Emma' }] }), makeRes());
+
+      expect(console.log).toHaveBeenCalledWith(
+        '[import] rows=2 google_books=0 open_library=0 db=0 calls, 0 rows []',
+      );
+    });
+
+    it('counts the calls the model made', async () => {
+      mockResolveRows.mockImplementation(async () => {
+        recordProviderCall('google_books');
+        recordProviderCall('open_library');
+        recordDbCall(5);
+        return [];
+      });
+
+      await resolve(makeReq({ rows: [{ title: 'Dune' }] }), makeRes());
+
+      expect(console.log).toHaveBeenCalledWith(
+        '[import] rows=1 google_books=1 open_library=1 db=1 calls, 5 rows [5]',
+      );
+    });
+
+    it('still reports what a failed batch spent', async () => {
+      mockResolveRows.mockImplementation(async () => {
+        recordProviderCall('google_books');
+        throw new Error('db down');
+      });
+      const res = makeRes();
+
+      await resolve(makeReq({ rows: [{ title: 'Dune' }] }), res);
+
+      expect(console.log).toHaveBeenCalledWith(
+        '[import] rows=1 google_books=1 open_library=0 db=0 calls, 0 rows []',
+      );
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
+
+    it('does not log a batch rejected before any work was done', async () => {
+      await resolve(makeReq({ rows: [] }), makeRes());
+
+      expect(console.log).not.toHaveBeenCalled();
+    });
   });
 });

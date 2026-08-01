@@ -1,6 +1,8 @@
 import { BooksProvider } from './books-types';
 import { isBooksProviderLoggingEnabled } from './is-books-provider-logging-enabled';
 import { httpAttempts, httpBackoffMs } from './books-retry-config';
+import { recordProviderCall } from '../stats/record-provider-call';
+import { isCallStatsScopeActive } from '../stats/call-stats-store';
 
 // Open Library asks callers to identify themselves and throttles anonymous
 // traffic more aggressively; sending nothing risks being lumped in with bots.
@@ -26,7 +28,10 @@ function delay(ms: number): Promise<void> {
  * — which is exactly how a 503 came to look like "this book does not exist".
  */
 export async function loggedFetch(provider: BooksProvider, url: string): Promise<globalThis.Response> {
-  const logging = isBooksProviderLoggingEnabled();
+  // Suppressed inside a stats scope: that request reports its own totals, and a
+  // line per lookup would bury them. Retry warnings below are unaffected —
+  // those report a provider misbehaving, not routine traffic.
+  const logging = isBooksProviderLoggingEnabled() && !isCallStatsScopeActive();
   const maxAttempts = httpAttempts();
   const backoff = httpBackoffMs();
   const start = Date.now();
@@ -34,6 +39,9 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      // Counted per attempt rather than per lookup: a retry is another request
+      // against the provider's quota, and hiding it would understate the cost.
+      recordProviderCall(provider);
       const response = await fetch(url, { headers: HEADERS });
 
       if (RETRYABLE.has(response.status) && attempt < maxAttempts) {
