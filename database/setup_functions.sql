@@ -28,6 +28,7 @@ BEGIN;
 \ir functions/fn_update_library_entry.sql
 \ir functions/fn_remove_from_library.sql
 \ir functions/fn_library_stats.sql
+\ir functions/fn_match_library_entries.sql
 \ir functions/fn_add_user_related.sql
 \ir functions/fn_remove_user_related.sql
 

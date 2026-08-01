@@ -56,6 +56,23 @@ export async function updateBookAiMetadata(bookId: number, genres: string[], the
   await pool.query('SELECT fn_update_book_ai_metadata($1, $2, $3, $4)', [bookId, genres, themes, moods]);
 }
 
+export interface MatchLibraryEntriesByTitleParams {
+  userId: number;
+  terms: string[];
+  phrases: string[];
+  limit: number;
+}
+
+export async function matchLibraryEntriesByTitle(params: MatchLibraryEntriesByTitleParams) {
+  const result = await pool.query('SELECT * FROM fn_match_library_entries($1, $2, $3, $4)', [
+    params.userId,
+    params.terms,
+    params.phrases,
+    params.limit,
+  ]);
+  return result.rows;
+}
+
 export async function matchLibraryEntries(userId: number, googleIds: string[], isbns: string[]) {
   const result = await pool.query(
     `SELECT b.google_books_id, b.isbn13, le.status
