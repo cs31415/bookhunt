@@ -1,6 +1,7 @@
 import { BooksProvider } from './books-types';
 import { isBooksProviderLoggingEnabled } from './is-books-provider-logging-enabled';
 import { httpAttempts, httpBackoffMs } from './books-retry-config';
+import { recordProviderCall } from '../stats/record-provider-call';
 
 // Open Library asks callers to identify themselves and throttles anonymous
 // traffic more aggressively; sending nothing risks being lumped in with bots.
@@ -34,6 +35,9 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      // Counted per attempt rather than per lookup: a retry is another request
+      // against the provider's quota, and hiding it would understate the cost.
+      recordProviderCall(provider);
       const response = await fetch(url, { headers: HEADERS });
 
       if (RETRYABLE.has(response.status) && attempt < maxAttempts) {
