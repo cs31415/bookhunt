@@ -16,16 +16,20 @@ export async function getLibrary(userId: number, query: GetLibraryQuery = {}) {
   );
   const offset = (page - 1) * limit;
 
+  // Stats describe the whole library rather than the page, so a caller walking
+  // every page needs them once — and asking per page meant an identical
+  // fn_library_stats query per request, five of them on a 300-book library.
+  // `total` is on every page, so pagination never depends on having them.
   const [rows, stats] = await Promise.all([
     getUserLibrary(userId, { limit, offset }),
-    getLibraryStats(userId),
+    page === 1 ? getLibraryStats(userId) : Promise.resolve(undefined),
   ]);
 
   const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
 
   return {
     entries: rows.map(({ total_count, ...entry }: any) => entry),
-    stats,
+    ...(stats !== undefined && { stats }),
     total,
     page,
     pageSize: limit,

@@ -25,7 +25,12 @@ import { getLibrary as getLibraryModel } from '../../models/library/get-library'
  *               type: object
  *               properties:
  *                 entries: { type: array, items: { type: object } }
- *                 stats: { type: object }
+ *                 stats:
+ *                   type: object
+ *                   description: >
+ *                     Whole-library counts, returned on the first page only — they do not vary by
+ *                     page, and a client walking every page would otherwise recompute them each time.
+ *                     Use `total` for pagination; it is present on every page.
  *                 total: { type: integer }
  *                 page: { type: integer }
  *                 pageSize: { type: integer }
