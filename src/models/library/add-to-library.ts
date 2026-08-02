@@ -1,6 +1,5 @@
 import { upsertBook, addToLibrary as addToLibraryData } from '../../data/library-data';
 import { resolveEditionFields } from './resolve-edition-fields';
-import { categorizeAddedBooks } from './categorize-added-books';
 import { BooksProvider } from '../../lib/books/books-types';
 
 interface AddToLibraryParams {
@@ -28,9 +27,11 @@ export async function addToLibrary(userId: number, params: AddToLibraryParams) {
   const book = await upsertBook({ ...params, ...resolved });
   const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
 
-  // A batch of one still gets the catalog vocabulary, which is most of the
-  // value here -- it is the grouping that needs several books at once.
-  await categorizeAddedBooks([{ id: book.id, title: params.title, authorName: params.authorName }]);
-
+  // Deliberately not categorized here. This is the path the CSV import and the
+  // photo scan use, one request per row and six at a time, so tagging here made
+  // a 20-book import twenty LLM calls instead of one and blocked every add on a
+  // round trip -- while giving the model no way to group, which was the point.
+  // The client sends the ids to POST /ai/categorize once the import is done
+  // (LOS-197).
   return { entry, book };
 }
