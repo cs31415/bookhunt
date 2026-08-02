@@ -28,6 +28,13 @@ export const MAX_IMPORT_ROWS = 40;
  *       candidate — Google Books frequently omits publisher from search results even for the
  *       correct book.
  *
+ *       A row whose candidates none of them answer its title comes back marked `tentative`.
+ *       These are rows nothing was catalogued under the title given, where the provider
+ *       offered a book by the same author instead: sometimes a retitled edition ("Half Lion"
+ *       is shelved as "The Man Who Remade India"), sometimes an unrelated book by that author.
+ *       Nothing in the response separates the two, so a tentative row must be shown as a
+ *       suggestion and left unselected until the reader confirms it.
+ *
  *       `matchedBookId` is set when the row already exists in the local catalog, with `matchedBook`
  *       carrying that book ready to render — the catalog search already returned its cover, slug and
  *       author, so no follow-up `GET /books` is needed. When the book is also already in the caller's
@@ -90,6 +97,13 @@ export const MAX_IMPORT_ROWS = 40;
  *                         type: array
  *                         description: Ranked best-first, at most 5
  *                         items: { type: object }
+ *                       tentative:
+ *                         type: boolean
+ *                         description: |
+ *                           Present and true when no candidate answers the row's title. Such a
+ *                           list is a suggestion, not an identification, and must not be
+ *                           preselected.
+ *                         example: true
  *       400:
  *         description: rows missing, empty, exceeding 40 items, or an entry without a title
  *       401:

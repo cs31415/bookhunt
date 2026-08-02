@@ -133,6 +133,25 @@ export function scoreCandidate(candidate: CandidateFields, hint: MatchHint): num
 }
 
 /**
+ * Whether a candidate's title names the book the hint asked for, ignoring the
+ * author entirely.
+ *
+ * The question this answers is narrower than "is this the right book": it is
+ * whether the provider found something on the title it was given, or answered
+ * with a different book by the same author. Google does the latter readily —
+ * `Celebrations! inauthor:Barnabas Kindersley` returns exactly one volume, and
+ * it is "Niños como yo" — and one confident wrong answer is worse than none,
+ * because it is what the client preselects (LOS-199).
+ *
+ * The author is left out on purpose. It has already done its work as a query
+ * qualifier, and requiring it again here would reject the correct edition of
+ * any book whose author string the catalogue spells differently.
+ */
+export function titleAgrees(candidate: CandidateFields, hint: MatchHint): boolean {
+  return titleOverlap(candidate.title, hint.title) >= TITLE_CONFIRM_OVERLAP;
+}
+
+/**
  * Whether a candidate agrees with the hint on both title and author — enough to
  * say it is the same book, not merely a plausible ranking.
  *
