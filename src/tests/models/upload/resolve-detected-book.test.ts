@@ -19,22 +19,22 @@ describe('resolveDetectedBook', () => {
     jest.clearAllMocks();
   });
 
-  it('queries with intitle/inauthor first and returns a matching result', async () => {
+  it('queries a free-text title with inauthor first and returns a matching result', async () => {
     const kagan = result('National Geographic Concise History of the World', ['Neil Kagan']);
     mockSearchBooks.mockResolvedValueOnce([kagan]);
     const resolved = await resolveDetectedBook('Concise History of the World', 'Kagan');
     expect(mockSearchBooks).toHaveBeenCalledTimes(1);
-    expect(mockSearchBooks).toHaveBeenCalledWith(
-      'intitle:"Concise History of the World" inauthor:"Kagan"',
-      3,
-    );
+    expect(mockSearchBooks).toHaveBeenCalledWith('Concise History of the World inauthor:Kagan', 3);
     expect(resolved).toBe(kagan);
   });
 
-  it('omits inauthor when the detected author is null', async () => {
+  // The qualified pass would repeat the free-text query verbatim, so it is
+  // skipped rather than spent.
+  it('goes straight to free text when the detected author is null', async () => {
     mockSearchBooks.mockResolvedValueOnce([result('Elements', ['Theodore Gray'])]);
     await resolveDetectedBook('Elements', null);
-    expect(mockSearchBooks).toHaveBeenCalledWith('intitle:"Elements"', 3);
+    expect(mockSearchBooks).toHaveBeenCalledTimes(1);
+    expect(mockSearchBooks).toHaveBeenCalledWith('Elements', 5);
   });
 
   it('falls back to free text when the fielded query returns nothing', async () => {
@@ -65,15 +65,17 @@ describe('resolveDetectedBook', () => {
 
   it('returns null when both queries return nothing', async () => {
     mockSearchBooks.mockResolvedValue([]);
-    expect(await resolveDetectedBook('Obscure Book', null)).toBeNull();
+    expect(await resolveDetectedBook('Obscure Book', 'Nobody')).toBeNull();
   });
 
-  it('strips embedded double quotes from the fielded query', async () => {
+  // Quotes would reimpose the exact-phrase match, and Google reads a colon as
+  // the start of a qualifier -- "Dune: Part Two" would search for "Dune".
+  it('strips quotes and colons from the qualified query', async () => {
     mockSearchBooks.mockResolvedValue([]);
-    await resolveDetectedBook('The "Real" Story', 'Jane "JJ" Doe');
+    await resolveDetectedBook('The "Real" Story: A Memoir', 'Jane "JJ" Doe');
     expect(mockSearchBooks).toHaveBeenNthCalledWith(
       1,
-      'intitle:"The Real Story" inauthor:"Jane JJ Doe"',
+      'The Real Story A Memoir inauthor:Jane JJ Doe',
       3,
     );
   });

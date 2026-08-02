@@ -81,7 +81,7 @@ describe('resolveImportRows', () => {
       await resolveImportRows([{ title: 'Dune', isbn: '9780441013593' }], 1);
 
       expect(googleSearch).toHaveBeenNthCalledWith(1, 'isbn:9780441013593', 5);
-      expect(googleSearch).toHaveBeenNthCalledWith(2, 'intitle:"Dune"', 5);
+      expect(googleSearch).toHaveBeenNthCalledWith(2, 'Dune', 5);
       expect(openLibrarySearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
     });
 
@@ -92,7 +92,7 @@ describe('resolveImportRows', () => {
       await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert', isbn: '9780441013593' }], 1);
 
       expect(googleSearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
-      expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune" inauthor:"Frank Herbert"', 5);
+      expect(googleSearch).toHaveBeenCalledWith('Dune inauthor:Frank Herbert', 5);
     });
 
     it('ignores an unparseable ISBN and searches normally', async () => {
@@ -100,7 +100,7 @@ describe('resolveImportRows', () => {
 
       await resolveImportRows([{ title: 'Dune', isbn: 'n/a' }], 1);
 
-      expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune"', 5);
+      expect(googleSearch).toHaveBeenCalledWith('Dune', 5);
     });
 
     it('echoes the normalised ISBN back on the row', async () => {
@@ -159,14 +159,14 @@ describe('resolveImportRows', () => {
   });
 
   // Google matches inpublisher against one publisher string per volume, so a
-  // file naming a different-but-correct one excludes the book outright:
-  // intitle:"Tools of Titans" inauthor:"Tim Ferriss" inpublisher:"HMH" returns
-  // nothing, while the same query without the qualifier returns five. An author
-  // narrows the search on its own, and scoreCandidate ranks by publisher after.
+  // file naming a different-but-correct one excludes the book outright: adding
+  // inpublisher:"HMH" to a Tools of Titans query empties it, while the same
+  // query without the qualifier returns five. An author narrows the search on
+  // its own, and scoreCandidate ranks by publisher after.
   it('narrows by author and leaves the publisher to local ranking', async () => {
     await resolveImportRows([{ title: 'Hong Kong', author: 'Reiber', publisher: "Frommer's" }], 1);
 
-    expect(googleSearch).toHaveBeenCalledWith('intitle:"Hong Kong" inauthor:"Reiber"', 5);
+    expect(googleSearch).toHaveBeenCalledWith('Hong Kong inauthor:Reiber', 5);
   });
 
   // Without an author it is the only thing narrowing a generic title, which is
@@ -174,16 +174,13 @@ describe('resolveImportRows', () => {
   it('narrows by publisher when the row has no author', async () => {
     await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], 1);
 
-    expect(googleSearch).toHaveBeenCalledWith(
-      'intitle:"Hong Kong" inpublisher:"Frommer\'s"',
-      5,
-    );
+    expect(googleSearch).toHaveBeenCalledWith('Hong Kong inpublisher:"Frommer\'s"', 5);
   });
 
   it('omits qualifiers for hints that were not supplied', async () => {
     await resolveImportRows([{ title: 'Dune' }], 1);
 
-    expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune"', 5);
+    expect(googleSearch).toHaveBeenCalledWith('Dune', 5);
   });
 
   it('does not consult Open Library when Google confirms the publisher', async () => {

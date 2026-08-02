@@ -11,6 +11,7 @@ import {
   scoreCandidate,
 } from '../upload/matches-detected-book';
 import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
+import { bareQueryTerm } from '../../lib/books/bare-query-term';
 import { findCatalogMatches } from './find-catalog-matches';
 import type { CatalogMatch } from './find-catalog-matches';
 import type { CatalogBookSummary } from '../../lib/books/format-catalog-book';
@@ -55,31 +56,38 @@ function quoted(value: string): string {
 }
 
 /**
- * Google Books honours fielded qualifiers precisely — verified against the live
- * API, where `intitle:"Hong Kong" inpublisher:"Frommer's"` returns exactly the
- * right book. Open Library accepts the same shape but does not strictly AND
- * terms, so its results need the same re-ranking everything else gets.
+ * The title goes in as free text and the author as a bare `inauthor:`, because a
+ * quoted `intitle:` demands the phrase match one title string exactly, and a CSV
+ * row rarely holds that string (LOS-199). Verified against the live API:
  *
- * That precision cuts both ways, which is why `inpublisher` is added only when
- * there is no author. Google matches it against one publisher string per volume,
- * and a file naming a different-but-correct one excludes the book outright:
+ *   intitle:"half lion" inauthor:"vinay sitapati"  -> 0
+ *   half lion inauthor:vinay sitapati              -> 1, the right book
  *
- *   intitle:"Tools of Titans" inauthor:"Tim Ferriss" inpublisher:"HMH"  -> 0
- *   intitle:"Tools of Titans" inauthor:"Tim Ferriss"                    -> 5
+ * "Half Lion" ships as "The Man Who Remade India" outside India, so the exact
+ * phrase matches nothing while free text still finds it. A middle initial the
+ * catalogue omits, or an author column holding two names joined by "and", does
+ * the same — each takes the count to zero rather than ranking the book lower.
  *
- * "HMH" is Houghton Mifflin Harcourt, and the book is theirs. Six of twenty
- * authored rows sampled from a real import came back empty for exactly this
- * reason, leaving them to the throttled fallback or to nothing at all.
+ * `inpublisher` keeps its quotes. Unquoted it stops narrowing anything at all:
+ * `hong kong inpublisher:frommer` returns Whole World Handbook and a guide to
+ * San Francisco.
  *
- * An author narrows the search perfectly well on its own, and scoreCandidate
- * then ranks the results by publisher far more forgivingly — by token, so
- * "Frommer's" and "Frommers" agree. Without an author the qualifier is the only
- * thing narrowing a generic title, so it stays: that is the case it was added
- * for (LOS-168).
+ * It is also asked for only when there is no author, which predates this change
+ * (LOS-168). Google matches it against one publisher string per volume, so a
+ * file naming a different-but-correct one excludes the book outright: adding
+ * inpublisher:"HMH" to a Tools of Titans query emptied it, and the book is
+ * Houghton Mifflin Harcourt's. Six of twenty authored rows sampled from a real
+ * import died that way. An author narrows the search perfectly well alone, and
+ * scoreCandidate then ranks by publisher far more forgivingly — by token, so
+ * "Frommer's" and "Frommers" agree.
+ *
+ * Free text ranks more loosely than the fielded form did, which leaves
+ * scoreCandidate carrying more of the load: `tools of titans inauthor:tim
+ * ferriss` puts three translations in the top five.
  */
 function googleQuery(hint: ImportRowHint): string {
-  const parts = [`intitle:${quoted(hint.title)}`];
-  if (hint.author) parts.push(`inauthor:${quoted(hint.author)}`);
+  const parts = [bareQueryTerm(hint.title)];
+  if (hint.author) parts.push(`inauthor:${bareQueryTerm(hint.author)}`);
   else if (hint.publisher) parts.push(`inpublisher:${quoted(hint.publisher)}`);
   return parts.join(' ');
 }
