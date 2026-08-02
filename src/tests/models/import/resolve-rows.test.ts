@@ -92,7 +92,7 @@ describe('resolveImportRows', () => {
       await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert', isbn: '9780441013593' }], 1);
 
       expect(googleSearch).toHaveBeenCalledWith('isbn:9780441013593', 5);
-      expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune" inauthor:"Frank Herbert"', 5);
+      expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune" inauthor:"Herbert"', 5);
     });
 
     it('ignores an unparseable ISBN and searches normally', async () => {
@@ -159,10 +159,10 @@ describe('resolveImportRows', () => {
   });
 
   // Google matches inpublisher against one publisher string per volume, so a
-  // file naming a different-but-correct one excludes the book outright:
-  // intitle:"Tools of Titans" inauthor:"Tim Ferriss" inpublisher:"HMH" returns
-  // nothing, while the same query without the qualifier returns five. An author
-  // narrows the search on its own, and scoreCandidate ranks by publisher after.
+  // file naming a different-but-correct one excludes the book outright: adding
+  // inpublisher:"HMH" to a Tools of Titans query empties it, while the same
+  // query without the qualifier returns five. An author narrows the search on
+  // its own, and scoreCandidate ranks by publisher after.
   it('narrows by author and leaves the publisher to local ranking', async () => {
     await resolveImportRows([{ title: 'Hong Kong', author: 'Reiber', publisher: "Frommer's" }], 1);
 
@@ -174,16 +174,158 @@ describe('resolveImportRows', () => {
   it('narrows by publisher when the row has no author', async () => {
     await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], 1);
 
-    expect(googleSearch).toHaveBeenCalledWith(
-      'intitle:"Hong Kong" inpublisher:"Frommer\'s"',
-      5,
-    );
+    expect(googleSearch).toHaveBeenCalledWith('intitle:"Hong Kong" inpublisher:"Frommer\'s"', 5);
   });
 
   it('omits qualifiers for hints that were not supplied', async () => {
     await resolveImportRows([{ title: 'Dune' }], 1);
 
     expect(googleSearch).toHaveBeenCalledWith('intitle:"Dune"', 5);
+  });
+
+  // Both ends of the precise query are stripped before it goes out, because
+  // Google matches a quoted qualifier literally: intitle:"Celebrations!"
+  // inauthor:"Barnabas Kindersley" returns nothing, while the same row asked
+  // for as intitle:"Celebrations" inauthor:"Kindersley" returns the book.
+  describe('the precise pass', () => {
+    it('strips punctuation from the title and reduces the author to a surname', async () => {
+      await resolveImportRows(
+        [{ title: 'Celebrations!', author: 'Barnabas Kindersley' }],
+        1,
+      );
+
+      expect(googleSearch).toHaveBeenNthCalledWith(
+        1,
+        'intitle:"Celebrations" inauthor:"Kindersley"',
+        5,
+      );
+    });
+
+    it('drops the co-authors a CSV cell carries along', async () => {
+      await resolveImportRows(
+        [{ title: 'How to Read a Book', author: 'Mortimer J. Adler and Charles Van Doren' }],
+        1,
+      );
+
+      expect(googleSearch).toHaveBeenNthCalledWith(
+        1,
+        'intitle:"How to Read a Book" inauthor:"Adler"',
+        5,
+      );
+    });
+
+    // A result that does not answer the title is the provider changing the
+    // subject, not a weak match to be ranked downwards. Google returns both
+    // kinds together for this row: the book, and other Kindersley titles.
+    it('discards results that do not answer the title it asked for', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Niños como yo', authors: ['Barnabas Kindersley'] }),
+        result({ googleBooksId: 'g2', title: 'Celebrations!', authors: ['Barnabas Kindersley'] }),
+      ]);
+
+      const [row] = await resolveImportRows(
+        [{ title: 'Celebrations!', author: 'Barnabas Kindersley' }],
+        1,
+      );
+
+      expect(row.candidates.map((c) => c.title)).toEqual(['Celebrations!']);
+      expect(row.tentative).toBeUndefined();
+    });
+
+    // The row that put "Niños como yo" in a real library. Once the precise pass
+    // answers, the alternate pass never runs and never gets to offer it.
+    it('keeps the alternate pass from running at all when it answers', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g2', title: 'Celebrations!', authors: ['Barnabas Kindersley'] }),
+      ]);
+
+      await resolveImportRows([{ title: 'Celebrations!', author: 'Barnabas Kindersley' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the alternate-title pass', () => {
+    // Half Lion ships as The Man Who Remade India outside India. Nothing is
+    // catalogued under the title the reader typed, so a title that disagrees is
+    // evidence of a retitled edition rather than of the wrong book.
+    it('runs when the precise pass finds nothing, and keeps the retitled edition', async () => {
+      googleSearch.mockImplementation(async (query: string) =>
+        query.startsWith('intitle:')
+          ? []
+          : [
+              result({
+                googleBooksId: 'g1',
+                title: 'The Man Who Remade India',
+                authors: ['Vinay Sitapati'],
+              }),
+            ],
+      );
+
+      const [row] = await resolveImportRows([{ title: 'Half Lion', author: 'Vinay Sitapati' }], 1);
+
+      expect(googleSearch).toHaveBeenNthCalledWith(1, 'intitle:"Half Lion" inauthor:"Sitapati"', 5);
+      expect(googleSearch).toHaveBeenNthCalledWith(2, 'Half Lion inauthor:Vinay Sitapati', 5);
+      expect(row.candidates[0].title).toBe('The Man Who Remade India');
+    });
+
+    // The pass exists to catch a retitled edition, and it cannot tell one from a
+    // different book by the same author -- both agree on author, disagree on
+    // title, and score identically. So the row is flagged for the reader rather
+    // than resolved on their behalf.
+    it('flags the row tentative, because a retitled edition and a wrong book look alike', async () => {
+      googleSearch.mockImplementation(async (query: string) =>
+        query.startsWith('intitle:')
+          ? []
+          : [
+              result({
+                googleBooksId: 'g1',
+                title: 'The Man Who Remade India',
+                authors: ['Vinay Sitapati'],
+              }),
+            ],
+      );
+
+      const [row] = await resolveImportRows([{ title: 'Half Lion', author: 'Vinay Sitapati' }], 1);
+
+      expect(row.tentative).toBe(true);
+    });
+
+    it('leaves a row the precise pass answered unflagged', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Dune', authors: ['Frank Herbert'] }),
+      ]);
+
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], 1);
+
+      expect(row.tentative).toBeUndefined();
+    });
+
+    // An ISBN names one edition outright, and title wording varies between a
+    // book's editions where its ISBN does not.
+    it('leaves an ISBN-settled row unflagged however far the title drifts', async () => {
+      googleSearch.mockResolvedValue([
+        result({ googleBooksId: 'g1', title: 'Duna', isbn13: '9780441013593' }),
+      ]);
+
+      const [row] = await resolveImportRows([{ title: 'Dune', isbn: '9780441013593' }], 1);
+
+      expect(row.tentative).toBeUndefined();
+    });
+
+    it('does not run without an author, having nothing left to narrow with', async () => {
+      await resolveImportRows([{ title: 'Half Lion' }], 1);
+
+      expect(googleSearch).toHaveBeenCalledTimes(1);
+      expect(googleSearch).toHaveBeenCalledWith('intitle:"Half Lion"', 5);
+    });
+
+    it('leaves a row with no candidates at all unflagged', async () => {
+      const [row] = await resolveImportRows([{ title: 'Half Lion', author: 'Vinay Sitapati' }], 1);
+
+      expect(row.candidates).toEqual([]);
+      expect(row.tentative).toBeUndefined();
+    });
   });
 
   it('does not consult Open Library when Google confirms the publisher', async () => {

@@ -9,8 +9,11 @@ import {
   isSamePublisher,
   matchesTitleAndAuthor,
   scoreCandidate,
+  titleAgrees,
 } from '../upload/matches-detected-book';
 import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
+import { bareQueryTerm } from '../../lib/books/bare-query-term';
+import { firstAuthorSurname } from '../../lib/books/first-author-surname';
 import { findCatalogMatches } from './find-catalog-matches';
 import type { CatalogMatch } from './find-catalog-matches';
 import type { CatalogBookSummary } from '../../lib/books/format-catalog-book';
@@ -38,6 +41,18 @@ export interface ResolvedImportRow {
   matchedBook?: CatalogBookSummary;
   /** Ranked best-first, so the client can preselect [0] and offer the rest. */
   candidates: SearchResult[];
+  /**
+   * Set when no candidate answers the title the row asked for, so the list is a
+   * suggestion rather than an identification and must not be preselected.
+   *
+   * These are the rows the alternate-title pass answered: either a genuinely
+   * retitled edition ("Half Lion" -> "The Man Who Remade India") or a different
+   * book by the same author, and nothing in the response tells the two apart
+   * (LOS-199). Both score alike, so this is a provenance flag, not a threshold —
+   * the reader is the one who can settle it, and the whole point of the review
+   * list is that they get to.
+   */
+  tentative?: boolean;
 }
 
 /** Candidates offered per row. Enough to disambiguate, few enough to scan in a dropdown. */
@@ -55,33 +70,70 @@ function quoted(value: string): string {
 }
 
 /**
- * Google Books honours fielded qualifiers precisely — verified against the live
- * API, where `intitle:"Hong Kong" inpublisher:"Frommer's"` returns exactly the
- * right book. Open Library accepts the same shape but does not strictly AND
- * terms, so its results need the same re-ranking everything else gets.
+ * The precise pass: a quoted title phrase and a surname (LOS-199).
  *
- * That precision cuts both ways, which is why `inpublisher` is added only when
- * there is no author. Google matches it against one publisher string per volume,
- * and a file naming a different-but-correct one excludes the book outright:
+ * Both halves are stripped down before they go in, because Google matches a
+ * quoted qualifier literally and empties the result set over a detail neither
+ * the reader nor the catalogue thinks is part of the name:
  *
- *   intitle:"Tools of Titans" inauthor:"Tim Ferriss" inpublisher:"HMH"  -> 0
- *   intitle:"Tools of Titans" inauthor:"Tim Ferriss"                    -> 5
+ *   intitle:"Celebrations!" inauthor:"Barnabas Kindersley"  -> 0
+ *   intitle:"Celebrations"  inauthor:"Kindersley"           -> the right book
  *
- * "HMH" is Houghton Mifflin Harcourt, and the book is theirs. Six of twenty
- * authored rows sampled from a real import came back empty for exactly this
- * reason, leaving them to the throttled fallback or to nothing at all.
+ *   intitle:"how to read a book" inauthor:"mortimer j adler and charles van doren"  -> 0
+ *   intitle:"how to read a book" inauthor:"adler"                                   -> 300
  *
- * An author narrows the search perfectly well on its own, and scoreCandidate
- * then ranks the results by publisher far more forgivingly — by token, so
- * "Frommer's" and "Frommers" agree. Without an author the qualifier is the only
- * thing narrowing a generic title, so it stays: that is the case it was added
- * for (LOS-168).
+ * An exclamation mark and a co-author are all it takes. See bareQueryTerm and
+ * firstAuthorSurname for what each end removes.
+ *
+ * `inpublisher` is asked for only when there is no author (LOS-168). Google
+ * matches it against one publisher string per volume, so a file naming a
+ * different-but-correct one excludes the book outright: adding
+ * inpublisher:"HMH" to a Tools of Titans query emptied it, and the book is
+ * Houghton Mifflin Harcourt's. Six of twenty authored rows sampled from a real
+ * import died that way. An author narrows the search perfectly well alone, and
+ * scoreCandidate then ranks by publisher far more forgivingly — by token, so
+ * "Frommer's" and "Frommers" agree.
+ *
+ * The publisher keeps its quotes for the same reason the others lose theirs:
+ * unquoted it stops narrowing anything at all, and `hong kong
+ * inpublisher:frommer` comes back with Whole World Handbook and a guide to San
+ * Francisco.
  */
-function googleQuery(hint: ImportRowHint): string {
-  const parts = [`intitle:${quoted(hint.title)}`];
-  if (hint.author) parts.push(`inauthor:${quoted(hint.author)}`);
+function googlePreciseQuery(hint: ImportRowHint): string {
+  const parts = [`intitle:${quoted(bareQueryTerm(hint.title))}`];
+  const surname = firstAuthorSurname(hint.author);
+  if (surname) parts.push(`inauthor:${quoted(surname)}`);
   else if (hint.publisher) parts.push(`inpublisher:${quoted(hint.publisher)}`);
   return parts.join(' ');
+}
+
+/**
+ * The fallback pass: free-text title, bare `inauthor:` — the shape that finds a
+ * book the precise pass cannot, because the catalogue files it under another
+ * title entirely.
+ *
+ *   intitle:"half lion" inauthor:"sitapati"  -> 0
+ *   half lion inauthor:vinay sitapati        -> "The Man Who Remade India"
+ *
+ * Which is the same book: Half Lion ships under that title outside India.
+ *
+ * This form is only safe *after* the precise pass comes back empty. Run on its
+ * own it answers a title it cannot find with a different book by the same
+ * author — `Celebrations! inauthor:Barnabas Kindersley` returns one volume and
+ * it is "Niños como yo" — and one confident wrong answer beats no answer
+ * straight into the reader's library. An empty precise pass is what rules that
+ * out: it establishes that the catalogue holds nothing under this title by this
+ * author, so a title that disagrees is evidence of a retitled edition rather
+ * than of the wrong book.
+ *
+ * Even then the result is not trusted outright; see `tentative` on the row.
+ *
+ * Pointless without an author — the query would be the bare title, which is what
+ * the precise pass just asked for.
+ */
+function googleAlternateTitleQuery(hint: ImportRowHint): string | null {
+  if (!hint.author) return null;
+  return `${bareQueryTerm(hint.title)} inauthor:${bareQueryTerm(hint.author)}`;
 }
 
 function openLibraryQuery(hint: ImportRowHint): string {
@@ -124,9 +176,17 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * One primary-provider lookup for a row. Lets BooksProviderError escape, so the
- * caller can gather every failed row and retry them together rather than
- * blocking this row on its own backoff.
+ * One primary-provider lookup for a row, as a cascade: ISBN, then the precise
+ * query, then — only if that found nothing on the title it asked for — the
+ * alternate-title query.
+ *
+ * The precise pass is filtered by titleAgrees rather than merely ranked. A
+ * result that does not answer the title is not a weak match to be sorted
+ * downwards, it is the provider changing the subject, and letting it through
+ * would leave the fallback with nothing to distinguish itself from.
+ *
+ * Lets BooksProviderError escape, so the caller can gather every failed row and
+ * retry them together rather than blocking this row on its own backoff.
  */
 async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
   // Already known to be out of capacity: don't spend a request learning it again.
@@ -141,7 +201,13 @@ async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
     const byIsbn = await google.search(`isbn:${isbn}`, CANDIDATES_PER_ROW);
     if (byIsbn.length > 0) return byIsbn;
   }
-  return google.search(googleQuery(hint), CANDIDATES_PER_ROW);
+
+  const precise = await google.search(googlePreciseQuery(hint), CANDIDATES_PER_ROW);
+  const onTitle = precise.filter((book) => titleAgrees(book, hint));
+  if (onTitle.length > 0) return onTitle;
+
+  const alternate = googleAlternateTitleQuery(hint);
+  return alternate ? google.search(alternate, CANDIDATES_PER_ROW) : [];
 }
 
 /**
@@ -231,6 +297,15 @@ function assembleRow(
     .slice(0, CANDIDATES_PER_ROW)
     .map(({ book }) => withMatchedPublisher(book, hint));
 
+  // Read off the candidates rather than threaded down from the lookup: an ISBN
+  // settles the row whatever the title says, and Open Library's results arrive
+  // by a different route than Google's. What matters is whether anything here
+  // actually answers the title, not which pass produced it.
+  const tentative =
+    candidates.length > 0 &&
+    !pinnedByIsbn(candidates, hint) &&
+    !candidates.some((book) => titleAgrees(book, hint));
+
   return {
     title: hint.title,
     author: hint.author ?? null,
@@ -241,6 +316,7 @@ function assembleRow(
       matchedBook: catalogMatch.book,
     }),
     candidates,
+    ...(tentative && { tentative: true }),
   };
 }
 

@@ -37,6 +37,18 @@ describe('resolveDetectedBook', () => {
     expect(mockSearchBooks).toHaveBeenCalledWith('intitle:"Elements"', 3);
   });
 
+  // Google matches a quoted qualifier literally, so a spine's punctuation or a
+  // full byline empties the pass for a reason unrelated to the book.
+  it('strips the title to words and the byline to a surname', async () => {
+    mockSearchBooks.mockResolvedValue([]);
+    await resolveDetectedBook('Celebrations!', 'Barnabas Kindersley');
+    expect(mockSearchBooks).toHaveBeenNthCalledWith(
+      1,
+      'intitle:"Celebrations" inauthor:"Kindersley"',
+      3,
+    );
+  });
+
   it('falls back to free text when the fielded query returns nothing', async () => {
     const daulaires = result("D'Aulaires' Book of Greek Myths", ["Ingri d'Aulaire"]);
     mockSearchBooks.mockResolvedValueOnce([]).mockResolvedValueOnce([daulaires]);
@@ -68,12 +80,14 @@ describe('resolveDetectedBook', () => {
     expect(await resolveDetectedBook('Obscure Book', null)).toBeNull();
   });
 
-  it('strips embedded double quotes from the fielded query', async () => {
+  // Embedded quotes would nest inside the ones the query adds, and Google reads
+  // a colon as the start of a qualifier.
+  it('strips quotes and colons from the fielded query', async () => {
     mockSearchBooks.mockResolvedValue([]);
-    await resolveDetectedBook('The "Real" Story', 'Jane "JJ" Doe');
+    await resolveDetectedBook('The "Real" Story: A Memoir', 'Jane "JJ" Doe');
     expect(mockSearchBooks).toHaveBeenNthCalledWith(
       1,
-      'intitle:"The Real Story" inauthor:"Jane JJ Doe"',
+      'intitle:"The Real Story A Memoir" inauthor:"Doe"',
       3,
     );
   });
