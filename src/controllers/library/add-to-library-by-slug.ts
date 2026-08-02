@@ -80,11 +80,16 @@ export async function addToLibraryBySlug(req: Request, res: Response) {
       return;
     }
 
-    const { title, authorName, googleBooksId, openLibraryId } = req.body ?? {};
-    if (!title || !authorName || (!googleBooksId && !openLibraryId)) {
+    // Title and author are enough. A provider id used to be required too, which
+    // made an import row that matched nothing impossible to add -- the CSV
+    // client offers exactly that thin shape, so every such row 400'd and was
+    // reported to the reader as an error (LOS-196). A book you own that no
+    // provider lists is a real book; it gets a thin catalog row, and
+    // resolveBookBySlug fills in the rest when its page is opened.
+    const { title, authorName } = req.body ?? {};
+    if (!title || !authorName) {
       res.status(400).json({
-        error:
-          'No catalog book matches this slug, and title, authorName, and one of googleBooksId/openLibraryId are required to create it',
+        error: 'No catalog book matches this slug, and title and authorName are required to create it',
       });
       return;
     }

@@ -3,16 +3,23 @@ import * as booksData from '../../../data/books-data';
 import { upsertBook } from '../../../data/library-data';
 import { searchBooks } from '../../../models/ai/search';
 import { getBooksProviderAdapter } from '../../../lib/books/get-books-provider-adapter';
+import { cacheGet } from '../../../lib/cache/cache-get';
+import { cacheSet } from '../../../lib/cache/cache-set';
 
 jest.mock('../../../data/books-data');
 jest.mock('../../../data/library-data');
 jest.mock('../../../models/ai/search');
 jest.mock('../../../lib/books/get-books-provider-adapter');
+jest.mock('../../../lib/cache/cache-get');
+jest.mock('../../../lib/cache/cache-set');
 
 const mockGetBookBySlug = booksData.getBookBySlug as jest.Mock;
 const mockUpsertBook = upsertBook as jest.Mock;
 const mockSearchBooks = searchBooks as jest.Mock;
 const mockGetBooksProviderAdapter = getBooksProviderAdapter as jest.Mock;
+const mockCacheGet = cacheGet as jest.Mock;
+const mockCacheSet = cacheSet as jest.Mock;
+const mockEnrichThinBookRow = booksData.enrichThinBookRow as jest.Mock;
 
 const SEARCH_RESULT_MATCH = {
   googleBooksId: 'gid',
@@ -63,6 +70,9 @@ const CATALOG_ROW = {
 describe('resolveBookBySlug model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockResolvedValue(undefined);
+    mockEnrichThinBookRow.mockResolvedValue(true);
   });
 
   it('returns the catalog row with cataloged: true on an exact slug match', async () => {
@@ -71,6 +81,9 @@ describe('resolveBookBySlug model', () => {
       slug: 'economics-in-one-lesson',
       title: 'Economics in One Lesson',
       author_slug: 'henry-hazlitt',
+      // A provider id is what makes this a normally-cataloged book rather than
+      // a thin one, which would be re-resolved (LOS-196).
+      google_books_id: 'gid',
     });
 
     const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
@@ -80,6 +93,7 @@ describe('resolveBookBySlug model', () => {
       slug: 'economics-in-one-lesson',
       title: 'Economics in One Lesson',
       author_slug: 'henry-hazlitt',
+      google_books_id: 'gid',
       cataloged: true,
     });
     expect(mockSearchBooks).not.toHaveBeenCalled();
@@ -294,6 +308,98 @@ describe('resolveBookBySlug model', () => {
 
       expect(mockSearchBooks).toHaveBeenCalled();
       expect(result?.google_books_id).toBe('gid');
+    });
+  });
+
+  // A book created from a title and an author alone, by an import row that
+  // matched no provider (LOS-196). The live-resolve path above only runs on a
+  // catalog miss, and a thin row is a hit -- so without this it would stay a
+  // bare title forever.
+  describe('a thin book, carrying no provider id', () => {
+    const THIN_ROW = {
+      id: 12,
+      slug: 'economics-in-one-lesson',
+      title: 'Economics in One Lesson',
+      author_name: 'Henry Hazlitt',
+      author_slug: 'henry-hazlitt',
+      google_books_id: null,
+      openlibrary_id: null,
+      subjects: [],
+    };
+
+    it('looks it up again and folds in what the provider had', async () => {
+      mockGetBookBySlug.mockResolvedValueOnce(THIN_ROW).mockResolvedValueOnce(CATALOG_ROW);
+      mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
+
+      const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+      expect(mockEnrichThinBookRow).toHaveBeenCalledWith(
+        12,
+        expect.objectContaining({ googleBooksId: 'gid', coverUrl: 'https://x/y.jpg' }),
+      );
+      expect(result?.google_books_id).toBe('gid');
+      expect(result?.cataloged).toBe(true);
+    });
+
+    // upsertBook matches on provider id, which a thin row has none of, so it
+    // takes the INSERT branch and stores a *second* book under a suffixed slug
+    // while the row the library entry points at stays thin. Caught end-to-end;
+    // this pins it.
+    it('updates the existing row rather than inserting a second book', async () => {
+      mockGetBookBySlug.mockResolvedValueOnce(THIN_ROW).mockResolvedValueOnce(CATALOG_ROW);
+      mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
+
+      await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+      expect(mockUpsertBook).not.toHaveBeenCalled();
+      expect(mockEnrichThinBookRow).toHaveBeenCalledWith(12, expect.anything());
+    });
+
+    // Another book already holds that provider id, so this thin row duplicates
+    // one the catalog has properly. Merging them is a bigger job.
+    it('leaves the row alone and remembers the miss when the provider id is taken', async () => {
+      mockGetBookBySlug.mockResolvedValue(THIN_ROW);
+      mockSearchBooks.mockResolvedValue([SEARCH_RESULT_MATCH]);
+      mockEnrichThinBookRow.mockResolvedValue(false);
+
+      const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+      expect(mockCacheSet).toHaveBeenCalledWith(expect.stringContaining('books:resolve-miss'), true, expect.any(Number));
+      expect(result?.id).toBe(12);
+    });
+
+    it('remembers a miss so the next view costs nothing', async () => {
+      mockGetBookBySlug.mockResolvedValue(THIN_ROW);
+      mockSearchBooks.mockResolvedValue([]);
+
+      const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+      expect(mockEnrichThinBookRow).not.toHaveBeenCalled();
+      expect(mockCacheSet).toHaveBeenCalledWith(expect.stringContaining('books:resolve-miss'), true, expect.any(Number));
+      // Still a usable page: the thin book itself.
+      expect(result?.id).toBe(12);
+    });
+
+    it('does not ask again while a miss is remembered', async () => {
+      mockGetBookBySlug.mockResolvedValue(THIN_ROW);
+      mockCacheGet.mockResolvedValue(true);
+
+      const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+      expect(mockSearchBooks).not.toHaveBeenCalled();
+      expect(result?.id).toBe(12);
+    });
+
+    // A provider being down must not take the detail page with it, and must not
+    // be remembered as "no such book" either.
+    it('returns the thin book and forgets nothing when the lookup throws', async () => {
+      mockGetBookBySlug.mockResolvedValue(THIN_ROW);
+      mockSearchBooks.mockRejectedValue(new Error('provider down'));
+
+      const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
+
+      expect(result?.id).toBe(12);
+      expect(mockCacheSet).not.toHaveBeenCalled();
     });
   });
 });

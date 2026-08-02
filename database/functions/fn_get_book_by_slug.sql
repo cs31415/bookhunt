@@ -1,4 +1,8 @@
 -- Return book joined with author name and author slug. NULL if not found.
+--
+-- DROP is required because adding a column changes the RETURNS TABLE row type,
+-- which CREATE OR REPLACE cannot do in place.
+DROP FUNCTION IF EXISTS fn_get_book_by_slug(VARCHAR);
 CREATE OR REPLACE FUNCTION fn_get_book_by_slug(
     p_slug VARCHAR
 ) RETURNS TABLE (
@@ -18,6 +22,10 @@ CREATE OR REPLACE FUNCTION fn_get_book_by_slug(
     blurb           TEXT,
     cover_url       VARCHAR,
     google_books_id VARCHAR,
+    -- Returned alongside google_books_id so a caller can tell a book that came
+    -- from a provider from one typed in by hand -- see resolveBookBySlug, which
+    -- re-resolves a row carrying neither.
+    openlibrary_id  VARCHAR,
     isbn13          VARCHAR,
     language        VARCHAR,
     related         INT[],
@@ -44,6 +52,7 @@ BEGIN
         b.blurb,
         b.cover_url,
         b.google_books_id,
+        b.openlibrary_id,
         b.isbn13,
         b.language,
         b.related,

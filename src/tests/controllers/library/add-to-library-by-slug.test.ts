@@ -90,11 +90,29 @@ describe('addToLibraryBySlug controller', () => {
       expect(mockAddToLibrary).not.toHaveBeenCalled();
     });
 
-    it('returns 400 when neither googleBooksId nor openLibraryId is present', async () => {
+    // The CSV client offers exactly this shape for a row nothing matched, and
+    // requiring a provider id made every such row 400 and be reported to the
+    // reader as an error (LOS-196). resolveBookBySlug fills in the rest when
+    // the book's page is opened.
+    it('creates a thin book from title and author alone', async () => {
       mockGetBookBySlug.mockResolvedValue(null);
+      mockAddToLibrary.mockResolvedValue({ entry: { book_id: 9 }, book: { id: 9, slug: 'a-new-book' } });
       const res = makeRes();
 
       await addToLibraryBySlug(makeReq('a-new-book', { title: 'T', authorName: 'A' }), res);
+
+      expect(res.status).not.toHaveBeenCalledWith(400);
+      expect(mockAddToLibrary).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ title: 'T', authorName: 'A', slug: 'a-new-book' }),
+      );
+    });
+
+    it('still returns 400 without a title or an author, which is nothing to create from', async () => {
+      mockGetBookBySlug.mockResolvedValue(null);
+      const res = makeRes();
+
+      await addToLibraryBySlug(makeReq('a-new-book', { title: 'T' }), res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(mockAddToLibrary).not.toHaveBeenCalled();
