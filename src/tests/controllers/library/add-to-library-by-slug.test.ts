@@ -75,9 +75,32 @@ describe('addToLibraryBySlug controller', () => {
         authorName: 'New Author',
         googleBooksId: 'gid',
         slug: 'a-new-book',
+        enrich: true,
       });
       expect(mockAddExistingToLibrary).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({ entry, book: { id: 9, slug: 'a-new-book' } });
+    });
+
+    // Only an explicit false opts out: an import says so, and every other
+    // caller gets the lookup it has always had (LOS-202).
+    it.each([
+      [false, false],
+      [true, true],
+      [undefined, true],
+    ])('passes enrich %p through as %p', async (sent, expected) => {
+      mockGetBookBySlug.mockResolvedValue(null);
+      mockAddToLibrary.mockResolvedValue({ entry: {}, book: { id: 9, slug: 'a-new-book' } });
+
+      await addToLibraryBySlug(
+        makeReq('a-new-book', {
+          title: 'A New Book',
+          authorName: 'New Author',
+          ...(sent === undefined ? {} : { enrich: sent }),
+        }),
+        makeRes(),
+      );
+
+      expect(mockAddToLibrary).toHaveBeenCalledWith(7, expect.objectContaining({ enrich: expected }));
     });
 
     it('returns 400 when title is missing', async () => {

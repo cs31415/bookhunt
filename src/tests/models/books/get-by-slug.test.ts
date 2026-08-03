@@ -82,8 +82,12 @@ describe('resolveBookBySlug model', () => {
       title: 'Economics in One Lesson',
       author_slug: 'henry-hazlitt',
       // A provider id is what makes this a normally-cataloged book rather than
-      // a thin one, which would be re-resolved (LOS-196).
+      // a thin one, which would be re-resolved (LOS-196). The edition fields are
+      // present too, or it would be re-fetched for those instead (LOS-202).
       google_books_id: 'gid',
+      blurb: 'A classic.',
+      publisher: 'Harper',
+      pages: 218,
     });
 
     const result = await resolveBookBySlug('economics-in-one-lesson', 'henry-hazlitt');
@@ -94,6 +98,9 @@ describe('resolveBookBySlug model', () => {
       title: 'Economics in One Lesson',
       author_slug: 'henry-hazlitt',
       google_books_id: 'gid',
+      blurb: 'A classic.',
+      publisher: 'Harper',
+      pages: 218,
       cataloged: true,
     });
     expect(mockSearchBooks).not.toHaveBeenCalled();
@@ -401,5 +408,105 @@ describe('resolveBookBySlug model', () => {
       expect(result?.id).toBe(12);
       expect(mockCacheSet).not.toHaveBeenCalled();
     });
+  });
+});
+
+/**
+ * A book catalogued from a search result: it knows its edition, but the search
+ * response never carried the publisher, and an import does not stop to fetch it
+ * (LOS-202). The blanks are filled the first time someone opens the book.
+ */
+describe('filling edition details on first view', () => {
+  const IMPORTED = {
+    id: 7,
+    slug: 'dune',
+    title: 'Dune',
+    author_slug: 'frank-herbert',
+    google_books_id: 'gid',
+    openlibrary_id: null,
+    blurb: '',
+    publisher: null,
+    pages: null,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCacheGet.mockResolvedValue(null);
+    mockEnrichThinBookRow.mockResolvedValue(true);
+  });
+
+  it('fetches the edition by id rather than searching again', async () => {
+    const getEditionDetails = jest
+      .fn()
+      .mockResolvedValue({ description: 'A classic.', publisher: 'Ace', pages: 412 });
+    mockGetBooksProviderAdapter.mockReturnValue({ getEditionDetails });
+    mockGetBookBySlug
+      .mockResolvedValueOnce(IMPORTED)
+      .mockResolvedValueOnce({ ...IMPORTED, blurb: 'A classic.', publisher: 'Ace', pages: 412 });
+
+    const result = await resolveBookBySlug('dune');
+
+    expect(getEditionDetails).toHaveBeenCalledWith('gid');
+    expect(mockSearchBooks).not.toHaveBeenCalled();
+    expect(mockEnrichThinBookRow).toHaveBeenCalledWith(7, {
+      blurb: 'A classic.',
+      publisher: 'Ace',
+      pages: 412,
+    });
+    expect(result).toMatchObject({ publisher: 'Ace', pages: 412 });
+  });
+
+  it('leaves a complete book alone', async () => {
+    const getEditionDetails = jest.fn();
+    mockGetBooksProviderAdapter.mockReturnValue({ getEditionDetails });
+    mockGetBookBySlug.mockResolvedValue({
+      ...IMPORTED,
+      blurb: 'Already here.',
+      publisher: 'Ace',
+      pages: 412,
+    });
+
+    await resolveBookBySlug('dune');
+
+    expect(getEditionDetails).not.toHaveBeenCalled();
+  });
+
+  // Otherwise a book the provider has nothing more to say about costs a request
+  // on every single view.
+  it('remembers a miss instead of asking again', async () => {
+    const getEditionDetails = jest
+      .fn()
+      .mockResolvedValue({ description: null, publisher: null, pages: null });
+    mockGetBooksProviderAdapter.mockReturnValue({ getEditionDetails });
+    mockGetBookBySlug.mockResolvedValue(IMPORTED);
+
+    await resolveBookBySlug('dune');
+
+    expect(mockCacheSet).toHaveBeenCalled();
+    expect(mockEnrichThinBookRow).not.toHaveBeenCalled();
+  });
+
+  it('does not ask again once a miss is remembered', async () => {
+    const getEditionDetails = jest.fn();
+    mockGetBooksProviderAdapter.mockReturnValue({ getEditionDetails });
+    mockGetBookBySlug.mockResolvedValue(IMPORTED);
+    mockCacheGet.mockResolvedValue(true);
+
+    await resolveBookBySlug('dune');
+
+    expect(getEditionDetails).not.toHaveBeenCalled();
+  });
+
+  // A provider being down must not take the detail page with it.
+  it('returns the book unchanged when the provider throws', async () => {
+    mockGetBooksProviderAdapter.mockReturnValue({
+      getEditionDetails: jest.fn().mockRejectedValue(new Error('down')),
+    });
+    mockGetBookBySlug.mockResolvedValue(IMPORTED);
+
+    const result = await resolveBookBySlug('dune');
+
+    expect(result).toMatchObject({ slug: 'dune', cataloged: true });
+    expect(mockEnrichThinBookRow).not.toHaveBeenCalled();
   });
 });

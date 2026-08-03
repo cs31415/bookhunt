@@ -52,7 +52,10 @@ BEGIN
                               THEN COALESCE(p_subjects, '{}')
                               ELSE subjects
                           END,
-        blurb           = COALESCE(blurb,           p_blurb),
+        -- NULLIF because fn_upsert_book stores a missing blurb as '', not NULL:
+        -- a plain COALESCE would read the empty string as a value worth keeping
+        -- and no book would ever get its description filled in.
+        blurb           = COALESCE(NULLIF(blurb, ''), p_blurb),
         cover_url       = COALESCE(cover_url,       p_cover_url),
         isbn13          = COALESCE(isbn13,          p_isbn13),
         language        = COALESCE(language,        p_language)
