@@ -46,4 +46,37 @@ describe('firstAuthorSurname', () => {
   it.each([[null], [undefined], [''], ['   '], ['.']])('returns null for %p', (input) => {
     expect(firstAuthorSurname(input as string | null)).toBeNull();
   });
+
+  /**
+   * Both of these sent an import after the wrong person, and one of them put a
+   * Clive Cussler novel in a library that had asked for Clive Gamble (LOS-205).
+   */
+  describe('names the wrong author would be taken from', () => {
+    // Every chunk is already a surname, so the first is the one wanted --
+    // taking the last asked Google about Irion and got a different Irion.
+    it.each([
+      ['Tyson/Liu/Irion', 'Tyson'],
+      ['Woodward/Bernstein', 'Woodward'],
+      ['Strunk | White', 'Strunk'],
+    ])('takes the first of the slash-separated %s', (input, expected) => {
+      expect(firstAuthorSurname(input)).toBe(expected);
+    });
+
+    // One surname shared by two people, written on the last of them. The first
+    // chunk is a bare forename and names nobody on its own.
+    it.each([
+      ['Ingri and Edgar Parin d’Aulaire', 'd’Aulaire'],
+      ['Jan and Stan Berenstain', 'Berenstain'],
+    ])('does not take the bare forename from %s', (input, expected) => {
+      expect(firstAuthorSurname(input)).toBe(expected);
+    });
+
+    // Still the first author where the first chunk is a whole name.
+    it.each([
+      ['Mortimer J. Adler and Charles Van Doren', 'Adler'],
+      ['Clive Gamble', 'Gamble'],
+    ])('keeps taking the first author from %s', (input, expected) => {
+      expect(firstAuthorSurname(input)).toBe(expected);
+    });
+  });
 });
