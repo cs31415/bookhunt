@@ -94,7 +94,13 @@ export async function addToLibraryBySlug(req: Request, res: Response) {
       return;
     }
 
-    const { entry, book } = await upsertAndAddModel(userId, { ...req.body, slug });
+    // `enrich: false` from an import, which has already been told everything the
+    // provider's search response knew and does not want a lookup per row.
+    const { entry, book } = await upsertAndAddModel(userId, {
+      ...req.body,
+      slug,
+      enrich: req.body?.enrich !== false,
+    });
     res.json({ entry, book: { id: book.id, slug: book.slug } });
   } catch (error) {
     console.error('Error adding to library:', error);

@@ -87,4 +87,40 @@ describe('addToLibrary model', () => {
       pages: 321,
     });
   });
+
+  // An import supplies whatever the provider's search response carried and asks
+  // not to be enriched: the gaps are ones a lookup would cost a round trip per
+  // book to fill, and they are filled on first view instead (LOS-202).
+  describe('enrich', () => {
+    beforeEach(() => {
+      mockUpsertBook.mockResolvedValue({ id: 10, slug: 'a-book' });
+      mockAddToLibrary.mockResolvedValue({ id: 10, status: 'queued' });
+    });
+
+    it('does not consult the provider when the caller passes enrich false', async () => {
+      await addToLibrary(1, { ...baseParams, publisher: null, enrich: false });
+
+      expect(mockResolveEditionFields).not.toHaveBeenCalled();
+    });
+
+    it('writes the payload as given, gaps and all', async () => {
+      await addToLibrary(1, {
+        ...baseParams,
+        blurb: 'From the search result',
+        publisher: null,
+        pages: null,
+        enrich: false,
+      });
+
+      expect(mockUpsertBook).toHaveBeenCalledWith(
+        expect.objectContaining({ blurb: 'From the search result', publisher: null, pages: null }),
+      );
+    });
+
+    it.each([[undefined], [true]])('still enriches when enrich is %p', async (enrich) => {
+      await addToLibrary(1, { ...baseParams, publisher: null, enrich });
+
+      expect(mockResolveEditionFields).toHaveBeenCalled();
+    });
+  });
 });

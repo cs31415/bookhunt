@@ -83,6 +83,73 @@ function isThin(book: { google_books_id?: string | null; openlibrary_id?: string
 }
 
 /**
+ * A book that was catalogued from a search result and never had its edition
+ * details fetched.
+ *
+ * An import writes what the provider's *search* response carried, which reliably
+ * omits publisher and often the description and page count -- fetching them at
+ * import time costs one round trip per row, which is what made adding 300 books
+ * take minutes (LOS-202). So the import skips it and this picks up the slack, on
+ * the one occasion someone actually wants the detail.
+ *
+ * Unlike a thin row, this book knows exactly which edition it is. It needs the
+ * detail endpoint for that id, not another search.
+ */
+function needsEditionDetails(book: {
+  google_books_id?: string | null;
+  openlibrary_id?: string | null;
+  blurb?: string | null;
+  publisher?: string | null;
+  pages?: number | null;
+}): boolean {
+  if (isThin(book)) return false;
+  return !book.blurb || !book.publisher || !book.pages;
+}
+
+/**
+ * Fetch the edition detail for a book that already knows its provider id, and
+ * fold in whatever was missing.
+ *
+ * Reuses enrichThinBookRow, whose COALESCE means nothing already on the row is
+ * overwritten -- this only ever fills blanks.
+ *
+ * A miss is remembered, so a book the provider simply has nothing more to say
+ * about does not cost a request on every view. There is no positive cache: a
+ * success fills the blanks, after which needsEditionDetails is false.
+ */
+async function fillEditionDetails(book: any) {
+  const key = cacheKey('books:edition-miss', RESOLVE_MISS_VERSION, book.slug);
+  if (await cacheGet<true>(key)) return book;
+
+  const source: BooksProvider = book.google_books_id ? 'google_books' : 'open_library';
+  const adapter = getBooksProviderAdapter(source);
+  if (!adapter?.getEditionDetails) return book;
+
+  let details;
+  try {
+    details = await adapter.getEditionDetails(book.google_books_id ?? book.openlibrary_id);
+  } catch (error) {
+    // A provider being down must not take the detail page with it; the blanks
+    // stay blank and the next view tries again.
+    console.error(`[books] edition details for "${book.slug}" failed:`, error);
+    return book;
+  }
+
+  if (!details.description && !details.publisher && !details.pages) {
+    await cacheSet(key, true, RESOLVE_MISS_TTL_SECONDS);
+    return book;
+  }
+
+  await enrichThinBookRow(book.id, {
+    blurb: details.description,
+    publisher: details.publisher,
+    pages: details.pages,
+  });
+
+  return (await getBookBySlug(book.slug)) ?? book;
+}
+
+/**
  * Try once more to find a thin book at a provider, and fold in whatever comes
  * back.
  *
@@ -169,8 +236,13 @@ export async function resolveBookBySlug(slug: string, authorSlug?: string, provi
   // require it to match before trusting the catalog row; otherwise fall through
   // to a live, author-narrowed resolve.
   if (real && (!authorSlug || authorSlugMatches(real.author_slug ?? '', authorSlug))) {
-    if (!isThin(real)) return { ...real, cataloged: true as const };
-    return { ...(await enrichThinBook(real)), cataloged: true as const };
+    if (isThin(real)) return { ...(await enrichThinBook(real)), cataloged: true as const };
+    // Knows which edition it is, just never fetched the detail for it — the
+    // shape an import leaves behind (LOS-202).
+    if (needsEditionDetails(real)) {
+      return { ...(await fillEditionDetails(real)), cataloged: true as const };
+    }
+    return { ...real, cataloged: true as const };
   }
 
   const match = await resolveMatch(slug, authorSlug, providerId);

@@ -20,10 +20,24 @@ interface AddToLibraryParams {
   language?: string | null;
   hue?: string | null;
   status?: string;
+  /**
+   * Whether to go to the provider for whatever this payload is missing.
+   *
+   * Defaults to true, which is right when a reader is adding one book and
+   * waiting on it. An import sets it false: the fields it did not send are the
+   * ones the provider's *search* response never carried — publisher above all,
+   * which google-books-adapter notes is "dependable only via the volume detail
+   * endpoint" — so enriching means one network round trip per row, for data the
+   * import did not stop to fetch on purpose (LOS-202).
+   *
+   * What is skipped here is filled in later, on first view of the book. See
+   * enrichBookDetails in models/books/get-by-slug.
+   */
+  enrich?: boolean;
 }
 
 export async function addToLibrary(userId: number, params: AddToLibraryParams) {
-  const resolved = await resolveEditionFields(params);
+  const resolved = params.enrich === false ? {} : await resolveEditionFields(params);
   const book = await upsertBook({ ...params, ...resolved });
   const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
 
