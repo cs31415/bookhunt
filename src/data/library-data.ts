@@ -112,6 +112,15 @@ export async function removeFromLibrary(userId: number, bookId: number) {
   return result.rows[0]?.fn_remove_from_library as boolean;
 }
 
+/** Returns how many entries were actually removed; ids the user does not own match nothing. */
+export async function removeManyFromLibrary(userId: number, bookIds: number[]) {
+  const result = await pool.query(
+    'SELECT * FROM fn_remove_many_from_library($1, $2)',
+    [userId, bookIds],
+  );
+  return result.rows[0]?.fn_remove_many_from_library as number;
+}
+
 export async function addUserRelated(userId: number, bookId: number, relatedBookId: number) {
   const result = await pool.query(
     'SELECT * FROM fn_add_user_related($1, $2, $3)',
