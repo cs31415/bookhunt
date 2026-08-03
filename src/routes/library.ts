@@ -6,6 +6,7 @@ import { addToLibraryBySlug } from '../controllers/library/add-to-library-by-slu
 import { bulkAddToLibrary } from '../controllers/library/bulk-add-to-library';
 import { updateEntry } from '../controllers/library/update-entry';
 import { removeEntry } from '../controllers/library/remove-entry';
+import { bulkRemoveFromLibrary } from '../controllers/library/bulk-remove-from-library';
 import { addRelated } from '../controllers/library/add-related';
 import { removeRelated } from '../controllers/library/remove-related';
 
@@ -20,6 +21,9 @@ router.get('/search', searchLibrary);
 router.post('/bulk', bulkAddToLibrary);
 router.post('/:slug', addToLibraryBySlug);
 router.put('/:bookId', updateEntry);
+// Above the wildcard for the same reason /search is: otherwise "bulk" is read
+// as a bookId and parses to NaN.
+router.delete('/bulk', bulkRemoveFromLibrary);
 router.delete('/:bookId', removeEntry);
 router.post('/:bookId/related', addRelated);
 router.delete('/:bookId/related/:relatedBookId', removeRelated);
