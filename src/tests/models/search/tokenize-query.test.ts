@@ -15,22 +15,32 @@ describe('tokenizeQuery', () => {
   });
 
   /**
-   * fn_match_import_rows scores each term as `title ILIKE '%term%'`, so a hyphen
-   * kept inside a term has to appear in the stored title character for
-   * character. "half-lion" scored nothing against a book catalogued as
-   * "Half - Lion", so re-importing the reader's own file offered to add it a
-   * second time (LOS-203).
+   * fn_match_import_rows scores each term as `title ILIKE '%term%'`, so
+   * punctuation kept inside a term has to appear in the stored title character
+   * for character. Both of these came from a reader re-importing their own file
+   * and being offered a book they already owned (LOS-203):
+   *
+   *   "half-lion"     vs a book catalogued as "Half - Lion"
+   *   "celebrations!" vs a book catalogued as "Celebrations"
    */
-  describe('word separators the catalog disagrees about', () => {
+  describe('punctuation the catalog disagrees about', () => {
     it.each([
       ['half-lion', ['half', 'lion']],
+      ['celebrations!', ['celebrations']],
+      ['who moved my cheese?', ['who', 'moved', 'cheese']],
       ['well-trained mind', ['well', 'trained', 'mind']],
       ['spider-man', ['spider', 'man']],
       ['science/fiction', ['science', 'fiction']],
       ['bhagavad–gita', ['bhagavad', 'gita']],
-      ['notre—dame', ['notre', 'dame']],
+      ['dune: part two', ['dune', 'part', 'two']],
+      ['norwegian wood (vintage)', ['norwegian', 'wood', 'vintage']],
+      ['the "real" story', ['real', 'story']],
     ])('%s becomes %p', (input, expected) => {
       expect(tokenizeQuery(input)).toEqual(expected);
+    });
+
+    it('keeps non-ASCII letters, which are not punctuation', () => {
+      expect(tokenizeQuery('niños como yo')).toEqual(['niños', 'como', 'yo']);
     });
   });
 
