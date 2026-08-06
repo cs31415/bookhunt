@@ -7,6 +7,7 @@ import { cacheGet } from '../cache/cache-get';
 import { isCacheEnabled } from '../cache/redis-client';
 import { cacheSet } from '../cache/cache-set';
 import { cacheKey } from '../cache/cache-key';
+import { redactUrlSecrets } from './redact-url-secrets';
 
 // Open Library asks callers to identify themselves and throttles anonymous
 // traffic more aggressively; sending nothing risks being lumped in with bots.
@@ -60,6 +61,10 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   const maxAttempts = httpAttempts();
   const backoff = httpBackoffMs();
   const start = Date.now();
+  // Bound once here, and never log `url` below: Google Books carries its API key
+  // in the query string, so the raw URL is a credential (LOS-188). Anything
+  // added to this function should reach for this, not the argument.
+  const safeUrl = redactUrlSecrets(url);
 
   // Imports and photo scans resolve overlapping titles, and every book detail
   // view re-resolves the same volume id, so this is where the quota actually
@@ -70,7 +75,7 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   const cached = caching ? await cacheGet<CachedResponse>(key) : null;
   if (cached) {
     if (logging) {
-      console.log(`[books:${provider}] ${url} -> ${cached.status} (cached), ${Date.now() - start}ms`);
+      console.log(`[books:${provider}] ${safeUrl} -> ${cached.status} (cached), ${Date.now() - start}ms`);
     }
     // Deliberately not counted by recordProviderCall: no request left the
     // process, and counting it would overstate real quota consumption.
@@ -99,7 +104,7 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
       }
 
       if (logging) {
-        console.log(`[books:${provider}] ${url} -> ${response.status}, ${Date.now() - start}ms`);
+        console.log(`[books:${provider}] ${safeUrl} -> ${response.status}, ${Date.now() - start}ms`);
       }
 
       // Only successes, and never anything in RETRYABLE: those are exactly the
@@ -129,7 +134,7 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
         continue;
       }
       if (logging) {
-        console.log(`[books:${provider}] ${url} -> failed, ${Date.now() - start}ms`);
+        console.log(`[books:${provider}] ${safeUrl} -> failed, ${Date.now() - start}ms`);
       }
       throw error;
     }
