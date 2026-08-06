@@ -161,6 +161,28 @@ describe('loggedFetch', () => {
         expect(console.log).toHaveBeenCalledWith(expect.stringContaining('[books:google_books]'));
       });
 
+      // LOS-188: Google Books takes its API key in the query string, so the raw
+      // URL is a credential. Every line that carries a URL has to mask it.
+      it('masks the API key on the success line', async () => {
+        mockFetch(() => Promise.resolve({ ok: true, status: 200 }));
+
+        await loggedFetch('google_books', 'https://example.test/v1?q=dune&key=AIzaSyReal');
+
+        expect(console.log).toHaveBeenCalledWith(expect.stringContaining('key=[redacted]'));
+        expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('AIzaSyReal'));
+      });
+
+      it('masks the API key on the failure line', async () => {
+        mockFetch(() => Promise.reject(new Error('network down')));
+
+        await expect(
+          loggedFetch('google_books', 'https://example.test/v1?q=dune&key=AIzaSyReal'),
+        ).rejects.toThrow('network down');
+
+        expect(console.log).toHaveBeenCalledWith(expect.stringContaining('key=[redacted]'));
+        expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('AIzaSyReal'));
+      });
+
       it('keeps warning about retries, which report a provider misbehaving', async () => {
         mockFetch((attempt) =>
           Promise.resolve(attempt === 1 ? { ok: false, status: 503 } : { ok: true, status: 200 }),

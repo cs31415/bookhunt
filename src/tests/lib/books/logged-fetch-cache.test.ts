@@ -64,6 +64,24 @@ describe('loggedFetch caching', () => {
     expect(stats.providerCalls.get('google_books')).toBeUndefined();
   });
 
+  // LOS-188 — the hit line carries the URL too, and it is the one most easily
+  // missed: it is the only log built before the request loop is even entered.
+  it('masks the API key on the cache-hit line', async () => {
+    const original = process.env.LOG_BOOKS_PROVIDER_QUERIES;
+    process.env.LOG_BOOKS_PROVIDER_QUERIES = 'true';
+    mockCacheGet.mockResolvedValue({ status: 200, body: '{}' });
+
+    try {
+      await loggedFetch('google_books', 'https://example.test/volumes/abc?key=AIzaSyReal');
+
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('key=[redacted]'));
+      expect(console.log).not.toHaveBeenCalledWith(expect.stringContaining('AIzaSyReal'));
+    } finally {
+      if (original === undefined) delete process.env.LOG_BOOKS_PROVIDER_QUERIES;
+      else process.env.LOG_BOOKS_PROVIDER_QUERIES = original;
+    }
+  });
+
   it('stores a success and still hands the body to the caller', async () => {
     mockFetch(jsonResponse({ totalItems: 2 }));
 
