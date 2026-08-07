@@ -18,6 +18,9 @@ BEGIN;
 -- reset partway rather than clearing.
 SET LOCAL client_min_messages = warning;
 
+DROP TABLE IF EXISTS canned_search_draws CASCADE;
+DROP TABLE IF EXISTS user_pinned_searches CASCADE;
+DROP TABLE IF EXISTS canned_searches CASCADE;
 DROP TABLE IF EXISTS ai_summaries CASCADE;
 DROP TABLE IF EXISTS library_entries CASCADE;
 DROP TABLE IF EXISTS books CASCADE;

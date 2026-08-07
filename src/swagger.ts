@@ -19,6 +19,16 @@ const options: swaggerJsdoc.Options = {
           bearerFormat: 'JWT',
         },
       },
+      schemas: {
+        CannedSearch: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            query: { type: 'string', example: 'history that reads like a thriller' },
+            category: { type: 'string', nullable: true, example: 'era-and-place' },
+          },
+        },
+      },
     },
   },
   apis: ['./src/controllers/**/*.ts'],
