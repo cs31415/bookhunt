@@ -73,6 +73,32 @@ async function reportDistribution(label: string) {
   );
 }
 
+/**
+ * Books carrying each kind of tag at all.
+ *
+ * Distribution above answers "do books share vocabulary"; this answers "do books
+ * have tags", which is the separate thing a sparse filter is complaining about
+ * (LOS-187). Subjects are the yardstick — they come from the provider rather
+ * than a model, so they are as covered as the catalog gets.
+ */
+async function reportCoverage(label: string) {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS books,
+            COUNT(*) FILTER (WHERE COALESCE(array_length(subjects, 1), 0) > 0)::int AS subjects,
+            COUNT(*) FILTER (WHERE COALESCE(array_length(themes, 1), 0) > 0)::int AS themes,
+            COUNT(*) FILTER (WHERE COALESCE(array_length(moods, 1), 0) > 0)::int AS moods
+     FROM books`,
+  );
+  const { books, subjects, themes, moods } = result.rows[0];
+  const percent = (n: number) => (books === 0 ? '0' : Math.round((n / books) * 100));
+  console.log(
+    `${label} coverage of ${books} books: ` +
+      `subjects ${subjects} (${percent(subjects)}%), ` +
+      `themes ${themes} (${percent(themes)}%), ` +
+      `moods ${moods} (${percent(moods)}%)`,
+  );
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const limit = parseNumberFlag(argv, '--limit');
@@ -81,6 +107,7 @@ async function main() {
 
   const books = await booksToTag(limit, all);
   await reportDistribution('Before');
+  await reportCoverage('Before');
 
   if (listOnly) {
     const vocabulary = await getTagVocabulary('subjects', 150);
@@ -110,6 +137,7 @@ async function main() {
         console.log(`  ${book?.title}`);
         console.log(`    categories: ${result.categories.join(' | ')}`);
         console.log(`    themes:     ${result.themes.join(' | ')}`);
+        console.log(`    moods:      ${result.moods.join(' | ')}`);
       }
     } catch (error) {
       // One batch failing should not cost the run; the vocabulary built so far
@@ -121,6 +149,7 @@ async function main() {
 
   console.log('');
   await reportDistribution('After');
+  await reportCoverage('After');
   console.log(`${tagged} books tagged, ${skipped} left for a re-run.`);
 }
 
