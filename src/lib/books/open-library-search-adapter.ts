@@ -1,11 +1,9 @@
-import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
+import { OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
 import { loggedFetch } from './logged-fetch';
 import { BooksProviderError } from './books-provider-error';
 import { SearchResult } from './books-types';
 
 export async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
-  await throttleOpenLibrary();
-
   // `publisher` is requested explicitly (LOS-168): it's the only provider field
   // that can disambiguate books sharing a generic title, such as travel guides
   // with no author. Open Library returns it as an array aggregated over every

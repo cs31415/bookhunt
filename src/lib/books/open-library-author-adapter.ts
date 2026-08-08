@@ -1,4 +1,4 @@
-import { throttleOpenLibrary, OPENLIBRARY_API_URL } from './open-library-rate-limiter';
+import { OPENLIBRARY_API_URL } from './open-library-rate-limiter';
 import { extractOpenLibraryTextField } from './extract-open-library-text-field';
 import { loggedFetch } from './logged-fetch';
 import { AuthorDetails } from './books-types';
@@ -10,8 +10,6 @@ function extractBirthYear(birthDate: string | undefined): number | null {
 
 export async function fetchOpenLibraryAuthorDetails(name: string): Promise<AuthorDetails> {
   const empty: AuthorDetails = { birthYear: null, bio: null };
-
-  await throttleOpenLibrary();
 
   let doc: any;
   try {
@@ -27,8 +25,6 @@ export async function fetchOpenLibraryAuthorDetails(name: string): Promise<Autho
   if (!doc) return empty;
 
   const birthYear = extractBirthYear(doc.birth_date);
-
-  await throttleOpenLibrary();
 
   let bio: string | null = null;
   try {
