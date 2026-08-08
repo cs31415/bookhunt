@@ -3,18 +3,21 @@
 ## Tables
 
 ### `users`
-Registered app users. Stores credentials, profile info, and password-reset state.
+Registered app users. Stores credentials, profile info, email-verification and password-reset state.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | SERIAL PK | Auto-incrementing unique identifier |
-| email | VARCHAR(255) UNIQUE NOT NULL | Login email; used for auth and password reset |
+| email | VARCHAR(255) UNIQUE NOT NULL | Login email; stored lowercase. `idx_users_email_lower` makes uniqueness case-insensitive |
 | password_hash | VARCHAR(255) NOT NULL | bcrypt-hashed password |
 | display_name | VARCHAR(255) NOT NULL | Public name shown in the UI |
 | preferences | JSONB DEFAULT '{}' | User settings (e.g. accent color, dark mode, fonts) |
 | is_discoverable | BOOLEAN DEFAULT FALSE | Whether this user's library is visible to others |
 | reset_token | VARCHAR(255) UNIQUE | nullable; one-time token for password reset flow |
 | reset_token_expires_at | TIMESTAMPTZ | nullable; expiry time for the reset token |
+| email_verified_at | TIMESTAMPTZ | nullable; NULL means sign-in is refused with 403 |
+| verification_token | VARCHAR(255) UNIQUE | nullable; one-time token from the sign-up email |
+| verification_token_expires_at | TIMESTAMPTZ | nullable; 24 hours after the token is issued |
 | created_at | TIMESTAMPTZ DEFAULT NOW() | Account creation timestamp |
 
 ### `authors`
@@ -99,10 +102,12 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 ## Functions
 
 ### Auth
-- `fn_register_user(p_email, p_password_hash, p_display_name)` → `users` row
+- `fn_register_user(p_email, p_password_hash, p_display_name, p_verification_token, p_verification_expires_at)` → `users` row (created unverified)
 - `fn_find_user_by_email(p_email)` → `users` row or NULL
 - `fn_set_reset_token(p_email, p_token, p_expires_at)` → BOOLEAN
 - `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
+- `fn_verify_email(p_token)` → `users` row, or no rows if the token is unknown, expired or spent
+- `fn_set_verification_token(p_email, p_token, p_expires_at)` → BOOLEAN (only for accounts still unverified)
 
 ### Books & Authors
 - `fn_upsert_book_from_google(p_google_books_id, p_slug, p_title, p_author_name, p_year, p_publisher, p_pages, p_rating, p_subjects, p_blurb, p_cover_url, p_isbn13, p_language, p_hue)` → creates book + author if not exists, returns book row. Author is upserted by name (slug derived from name).

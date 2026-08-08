@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { findUserByEmail } from '../../models/auth/login';
+import { signAuthToken } from '../../lib/auth/sign-auth-token';
 
 /**
  * @swagger
@@ -36,10 +36,17 @@ import { findUserByEmail } from '../../models/auth/login';
  *                 token: { type: string }
  *       401:
  *         description: Invalid credentials
+ *       403:
+ *         description: Email address not yet verified (code EMAIL_NOT_VERIFIED)
  */
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body ?? {};
+
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      res.status(400).json({ error: 'Email and password are required.' });
+      return;
+    }
 
     const user = await findUserByEmail(email);
 
@@ -55,11 +62,18 @@ export async function login(req: Request, res: Response) {
       return;
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN ?? '7d' } as jwt.SignOptions,
-    );
+    // Checked after the password, not before: answering "verify your email"
+    // to any address that happens to exist would confirm the account to someone
+    // who has not proved they can sign into it (LOS-218).
+    if (!user.email_verified_at) {
+      res.status(403).json({
+        error: 'Please verify your email address before signing in.',
+        code: 'EMAIL_NOT_VERIFIED',
+      });
+      return;
+    }
+
+    const token = signAuthToken(user);
 
     res.json({
       user: {

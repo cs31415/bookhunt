@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { resetPassword as resetPasswordModel } from '../../models/auth/reset-password';
+import { validatePassword } from '../../lib/validate/validate-password';
 
 /**
  * @swagger
@@ -17,7 +18,7 @@ import { resetPassword as resetPasswordModel } from '../../models/auth/reset-pas
  *             required: [token, password]
  *             properties:
  *               token: { type: string }
- *               password: { type: string, minLength: 6 }
+ *               password: { type: string, minLength: 8 }
  *     responses:
  *       200:
  *         description: Password reset successful
@@ -31,9 +32,22 @@ import { resetPassword as resetPasswordModel } from '../../models/auth/reset-pas
  *         description: Invalid or expired reset token
  */
 export async function resetPassword(req: Request, res: Response) {
-  try {
-    const { token, password } = req.body;
+  const { token, password } = req.body ?? {};
 
+  if (typeof token !== 'string' || token.trim().length === 0) {
+    res.status(400).json({ error: 'A reset token is required.' });
+    return;
+  }
+
+  // Same rules as registration: a reset is the other way a password gets set,
+  // and it had no floor at all before this.
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    res.status(400).json({ error: passwordError });
+    return;
+  }
+
+  try {
     const passwordHash = await bcrypt.hash(password, 10);
     const success = await resetPasswordModel(token, passwordHash);
 

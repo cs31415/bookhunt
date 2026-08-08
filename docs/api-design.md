@@ -19,10 +19,16 @@ All routers are mounted under `/api` (e.g. `app.use('/api', router)`). Paths bel
 ### Auth (`/auth`)
 | Method | Path | Auth | Request | Response |
 |--------|------|------|---------|----------|
-| POST | /register | None | `{ email, password, displayName }` | `{ user: { id, email, displayName }, token }` |
-| POST | /login | None | `{ email, password }` | `{ user: { id, email, displayName }, token }` |
+| POST | /register | None | `{ email, password, displayName }` | 201 `{ user: { id, email, displayName }, verificationRequired: true }` — no session token; 409 if the address is taken (case-insensitively), 400 on a malformed field |
+| POST | /login | None | `{ email, password }` | `{ user: { id, email, displayName }, token }` — 401 on bad credentials, 403 `{ code: 'EMAIL_NOT_VERIFIED' }` until the address is confirmed |
+| POST | /verify-email | None | `{ token }` | `{ user: { id, email, displayName }, token }` — signs the reader in; 400 if unknown, expired or already used |
+| POST | /resend-verification | None | `{ email }` | `{ ok: true }` (always 200) |
 | POST | /forgot-password | None | `{ email }` | `{ ok: true }` (always 200) |
 | POST | /reset-password | None | `{ token, password }` | `{ ok: true }` |
+
+Registration is gated on email verification: an account is created unverified,
+emailed a link good for 24 hours, and refused at sign-in until it is used.
+Passwords are a minimum of 8 characters. Every `/auth` route is rate limited.
 
 ### Books (`/books`)
 | Method | Path | Auth | Params/Body | Response |
