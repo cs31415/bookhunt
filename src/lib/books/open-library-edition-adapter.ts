@@ -1,12 +1,10 @@
-import { throttleOpenLibrary, OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
+import { OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
 import { extractOpenLibraryTextField } from './extract-open-library-text-field';
 import { loggedFetch } from './logged-fetch';
 import { EditionDetails, SearchResult } from './books-types';
 
 export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Promise<EditionDetails> {
   const empty: EditionDetails = { description: null, publisher: null, pages: null };
-
-  await throttleOpenLibrary();
 
   let edition: any;
   try {
@@ -23,7 +21,6 @@ export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Pro
 
   const workKey: string | undefined = edition.works?.[0]?.key;
   if (!description && workKey) {
-    await throttleOpenLibrary();
     try {
       const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}${workKey}.json`);
       if (response.ok) {
@@ -41,8 +38,6 @@ export async function fetchOpenLibraryEditionDetails(openLibraryId: string): Pro
 // Best-effort: the edition JSON has no resolved author names (only author keys)
 // and no per-edition subjects, so `authors`/`categories` come back empty here.
 export async function getOpenLibraryById(openLibraryId: string): Promise<SearchResult | null> {
-  await throttleOpenLibrary();
-
   let edition: any;
   try {
     const response = await loggedFetch('open_library', `${OPENLIBRARY_API_URL}/books/${openLibraryId}.json`);

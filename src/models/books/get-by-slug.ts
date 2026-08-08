@@ -113,9 +113,19 @@ function needsEditionDetails(book: {
  * Reuses enrichThinBookRow, whose COALESCE means nothing already on the row is
  * overwritten -- this only ever fills blanks.
  *
- * A miss is remembered, so a book the provider simply has nothing more to say
- * about does not cost a request on every view. There is no positive cache: a
- * success fills the blanks, after which needsEditionDetails is false.
+ * The attempt is remembered either way, so a book the provider has nothing more
+ * to say about does not cost a request on every view.
+ *
+ * Remembering only a *wholly* empty answer was not enough. needsEditionDetails
+ * is true when any one of blurb, publisher and pages is blank, and a provider
+ * that has two of the three fills those two and leaves the third blank forever
+ * -- so the row still qualified, and every single view fetched the same edition
+ * again to learn the same thing. Open Library has no page count for OL35961335M,
+ * which is how a warm-cache book detail request came to cost 1-2s of rate-limit
+ * sleep (LOS-217).
+ *
+ * A complete fill makes needsEditionDetails false, so the key it leaves behind
+ * is never read; it costs one write to keep the two paths the same shape.
  */
 async function fillEditionDetails(book: any) {
   const key = cacheKey('books:edition-miss', RESOLVE_MISS_VERSION, book.slug);
@@ -135,8 +145,10 @@ async function fillEditionDetails(book: any) {
     return book;
   }
 
+  // Asked and answered, whatever the answer was.
+  await cacheSet(key, true, RESOLVE_MISS_TTL_SECONDS);
+
   if (!details.description && !details.publisher && !details.pages) {
-    await cacheSet(key, true, RESOLVE_MISS_TTL_SECONDS);
     return book;
   }
 

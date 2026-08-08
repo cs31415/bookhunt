@@ -486,6 +486,27 @@ describe('filling edition details on first view', () => {
     expect(mockEnrichThinBookRow).not.toHaveBeenCalled();
   });
 
+  /**
+   * The case that made a warm-cache detail view cost 1-2s (LOS-217). Open
+   * Library has the description and publisher for this edition but no page
+   * count, so needsEditionDetails stayed true and every view fetched the same
+   * edition again to be told the same thing.
+   */
+  it('remembers an answer that fills only some of the blanks', async () => {
+    const getEditionDetails = jest
+      .fn()
+      .mockResolvedValue({ description: 'A classic.', publisher: 'Ace', pages: null });
+    mockGetBooksProviderAdapter.mockReturnValue({ getEditionDetails });
+    mockGetBookBySlug
+      .mockResolvedValueOnce(IMPORTED)
+      .mockResolvedValueOnce({ ...IMPORTED, blurb: 'A classic.', publisher: 'Ace', pages: null });
+
+    await resolveBookBySlug('dune');
+
+    expect(mockEnrichThinBookRow).toHaveBeenCalled();
+    expect(mockCacheSet).toHaveBeenCalled();
+  });
+
   it('does not ask again once a miss is remembered', async () => {
     const getEditionDetails = jest.fn();
     mockGetBooksProviderAdapter.mockReturnValue({ getEditionDetails });

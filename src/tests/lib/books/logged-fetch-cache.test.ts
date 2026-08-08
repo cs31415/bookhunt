@@ -3,14 +3,17 @@ import { cacheGet } from '../../../lib/cache/cache-get';
 import { cacheSet } from '../../../lib/cache/cache-set';
 import { isCacheEnabled } from '../../../lib/cache/redis-client';
 import { runWithCallStats } from '../../../lib/stats/run-with-call-stats';
+import { throttleOpenLibrary } from '../../../lib/books/open-library-rate-limiter';
 
 jest.mock('../../../lib/cache/cache-get');
 jest.mock('../../../lib/cache/cache-set');
 jest.mock('../../../lib/cache/redis-client');
+jest.mock('../../../lib/books/open-library-rate-limiter');
 
 const mockCacheGet = cacheGet as jest.Mock;
 const mockCacheSet = cacheSet as jest.Mock;
 const mockIsCacheEnabled = isCacheEnabled as jest.Mock;
+const mockThrottleOpenLibrary = throttleOpenLibrary as jest.Mock;
 
 const DAY = 24 * 60 * 60;
 
@@ -123,6 +126,53 @@ describe('loggedFetch caching', () => {
     await loggedFetch('google_books', 'https://example.test/volumes/b');
 
     expect(mockCacheSet.mock.calls[0][0]).not.toBe(mockCacheSet.mock.calls[1][0]);
+  });
+
+  /**
+   * The throttle used to sit in each Open Library adapter, ahead of this
+   * function and therefore ahead of the cache check — so a fully cached lookup
+   * still slept a second to reach a 4ms read, and a book detail view paying for
+   * two lookups slept two (LOS-217). It protects Open Library's 1/sec limit on
+   * outbound requests; a hit sends nothing and owes nothing.
+   */
+  describe('Open Library rate limiting', () => {
+    it('does not throttle a cache hit', async () => {
+      mockCacheGet.mockResolvedValue({ status: 200, body: '{}' });
+      mockFetch(jsonResponse({}));
+
+      await loggedFetch('open_library', 'https://openlibrary.test/books/OL1M.json');
+
+      expect(mockThrottleOpenLibrary).not.toHaveBeenCalled();
+    });
+
+    it('throttles a request that actually goes out', async () => {
+      mockFetch(jsonResponse({}));
+
+      await loggedFetch('open_library', 'https://openlibrary.test/books/OL1M.json');
+
+      expect(mockThrottleOpenLibrary).toHaveBeenCalledTimes(1);
+    });
+
+    // A retry is another request against the same 1/sec limit. Held per adapter,
+    // the throttle covered the first attempt only.
+    it('throttles each retry, not just the first attempt', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({}, 503))
+        .mockResolvedValueOnce(jsonResponse({})) as any;
+
+      await loggedFetch('open_library', 'https://openlibrary.test/books/OL1M.json');
+
+      expect(mockThrottleOpenLibrary).toHaveBeenCalledTimes(2);
+    });
+
+    it('leaves other providers unthrottled', async () => {
+      mockFetch(jsonResponse({}));
+
+      await loggedFetch('google_books', 'https://example.test/volumes/abc');
+
+      expect(mockThrottleOpenLibrary).not.toHaveBeenCalled();
+    });
   });
 
   // Local dev and the test suite run with no Redis, and that path has to behave
