@@ -2,17 +2,23 @@ import { cacheGet } from '../../../lib/cache/cache-get';
 import { cacheSet } from '../../../lib/cache/cache-set';
 import { cacheKey } from '../../../lib/cache/cache-key';
 import { getRedis, isCacheEnabled, resetRedis } from '../../../lib/cache/redis-client';
+import { resetCacheLogging } from '../../../lib/cache/log-cache';
 
 jest.mock('ioredis');
 
 const MockRedis = jest.requireMock('ioredis').default ?? jest.requireMock('ioredis');
 
 const ORIGINAL_URL = process.env.REDIS_URL;
+const ORIGINAL_LOG = process.env.LOG_CACHE_QUERIES;
 
 afterEach(() => {
   resetRedis();
+  resetCacheLogging();
   if (ORIGINAL_URL === undefined) delete process.env.REDIS_URL;
   else process.env.REDIS_URL = ORIGINAL_URL;
+  if (ORIGINAL_LOG === undefined) delete process.env.LOG_CACHE_QUERIES;
+  else process.env.LOG_CACHE_QUERIES = ORIGINAL_LOG;
+  jest.restoreAllMocks();
   jest.clearAllMocks();
 });
 
@@ -134,5 +140,138 @@ describe('with REDIS_URL set', () => {
     client.get.mockResolvedValue('not json');
 
     await expect(cacheGet('k')).resolves.toBeNull();
+  });
+});
+
+// The cache's failure modes are all shaped like a miss, so these logs are the
+// only way to tell a dead cache from a cold one.
+describe('cache logging', () => {
+  let log: jest.SpyInstance;
+
+  beforeEach(() => {
+    log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    // Silences the outage warning from reportCacheFailure in the failing-read
+    // case below, which is asserted on elsewhere.
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  function lines(): string[] {
+    return log.mock.calls.map((call) => String(call[0]));
+  }
+
+  describe('with LOG_CACHE_QUERIES unset', () => {
+    it('says nothing at all', async () => {
+      process.env.REDIS_URL = 'redis://localhost:6379';
+      MockRedis.mockImplementation(() => ({
+        get: jest.fn().mockResolvedValue('{"a":1}'),
+        set: jest.fn().mockResolvedValue('OK'),
+        on: jest.fn(),
+        disconnect: jest.fn(),
+      }));
+
+      await cacheGet('k');
+      await cacheSet('k', { a: 1 }, 60);
+
+      expect(lines()).toHaveLength(0);
+    });
+  });
+
+  describe('with LOG_CACHE_QUERIES=true', () => {
+    beforeEach(() => {
+      process.env.LOG_CACHE_QUERIES = 'true';
+    });
+
+    it('reports the cache as disabled exactly once, not once per call', async () => {
+      delete process.env.REDIS_URL;
+
+      await cacheGet('a');
+      await cacheGet('b');
+      await cacheSet('c', { a: 1 }, 60);
+
+      const disabled = lines().filter((line) => line.includes('disabled'));
+      expect(disabled).toHaveLength(1);
+      expect(disabled[0]).toContain('REDIS_URL');
+    });
+
+    describe('with Redis up', () => {
+      let client: { get: jest.Mock; set: jest.Mock; on: jest.Mock; disconnect: jest.Mock };
+
+      beforeEach(() => {
+        process.env.REDIS_URL = 'redis://localhost:6379';
+        client = {
+          get: jest.fn(),
+          set: jest.fn().mockResolvedValue('OK'),
+          on: jest.fn(),
+          disconnect: jest.fn(),
+        };
+        MockRedis.mockImplementation(() => client);
+      });
+
+      it('distinguishes a miss from a hit, and names the key', async () => {
+        const key = cacheKey('ai:search', 2, 'ada lovelace');
+
+        client.get.mockResolvedValue(null);
+        await cacheGet(key);
+        client.get.mockResolvedValue('[{"title":"Ada"}]');
+        await cacheGet(key);
+
+        expect(lines()[0]).toContain(`miss ${key}`);
+        expect(lines()[1]).toContain(`hit ${key}`);
+        expect(lines()[0]).toMatch(/\d+ms$/);
+      });
+
+      // A key written with the wrong duration is indistinguishable from a correct
+      // one until it expires, which is far too late to notice.
+      it('records the TTL on a write', async () => {
+        await cacheSet('k', { a: 1 }, 2592000);
+
+        expect(lines()[0]).toContain('set k ttl=2592000s');
+      });
+
+      // withTimeout resolves to its fallback instead of rejecting, so a refused
+      // or timed-out write never reaches the catch. Reporting it as a set would
+      // make a dead cache look like a working one.
+      it('does not claim a write succeeded when it did not', async () => {
+        client.set.mockResolvedValue(null);
+
+        await cacheSet('k', { a: 1 }, 60);
+
+        expect(lines()[0]).toContain('set-failed k');
+        expect(lines()[0]).not.toMatch(/\bset k\b/);
+      });
+
+      it('logs a rejected write as a failure', async () => {
+        client.set.mockRejectedValue(new Error('ECONNREFUSED'));
+
+        await cacheSet('k', { a: 1 }, 60);
+
+        expect(lines()[0]).toContain('set-failed k');
+      });
+
+      it('logs a failing read as a miss rather than a hit', async () => {
+        client.get.mockRejectedValue(new Error('ECONNREFUSED'));
+
+        await cacheGet('k');
+
+        expect(lines()[0]).toContain('miss k');
+      });
+
+      // Saying "hit" here would point an investigation at the wrong place.
+      it('logs an unparseable value as a miss', async () => {
+        client.get.mockResolvedValue('not json');
+
+        await cacheGet('k');
+
+        expect(lines()[0]).toContain('miss k');
+      });
+
+      it('never logs the cached value', async () => {
+        client.get.mockResolvedValue('{"secret":"cosmos"}');
+
+        await cacheGet('k');
+
+        expect(lines().join('\n')).not.toContain('cosmos');
+      });
+    });
   });
 });
