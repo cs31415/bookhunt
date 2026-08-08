@@ -1,4 +1,5 @@
 import { getRedis, reportCacheFailure, reportCacheHealthy, withTimeout } from './redis-client';
+import { logCacheDisabled, logCacheEvent } from './log-cache';
 
 /**
  * Reads a JSON value from the cache, or null for anything that is not a clean
@@ -12,15 +13,27 @@ import { getRedis, reportCacheFailure, reportCacheHealthy, withTimeout } from '.
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const redis = getRedis();
-  if (!redis) return null;
+  if (!redis) {
+    logCacheDisabled();
+    return null;
+  }
 
+  const start = Date.now();
   try {
     const raw = await withTimeout(redis.get(key), null);
     reportCacheHealthy();
-    if (raw === null) return null;
-    return JSON.parse(raw) as T;
+    if (raw === null) {
+      logCacheEvent('miss', key, start);
+      return null;
+    }
+    // Parsed before logging the hit: an unparseable value is a miss, and saying
+    // "hit" for one would point an investigation at the wrong place.
+    const value = JSON.parse(raw) as T;
+    logCacheEvent('hit', key, start);
+    return value;
   } catch (error) {
     reportCacheFailure('get', error);
+    logCacheEvent('miss', key, start);
     return null;
   }
 }
