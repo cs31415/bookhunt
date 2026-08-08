@@ -1,13 +1,17 @@
 import { Request, Response } from 'express';
-import { requestPasswordReset } from '../../models/auth/forgot-password';
+import { resendVerification as resendVerificationModel } from '../../models/auth/resend-verification';
 import { isValidEmail } from '../../lib/validate/is-valid-email';
 
 /**
  * @swagger
- * /auth/forgot-password:
+ * /auth/resend-verification:
  *   post:
  *     tags: [Auth]
- *     summary: Request a password reset email
+ *     summary: Send a fresh verification link
+ *     description: >
+ *       Always returns ok, whether or not the address has an account and
+ *       whether or not it is already verified, so the endpoint cannot be used
+ *       to discover which addresses are registered.
  *     requestBody:
  *       required: true
  *       content:
@@ -27,7 +31,7 @@ import { isValidEmail } from '../../lib/validate/is-valid-email';
  *               properties:
  *                 ok: { type: boolean }
  */
-export async function forgotPassword(req: Request, res: Response) {
+export async function resendVerification(req: Request, res: Response) {
   const { email } = req.body ?? {};
 
   if (!isValidEmail(email)) {
@@ -36,11 +40,10 @@ export async function forgotPassword(req: Request, res: Response) {
   }
 
   try {
-    await requestPasswordReset(email);
-
+    await resendVerificationModel(email);
     res.json({ ok: true });
   } catch (err) {
-    console.error('Forgot password error:', err);
+    console.error('Resend verification error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

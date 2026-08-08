@@ -1,18 +1,14 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { register } from '../../../controllers/auth/register';
 import * as registerModel from '../../../models/auth/register';
 
 jest.mock('../../../models/auth/register');
-jest.mock('bcryptjs');
-jest.mock('jsonwebtoken');
 
 const mockRegisterUser = registerModel.registerUser as jest.Mock;
-const mockHash = bcrypt.hash as jest.Mock;
-const mockSign = jwt.sign as jest.Mock;
 
-function makeReq(body = {}) { return { body } as Request; }
+function makeReq(body: unknown = {}) {
+  return { body } as Request;
+}
 
 function makeRes() {
   return {
@@ -21,44 +17,109 @@ function makeRes() {
   } as unknown as Response;
 }
 
-describe('register controller', () => {
-  beforeEach(() => {
-    process.env.JWT_SECRET = 'test-secret';
-  });
+const validBody = {
+  email: 'reader@example.com',
+  password: 'b00kW0rm!',
+  displayName: 'Ada Reader',
+};
 
-  it('returns user and token on successful registration', async () => {
-    mockHash.mockResolvedValue('hashed');
-    mockRegisterUser.mockResolvedValue({ id: 1, email: 'a@b.com', display_name: 'Alice' });
-    mockSign.mockReturnValue('jwt');
+describe('register controller', () => {
+  it('creates the account and reports that verification is required', async () => {
+    mockRegisterUser.mockResolvedValue({
+      id: 1,
+      email: 'reader@example.com',
+      displayName: 'Ada Reader',
+    });
 
     const res = makeRes();
-    await register(makeReq({ email: 'a@b.com', password: 'pass', displayName: 'Alice' }), res);
+    await register(makeReq(validBody), res);
 
-    expect(mockHash).toHaveBeenCalledWith('pass', 10);
+    expect(mockRegisterUser).toHaveBeenCalledWith(
+      'reader@example.com',
+      'b00kW0rm!',
+      'Ada Reader',
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
-      user: { id: 1, email: 'a@b.com', displayName: 'Alice' },
-      token: 'jwt',
+      user: { id: 1, email: 'reader@example.com', displayName: 'Ada Reader' },
+      verificationRequired: true,
     });
   });
 
-  it('returns 409 when email is already registered', async () => {
-    mockHash.mockResolvedValue('hashed');
+  it('issues no session token', async () => {
+    mockRegisterUser.mockResolvedValue({
+      id: 1,
+      email: 'reader@example.com',
+      displayName: 'Ada Reader',
+    });
+
+    const res = makeRes();
+    await register(makeReq(validBody), res);
+
+    // The whole point of the hard gate: registering does not sign anyone in.
+    const [payload] = (res.json as jest.Mock).mock.calls[0];
+    expect(payload).not.toHaveProperty('token');
+  });
+
+  it('returns 409 when the email is already registered', async () => {
     const err: any = new Error('duplicate key');
     err.code = '23505';
     mockRegisterUser.mockRejectedValue(err);
 
     const res = makeRes();
-    await register(makeReq({ email: 'a@b.com', password: 'p', displayName: 'A' }), res);
+    await register(makeReq(validBody), res);
+
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith({ error: 'Email already registered' });
   });
 
-  it('returns 500 on unexpected error', async () => {
-    mockHash.mockResolvedValue('hashed');
+  describe('validation', () => {
+    it.each([
+      ['a missing password', { ...validBody, password: undefined }, 'Password is required.'],
+      [
+        'a short password',
+        { ...validBody, password: 'short' },
+        'Password must be at least 8 characters.',
+      ],
+      [
+        'a malformed email',
+        { ...validBody, email: 'not-an-address' },
+        'A valid email address is required.',
+      ],
+      [
+        'a missing email',
+        { ...validBody, email: undefined },
+        'A valid email address is required.',
+      ],
+      [
+        'a blank display name',
+        { ...validBody, displayName: '   ' },
+        'Display name is required.',
+      ],
+    ])('returns 400 for %s', async (_label, body, error) => {
+      const res = makeRes();
+      await register(makeReq(body), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error });
+      // Nothing is written when the request never made sense.
+      expect(mockRegisterUser).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 rather than 500 for an absent body', async () => {
+      const res = makeRes();
+      await register(makeReq(undefined), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+  });
+
+  it('returns 500 on an unexpected error', async () => {
     mockRegisterUser.mockRejectedValue(new Error('DB error'));
 
     const res = makeRes();
-    await register(makeReq({ email: 'a@b.com', password: 'p', displayName: 'A' }), res);
+    await register(makeReq(validBody), res);
+
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
   });

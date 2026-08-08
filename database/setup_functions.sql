@@ -8,6 +8,8 @@ BEGIN;
 \ir functions/fn_find_user_by_email.sql
 \ir functions/fn_set_reset_token.sql
 \ir functions/fn_reset_password.sql
+\ir functions/fn_verify_email.sql
+\ir functions/fn_set_verification_token.sql
 
 -- books & authors
 \ir functions/fn_upsert_book.sql

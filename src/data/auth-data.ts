@@ -1,9 +1,15 @@
 import { pool } from '../lib/db';
 
-export async function registerUser(email: string, passwordHash: string, displayName: string) {
+export async function registerUser(
+  email: string,
+  passwordHash: string,
+  displayName: string,
+  verificationToken: string,
+  verificationExpiresAt: Date,
+) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_register_user($1, $2, $3)',
-    [email, passwordHash, displayName],
+    'SELECT * FROM fn_register_user($1, $2, $3, $4, $5)',
+    [email, passwordHash, displayName, verificationToken, verificationExpiresAt],
   );
   return rows[0];
 }
@@ -29,4 +35,20 @@ export async function resetPassword(token: string, passwordHash: string) {
     [token, passwordHash],
   );
   return rows[0].fn_reset_password as boolean;
+}
+
+/** Returns the verified user, or null when the token is unknown or expired. */
+export async function verifyEmail(token: string) {
+  const { rows } = await pool.query(
+    'SELECT * FROM fn_verify_email($1)',
+    [token],
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function setVerificationToken(email: string, token: string, expiresAt: Date) {
+  await pool.query(
+    'SELECT * FROM fn_set_verification_token($1, $2, $3)',
+    [email, token, expiresAt],
+  );
 }
