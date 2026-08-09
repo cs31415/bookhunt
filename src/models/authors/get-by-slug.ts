@@ -10,12 +10,12 @@ export { getBooksByAuthor };
 export async function getAuthorBySlug(slug: string) {
   const author = await fetchAuthorBySlug(slug);
   if (!author) return null;
-  if (author.birth_year && author.country && author.bio) return author;
+  if (author.birth_year && author.bio) return author;
   return enrichAuthor(author);
 }
 
 async function enrichAuthor(author: any) {
-  let { birth_year: birthYear, country, bio } = author;
+  let { birth_year: birthYear, bio } = author;
 
   if (!birthYear || !bio) {
     const chain = parseBooksProviderConfig('BOOKS_SEARCH_PROVIDERS');
@@ -24,17 +24,16 @@ async function enrichAuthor(author: any) {
     bio = bio || details.bio;
   }
 
-  if (!birthYear || !country || !bio) {
-    const aiDetails = await generateAuthorDetails(author.name, { birthYear, country, bio });
+  if (!birthYear || !bio) {
+    const aiDetails = await generateAuthorDetails(author.name, { birthYear, bio });
     birthYear = birthYear || aiDetails.birthYear;
-    country = country || aiDetails.country;
     bio = bio || aiDetails.bio;
   }
 
-  if (birthYear === author.birth_year && country === author.country && bio === author.bio) {
+  if (birthYear === author.birth_year && bio === author.bio) {
     return author;
   }
-  return updateAuthorDetails(author.id, { birthYear, country, bio });
+  return updateAuthorDetails(author.id, { birthYear, bio });
 }
 
 interface AuthorWork {
@@ -161,7 +160,6 @@ export async function resolveProviderAuthor(slug: string, userId?: number) {
   const name = resolveAuthorName(results, slug, nameQuery);
 
   let birthYear: number | null = null;
-  let country: string | null = null;
   let bio: string | null = null;
   try {
     const chain = parseBooksProviderConfig('BOOKS_SEARCH_PROVIDERS');
@@ -169,10 +167,9 @@ export async function resolveProviderAuthor(slug: string, userId?: number) {
     birthYear = details.birthYear;
     bio = details.bio;
 
-    if (!birthYear || !country || !bio) {
-      const aiDetails = await generateAuthorDetails(name, { birthYear, country, bio });
+    if (!birthYear || !bio) {
+      const aiDetails = await generateAuthorDetails(name, { birthYear, bio });
       birthYear = birthYear || aiDetails.birthYear;
-      country = country || aiDetails.country;
       bio = bio || aiDetails.bio;
     }
   } catch (error) {
@@ -187,6 +184,6 @@ export async function resolveProviderAuthor(slug: string, userId?: number) {
 
   // Persist the resolved author so the next request for this slug hits the
   // catalog path (getAuthorBySlug) instead of re-resolving live (LOS-150).
-  const author = await createAuthor({ slug, name, birthYear, country, bio });
+  const author = await createAuthor({ slug, name, birthYear, bio });
   return { author, books };
 }

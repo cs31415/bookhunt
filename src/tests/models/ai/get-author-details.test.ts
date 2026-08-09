@@ -7,7 +7,7 @@ const mockCompleteText = completeText as jest.Mock;
 
 describe('generateAuthorDetails', () => {
   const originalEnv = process.env.LOG_LLM_QUERIES;
-  const known = { birthYear: null, country: null, bio: null };
+  const known = { birthYear: null, bio: null };
 
   afterEach(() => {
     process.env.LOG_LLM_QUERIES = originalEnv;
@@ -15,7 +15,7 @@ describe('generateAuthorDetails', () => {
 
   it('does not log when LOG_LLM_QUERIES is unset', async () => {
     delete process.env.LOG_LLM_QUERIES;
-    mockCompleteText.mockResolvedValue({ birth_year: 1900, country: 'UK', bio: 'A bio' });
+    mockCompleteText.mockResolvedValue({ birth_year: 1900, bio: 'A bio' });
 
     await generateAuthorDetails('Author Name', known);
 
@@ -24,7 +24,7 @@ describe('generateAuthorDetails', () => {
 
   it('logs generation start/end when LOG_LLM_QUERIES=true', async () => {
     process.env.LOG_LLM_QUERIES = 'true';
-    mockCompleteText.mockResolvedValue({ birth_year: 1900, country: 'UK', bio: 'A bio' });
+    mockCompleteText.mockResolvedValue({ birth_year: 1900, bio: 'A bio' });
 
     await generateAuthorDetails('Author Name', known);
 
