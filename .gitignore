@@ -8,6 +8,12 @@ scripts/.env
 .DS_Store
 *.log
 
+# Editor directories and files. extensions.json is exempt: recommended
+# extensions are a project fact, unlike a personal debug configuration.
+.vscode/*
+!.vscode/extensions.json
+.idea
+
 .claude/
 
 scripts/photos/
