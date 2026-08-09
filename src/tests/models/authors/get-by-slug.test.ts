@@ -46,14 +46,13 @@ describe('resolveProviderAuthor', () => {
     jest.clearAllMocks();
     mockParseBooksProviderConfig.mockReturnValue(['google_books', 'open_library']);
     mockGetAuthorDetailsWithFallback.mockResolvedValue({ birthYear: null, bio: null });
-    mockGenerateAuthorDetails.mockResolvedValue({ birthYear: null, country: null, bio: null });
+    mockGenerateAuthorDetails.mockResolvedValue({ birthYear: null, bio: null });
     // Echo the persisted row back the way the stored proc would, with a real id.
-    mockCreateAuthor.mockImplementation(async ({ slug, name, birthYear, country, bio }) => ({
+    mockCreateAuthor.mockImplementation(async ({ slug, name, birthYear, bio }) => ({
       id: 101,
       slug,
       name,
       birth_year: birthYear,
-      country,
       bio,
     }));
   });
@@ -77,7 +76,6 @@ describe('resolveProviderAuthor', () => {
   it('resolves a provider author by slug, enriching details and returning works', async () => {
     mockSearchBooks.mockResolvedValue([makeResult(), makeResult({ googleBooksId: 'g2', title: 'The Universe Within' })]);
     mockGetAuthorDetailsWithFallback.mockResolvedValue({ birthYear: 1960, bio: 'A paleontologist.' });
-    mockGenerateAuthorDetails.mockResolvedValue({ birthYear: null, country: 'United States', bio: null });
 
     const result = await resolveProviderAuthor('neil-shubin');
 
@@ -86,7 +84,6 @@ describe('resolveProviderAuthor', () => {
       slug: 'neil-shubin',
       name: 'Neil Shubin',
       birth_year: 1960,
-      country: 'United States',
       bio: 'A paleontologist.',
     });
     // The resolved author is persisted so later requests hit the catalog path.
@@ -94,18 +91,15 @@ describe('resolveProviderAuthor', () => {
       slug: 'neil-shubin',
       name: 'Neil Shubin',
       birthYear: 1960,
-      country: 'United States',
       bio: 'A paleontologist.',
     });
     expect(result?.books).toHaveLength(2);
     // Provider works carry no catalog identity.
     expect(result?.books.every((b) => b.bookId === null && b.slug === null)).toBe(true);
-    // Country isn't returned by provider adapters, so AI fills the gap.
-    expect(mockGenerateAuthorDetails).toHaveBeenCalledWith('Neil Shubin', {
-      birthYear: 1960,
-      country: null,
-      bio: 'A paleontologist.',
-    });
+    // Nothing is left for the model to add once the providers answered, so it
+    // is not consulted. Dropping country (LOS-228) is what made that true --
+    // it was the one field no provider could ever supply.
+    expect(mockGenerateAuthorDetails).not.toHaveBeenCalled();
   });
 
   it('recovers the canonical name from the credited author matching the slug', async () => {
@@ -149,7 +143,6 @@ describe('resolveProviderAuthor', () => {
       slug: 'neil-shubin',
       name: 'Neil Shubin',
       birth_year: null,
-      country: null,
       bio: null,
     });
     // Still persisted (with null details) so the row exists for later top-up.
@@ -157,7 +150,6 @@ describe('resolveProviderAuthor', () => {
       slug: 'neil-shubin',
       name: 'Neil Shubin',
       birthYear: null,
-      country: null,
       bio: null,
     });
     expect(result?.books).toHaveLength(1);

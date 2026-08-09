@@ -16,23 +16,28 @@ export async function getBooksByAuthor(authorId: number) {
   return result.rows;
 }
 
+// The NULL in both calls below is p_country, which the app stopped producing in
+// LOS-228. The column and the parameter stay: both functions COALESCE, so
+// passing NULL preserves the values already stored for the handful of authors
+// that have one rather than erasing them, and writes none for anyone else.
+
 export async function createAuthor(
-  author: { slug: string; name: string; birthYear: number | null; country: string | null; bio: string | null },
+  author: { slug: string; name: string; birthYear: number | null; bio: string | null },
 ) {
   const result = await pool.query(
-    'SELECT * FROM fn_create_author($1, $2, $3, $4, $5)',
-    [author.slug, author.name, author.birthYear, author.country, author.bio],
+    'SELECT * FROM fn_create_author($1, $2, $3, NULL, $4)',
+    [author.slug, author.name, author.birthYear, author.bio],
   );
   return result.rows[0];
 }
 
 export async function updateAuthorDetails(
   authorId: number,
-  details: { birthYear: number | null; country: string | null; bio: string | null },
+  details: { birthYear: number | null; bio: string | null },
 ) {
   const result = await pool.query(
-    'SELECT * FROM fn_update_author_details($1, $2, $3, $4)',
-    [authorId, details.birthYear, details.country, details.bio],
+    'SELECT * FROM fn_update_author_details($1, $2, NULL, $3)',
+    [authorId, details.birthYear, details.bio],
   );
   return result.rows[0];
 }
