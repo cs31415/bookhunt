@@ -1,0 +1,25 @@
+node_modules
+dist
+
+# Never bake secrets into an image. Config arrives as container environment.
+.env
+.env.local
+scripts/.env
+
+.git
+.gitignore
+.github
+
+# Local-only material with no bearing on a build.
+docs
+database
+scripts
+assets
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+*.log
+.DS_Store
+.claude
+.vscode
