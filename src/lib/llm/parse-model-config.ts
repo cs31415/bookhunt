@@ -2,7 +2,7 @@ import { LlmProvider, ModelRef } from './llm-types';
 
 const PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google'];
 
-export function parseModelConfig(envVarName: 'LLM_TEXT_MODELS' | 'LLM_VISION_MODELS'): ModelRef[] {
+export function parseModelConfig(envVarName: 'LLM_TEXT_MODELS'): ModelRef[] {
   const raw = process.env[envVarName]?.trim();
 
   if (!raw) {

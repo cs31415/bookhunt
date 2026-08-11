@@ -67,7 +67,7 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   // added to this function should reach for this, not the argument.
   const safeUrl = redactUrlSecrets(url);
 
-  // Imports and photo scans resolve overlapping titles, and every book detail
+  // Imports resolve overlapping titles, and every book detail
   // view re-resolves the same volume id, so this is where the quota actually
   // goes: Google's free tier is 1,000 queries/day and Open Library serializes
   // callers at 1/sec.

@@ -1,7 +1,7 @@
 import { matchImportRows } from '../../data/import-data';
 import { formatCatalogBook } from '../../lib/books/format-catalog-book';
 import type { CatalogBookSummary } from '../../lib/books/format-catalog-book';
-import { scoreCandidate } from '../upload/matches-detected-book';
+import { scoreCandidate } from '../matching/match-book-candidate';
 import { tokenizeQuery } from '../search/tokenize-query';
 
 export interface CatalogMatchHint {
@@ -36,11 +36,10 @@ const CATALOG_MATCH_THRESHOLD = 0.9;
  * to issue 372 full scans of the catalog, and the answer to "which of these
  * titles do we already have" is naturally a batch question.
  *
- * Deliberately not findBookByTitle (src/data/upload-data.ts): that is
- * `LIKE '%title%'` with no author or publisher check, returning an arbitrary
- * first row — which for a title like "Hong Kong" is a coin flip. The catalog
- * ranks properly and returns the publisher, so the same scoring used for
- * provider candidates applies here too.
+ * Deliberately not a bare `LIKE '%title%'` lookup with no author or publisher
+ * check: that returns an arbitrary first row, which for a title like "Hong Kong"
+ * is a coin flip. The catalog ranks properly and returns the publisher, so the
+ * same scoring used for provider candidates applies here too.
  */
 export async function findCatalogMatches(
   hints: CatalogMatchHint[],

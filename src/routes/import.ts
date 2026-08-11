@@ -5,8 +5,8 @@ import { resolve } from '../controllers/import/resolve';
 
 const router = Router();
 
-// authRequired before rateLimiter, matching routes/upload.ts: unauthenticated
-// callers are rejected without consuming anyone's budget. Auth is needed anyway —
+// authRequired before rateLimiter: unauthenticated callers are rejected without
+// consuming anyone's budget. Auth is needed anyway —
 // the endpoint checks the caller's catalog and there is no logged-out use case.
 //
 // Deliberately high compared with the other routes. The client sends small

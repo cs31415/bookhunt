@@ -7,7 +7,6 @@ export interface ModelRef {
 
 export interface LlmRequest {
   prompt: string;
-  imageUrls?: string[];
   maxTokens: number;
   /**
    * Accept a response that hit the output limit instead of rejecting it. Set for

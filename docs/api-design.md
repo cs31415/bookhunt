@@ -70,8 +70,3 @@ External (Google Books/OpenLibrary) search is a separate concern — see `POST /
 |--------|------|------|--------|----------|
 | GET | / | Required | `?limit&excludeId` | `{ recommendations: { book, reason }[] }` |
 
-### Upload (`/upload`)
-| Method | Path | Auth | Body | Response |
-|--------|------|------|------|----------|
-| POST | /presign | Required | `{ contentType }` | `{ url, key }` |
-| POST | /scan | Required | `{ imageKey }` | `{ detectedBooks: { title, author, matchedBookId? }[] }` |

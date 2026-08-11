@@ -12,20 +12,10 @@ function getOpenAi(): OpenAI {
 }
 
 export async function completeWithOpenAi(model: string, request: LlmRequest): Promise<string> {
-  const content = request.imageUrls?.length
-    ? [
-        ...request.imageUrls.map((url) => ({
-          type: 'image_url' as const,
-          image_url: { url },
-        })),
-        { type: 'text' as const, text: request.prompt },
-      ]
-    : request.prompt;
-
   const response = await getOpenAi().chat.completions.create({
     model,
     max_completion_tokens: request.maxTokens,
-    messages: [{ role: 'user', content }],
+    messages: [{ role: 'user', content: request.prompt }],
   });
 
   if (!request.tolerateTruncation && response.choices[0]?.finish_reason === 'length') {
