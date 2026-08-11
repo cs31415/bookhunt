@@ -1,6 +1,9 @@
 {
   "name": "bookhunt-api",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
