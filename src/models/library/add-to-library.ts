@@ -41,10 +41,10 @@ export async function addToLibrary(userId: number, params: AddToLibraryParams) {
   const book = await upsertBook({ ...params, ...resolved });
   const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
 
-  // Deliberately not categorized here. This is the path the CSV import and the
-  // photo scan use, one request per row and six at a time, so tagging here made
-  // a 20-book import twenty LLM calls instead of one and blocked every add on a
-  // round trip -- while giving the model no way to group, which was the point.
+  // Deliberately not categorized here. This is the path the CSV import uses,
+  // one request per row and six at a time, so tagging here made a 20-book import
+  // twenty LLM calls instead of one and blocked every add on a round trip --
+  // while giving the model no way to group, which was the point.
   // The client sends the ids to POST /ai/categorize once the import is done
   // (LOS-197).
   return { entry, book };

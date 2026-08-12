@@ -24,21 +24,6 @@ describe('completeWithOpenAi', () => {
     expect(result).toBe('reply');
   });
 
-  it('maps image URLs to image_url parts followed by the text part', async () => {
-    await completeWithOpenAi('gpt-4o-mini', {
-      prompt: 'describe',
-      imageUrls: ['https://s3/img1', 'https://s3/img2'],
-      maxTokens: 2048,
-    });
-
-    const content = mockCreate.mock.calls[0][0].messages[0].content;
-    expect(content).toEqual([
-      { type: 'image_url', image_url: { url: 'https://s3/img1' } },
-      { type: 'image_url', image_url: { url: 'https://s3/img2' } },
-      { type: 'text', text: 'describe' },
-    ]);
-  });
-
   it('returns an empty string when the response has no content', async () => {
     mockCreate.mockResolvedValue({ choices: [{ message: { content: null } }] });
 

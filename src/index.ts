@@ -14,7 +14,6 @@ import libraryRoutes from './routes/library';
 import searchRoutes from './routes/search';
 import aiRoutes from './routes/ai';
 import recommendationRoutes from './routes/recommendations';
-import uploadRoutes from './routes/upload';
 import importRoutes from './routes/import';
 import cannedSearchRoutes from './routes/canned-searches';
 import { requestLogger } from './middleware/requestLogger';
@@ -50,7 +49,6 @@ app.use('/api/library', libraryRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/recommendations', recommendationRoutes);
-app.use('/api/upload', uploadRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/canned-searches', cannedSearchRoutes);
 

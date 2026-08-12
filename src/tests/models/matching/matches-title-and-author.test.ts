@@ -1,7 +1,7 @@
 import {
   matchesTitleAndAuthor,
   matchesTitleAndAuthorEitherWay,
-} from '../../../models/upload/matches-detected-book';
+} from '../../../models/matching/match-book-candidate';
 
 const cosmos = { title: 'Cosmos', authors: ['Carl Sagan'], publishers: ['Random House'] };
 

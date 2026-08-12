@@ -6,7 +6,7 @@ import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-c
 import { searchWithFallback } from '../../lib/books/search-with-fallback';
 import { SearchResult } from '../../lib/books/books-types';
 import { tokenizeQuery } from '../search/tokenize-query';
-import { matchesTitleAndAuthorEitherWay, scoreCandidate } from '../upload/matches-detected-book';
+import { matchesTitleAndAuthorEitherWay, scoreCandidate } from '../matching/match-book-candidate';
 
 export type { SearchResult } from '../../lib/books/books-types';
 

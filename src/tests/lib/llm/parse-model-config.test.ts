@@ -5,7 +5,6 @@ describe('parseModelConfig', () => {
 
   beforeEach(() => {
     delete process.env.LLM_TEXT_MODELS;
-    delete process.env.LLM_VISION_MODELS;
     delete process.env.ANTHROPIC_MODEL;
   });
 
@@ -24,9 +23,9 @@ describe('parseModelConfig', () => {
   });
 
   it('trims whitespace around entries', () => {
-    process.env.LLM_VISION_MODELS = ' anthropic:claude-haiku-4-5 , openai:gpt-4o-mini ';
+    process.env.LLM_TEXT_MODELS = ' anthropic:claude-haiku-4-5 , openai:gpt-4o-mini ';
 
-    expect(parseModelConfig('LLM_VISION_MODELS')).toEqual([
+    expect(parseModelConfig('LLM_TEXT_MODELS')).toEqual([
       { provider: 'anthropic', model: 'claude-haiku-4-5' },
       { provider: 'openai', model: 'gpt-4o-mini' },
     ]);

@@ -6,9 +6,8 @@ Personal book explorer app — search, curate a library, get AI-powered summarie
 
 - **API**: Node.js + Express + TypeScript
 - **Database**: PostgreSQL (stored procedures, no ORM)
-- **AI**: LLM APIs (Anthropic/OpenAI/Google, configurable per model) for summaries, themes, bookshelf scanning
+- **AI**: LLM APIs (Anthropic/OpenAI/Google, configurable per model) for summaries and themes
 - **Search**: Google Books API
-- **Storage**: AWS S3 (bookshelf photo uploads)
 - **Auth**: JWT + bcrypt
 
 ## Project Structure
@@ -19,7 +18,7 @@ src/
   controllers/        HTTP handling (req/res parsing, status codes)
   models/             Orchestration (coordinates data + external APIs)
   data/               Database access (pool.query wrappers)
-  lib/                Shared clients (db, anthropic, s3)
+  lib/                Shared clients (db, LLM adapters, book providers)
   middleware/         Auth + rate limiting
 database/              PostgreSQL schema (tables/ and functions/) with setup scripts
 docs/                  API design, database design, implementation plan
@@ -58,7 +57,6 @@ cp .env.example .env
 | Script | Description |
 |---|---|
 | `test-create-user.js` | Creates a test user via the API |
-| `test-photo-import.js` | Imports bookshelf photos for a user |
 | `wipe-user.js` | Deletes a user and all associated data |
 
 Run with `node scripts/<script>.js` from the repo root.

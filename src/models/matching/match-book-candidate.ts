@@ -59,10 +59,7 @@ export interface MatchHint {
   isbn?: string | null;
 }
 
-/**
- * Title overlap at which two titles are taken to name the same book. Shared by
- * matchesDetectedBook() and matchesTitleAndAuthor() so the two cannot drift.
- */
+/** Title overlap at which two titles are taken to name the same book. */
 const TITLE_CONFIRM_OVERLAP = 0.75;
 
 /** Tie-breaker weights. Title recall is the 0-1 base; these only reorder near-ties. */
@@ -155,11 +152,11 @@ export function titleAgrees(candidate: CandidateFields, hint: MatchHint): boolea
  * Whether a candidate agrees with the hint on both title and author — enough to
  * say it is the same book, not merely a plausible ranking.
  *
- * Deliberately stricter than matchesDetectedBook(), which treats an author
- * missing on either side as matching: that is right for a noisy photo spine,
- * where absence is the norm and a match cannot be disproved, and wrong here,
- * where the caller is asking whether the author *confirms* the identification.
- * So a hint with no author, or a candidate listing none, is never a match.
+ * Deliberately stricter than a ranking score, which tolerates an author missing
+ * on either side: that is right where absence is the norm and a match cannot be
+ * disproved, and wrong here, where the caller is asking whether the author
+ * *confirms* the identification. So a hint with no author, or a candidate
+ * listing none, is never a match.
  */
 export function matchesTitleAndAuthor(candidate: CandidateFields, hint: MatchHint): boolean {
   if (!hint.author || candidate.authors.length === 0) return false;
@@ -175,7 +172,7 @@ export function matchesTitleAndAuthor(candidate: CandidateFields, hint: MatchHin
  *
  * matchesTitleAndAuthor measures overlap in one direction only — how much of the
  * *hint's* title the candidate covers — which is right wherever the hint is the
- * terse side, as a photographed spine or a CSV cell is. It is wrong when the
+ * terse side, as a CSV cell is. It is wrong when the
  * hint is the verbose side: an LLM answers with "Broca's Brain: Reflections on
  * the Romance of Science" for a catalog row titled "Broca's Brain", and every
  * catalog token is present but only a third of the LLM's, so the one-way test
@@ -196,30 +193,4 @@ export function matchesTitleAndAuthorEitherWay(candidate: CandidateFields, hint:
       { title: candidate.title, author: candidate.authors[0] ?? null },
     )
   );
-}
-
-/**
- * Whether a search result plausibly is the book detected in a photo. Vision
- * titles are noisy (misread spines), so this checks token overlap rather than
- * equality: accept when nearly all detected title words appear in the result
- * title, or when most of them do and an author word matches too. Missing
- * authors on either side cannot disprove a match, so they count as matching.
- *
- * Kept as a boolean for the photo-scan path, which wants one answer rather than
- * a ranking. Import uses scoreCandidate instead and lets the reader choose.
- */
-export function matchesDetectedBook(
-  result: { title: string; authors: string[] },
-  detectedTitle: string,
-  detectedAuthor: string | null,
-): boolean {
-  if (tokenize(detectedTitle).length === 0) return false;
-
-  const overlap = titleOverlap(result.title, detectedTitle);
-  const authorMatches =
-    !detectedAuthor ||
-    result.authors.length === 0 ||
-    anyTokenMatches(detectedAuthor, result.authors);
-
-  return overlap >= TITLE_CONFIRM_OVERLAP || (overlap >= 0.6 && authorMatches);
 }

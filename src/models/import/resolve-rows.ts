@@ -4,13 +4,13 @@ import { isCircuitOpen, openCircuit } from '../../lib/books/provider-circuit';
 import { primaryAttempts, primaryBackoffMs } from '../../lib/books/books-retry-config';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
-import { RESOLUTION_CONCURRENCY } from '../../lib/upload-constraints';
+import { RESOLUTION_CONCURRENCY } from '../../lib/import-constraints';
 import {
   isSamePublisher,
   matchesTitleAndAuthor,
   scoreCandidate,
   titleAgrees,
-} from '../upload/matches-detected-book';
+} from '../matching/match-book-candidate';
 import { isSameIsbn, normalizeIsbn } from '../../lib/books/normalize-isbn';
 import { bareQueryTerm } from '../../lib/books/bare-query-term';
 import { firstAuthorSurname } from '../../lib/books/first-author-surname';

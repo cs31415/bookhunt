@@ -13,20 +13,10 @@ function getAnthropic(): Anthropic {
 }
 
 export async function completeWithAnthropic(model: string, request: LlmRequest): Promise<string> {
-  const content = request.imageUrls?.length
-    ? [
-        ...request.imageUrls.map((url) => ({
-          type: 'image' as const,
-          source: { type: 'url' as const, url },
-        })),
-        { type: 'text' as const, text: request.prompt },
-      ]
-    : request.prompt;
-
   const response = await getAnthropic().messages.create({
     model,
     max_tokens: request.maxTokens,
-    messages: [{ role: 'user', content }],
+    messages: [{ role: 'user', content: request.prompt }],
   });
 
   if (!request.tolerateTruncation && response.stop_reason === 'max_tokens') {

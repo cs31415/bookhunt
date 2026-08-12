@@ -1,4 +1,4 @@
-import { scoreCandidate } from '../../../models/upload/matches-detected-book';
+import { scoreCandidate } from '../../../models/matching/match-book-candidate';
 
 const frommers = {
   title: "Frommer's Hong Kong",
