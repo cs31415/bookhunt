@@ -31,12 +31,20 @@ export async function sendEmail(email: OutgoingEmail): Promise<boolean> {
   }
 
   try {
+    // EMAIL_FROM may carry a display name -- Resend accepts "BookHunt
+    // <noreply@bookhunt.net>" -- which is worth setting: a bare address is less
+    // recognisable in an inbox list, and recognisability is one of the few
+    // deliverability levers available to a domain with no sending history.
+    const replyTo = process.env.EMAIL_REPLY_TO?.trim();
     const { error } = await getResend().emails.send({
-      from: process.env.EMAIL_FROM ?? 'noreply@bookhunt.app',
+      from: process.env.EMAIL_FROM ?? 'noreply@bookhunt.net',
       to: email.to,
       subject: email.subject,
       html: email.html,
       text: email.text,
+      // Only when configured: Resend rejects an empty string, and a sender that
+      // accepts replies reads better to a filter than one that cannot.
+      ...(replyTo ? { replyTo } : {}),
     });
 
     // Resend reports a rejected send in the response rather than by throwing,

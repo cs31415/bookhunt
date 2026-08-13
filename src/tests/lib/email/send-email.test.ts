@@ -80,6 +80,24 @@ describe('sendEmail', () => {
     const send = mockSend({ data: { id: 'msg_1' }, error: null });
 
     await sendEmail(message);
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ from: 'noreply@bookhunt.app' }));
+    // bookhunt.net, not the .app this used to assert: that domain is not ours,
+    // so mail from it could never have been delivered.
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ from: 'noreply@bookhunt.net' }));
+  });
+
+  it('sets Reply-To when EMAIL_REPLY_TO is configured', async () => {
+    process.env.EMAIL_REPLY_TO = 'hello@bookhunt.net';
+    const send = mockSend({ data: { id: 'msg_1' }, error: null });
+
+    await sendEmail(message);
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ replyTo: 'hello@bookhunt.net' }));
+  });
+
+  it('omits Reply-To entirely when unset, since Resend rejects an empty one', async () => {
+    delete process.env.EMAIL_REPLY_TO;
+    const send = mockSend({ data: { id: 'msg_1' }, error: null });
+
+    await sendEmail(message);
+    expect(send.mock.calls[0][0]).not.toHaveProperty('replyTo');
   });
 });
