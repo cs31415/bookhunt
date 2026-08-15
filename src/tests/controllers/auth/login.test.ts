@@ -25,6 +25,9 @@ const verifiedUser = {
   id: 1,
   email: 'a@b.com',
   display_name: 'Alice',
+  handle: 'alice',
+  is_discoverable: false,
+  preferences: { theme: 'dark' },
   password_hash: 'hash',
   email_verified_at: new Date('2026-01-01T00:00:00Z'),
 };
@@ -43,7 +46,17 @@ describe('login controller', () => {
     await login(makeReq({ email: 'a@b.com', password: 'pass' }), res);
 
     expect(res.json).toHaveBeenCalledWith({
-      user: { id: 1, email: 'a@b.com', displayName: 'Alice' },
+      // The browser learns everything it knows about the reader from here:
+      // there is no who-am-I endpoint, so settings that must survive a reload
+      // ride along with the session (LOS-251, LOS-258).
+      user: {
+        id: 1,
+        email: 'a@b.com',
+        displayName: 'Alice',
+        handle: 'alice',
+        isDiscoverable: false,
+        preferences: { theme: 'dark' },
+      },
       token: 'jwt-token',
     });
   });

@@ -29,6 +29,11 @@ const HANDLE_CONSTRAINT = 'idx_users_handle_lower';
  *               displayName: { type: string }
  *               handle: { type: string }
  *               isDiscoverable: { type: boolean }
+ *               preferences:
+ *                 type: object
+ *                 description: >
+ *                   Merged into the stored document rather than replacing it,
+ *                   so saving one key cannot drop another.
  *     responses:
  *       200:
  *         description: The updated profile
@@ -38,7 +43,7 @@ const HANDLE_CONSTRAINT = 'idx_users_handle_lower';
  *         description: The handle is taken (code HANDLE_TAKEN, field handle)
  */
 export async function updateMe(req: Request, res: Response) {
-  const { displayName, handle, isDiscoverable } = req.body ?? {};
+  const { displayName, handle, isDiscoverable, preferences } = req.body ?? {};
 
   if (displayName !== undefined) {
     const error = validateDisplayName(displayName);
@@ -64,11 +69,24 @@ export async function updateMe(req: Request, res: Response) {
     return;
   }
 
+  // A plain object, not an array and not null. The column is one document
+  // merged key by key, so anything else would either be discarded by the merge
+  // or, in the case of null, silently mean "no change" when the caller meant
+  // something.
+  if (
+    preferences !== undefined &&
+    (typeof preferences !== 'object' || preferences === null || Array.isArray(preferences))
+  ) {
+    res.status(400).json({ error: 'preferences must be an object.' });
+    return;
+  }
+
   try {
     const user = await updateProfile(req.user!.id, {
       displayName,
       handle: normalizedHandle,
       isDiscoverable,
+      preferences,
     });
 
     if (!user) {
