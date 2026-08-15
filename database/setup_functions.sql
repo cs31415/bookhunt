@@ -17,6 +17,7 @@ BEGIN;
 \ir functions/fn_search_users.sql
 \ir functions/fn_user_favorites.sql
 \ir functions/fn_messages.sql
+\ir functions/fn_favorite_authors.sql
 
 -- books & authors
 \ir functions/fn_upsert_book.sql

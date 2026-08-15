@@ -71,6 +71,14 @@ The two failure codes are deliberately distinct: one is fixed by favouriting som
 |--------|------|------|--------|----------|
 | GET | /:slug | None | — | `{ author, books: Book[] }` |
 
+Author favourites are public, like book favourites: an author list reads as taste rather than as a social graph. `GET /users/:handle/favorite-authors` serves the visitor view, gated on `is_discoverable` like everything else public.
+
+| Method | Path | Auth | Response |
+|--------|------|------|----------|
+| GET | /authors/favorites | Bearer | `{ authors: [{ name, slug, bookCount }] }` |
+| POST/DELETE | /authors/:slug/favorite | Bearer | `{ ok: true }`; 404 for an unknown slug. Idempotent |
+| GET | /users/:handle/favorite-authors | None | The same shape, empty for an unknown or private handle |
+
 ### Search (`/search`)
 | Method | Path | Auth | Params | Response |
 |--------|------|------|--------|----------|

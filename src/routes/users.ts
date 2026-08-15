@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { handleAvailable } from '../controllers/users/handle-available';
 import { updateMe } from '../controllers/users/update-me';
 import { getPublicProfile, getPublicLibrary } from '../controllers/users/get-public-profile';
+import { getPublicFavoriteAuthors } from '../controllers/authors/favorites';
 import {
   searchUsers,
   getFavorites,
@@ -35,6 +36,7 @@ router.get('/favorites', authRequired, rateLimiter(MINUTE, 60), getFavorites);
 // that answers questions about accounts other than the caller's.
 router.get('/:handle', rateLimiter(MINUTE, 60), getPublicProfile);
 router.get('/:handle/library', rateLimiter(MINUTE, 60), getPublicLibrary);
+router.get('/:handle/favorite-authors', rateLimiter(MINUTE, 60), getPublicFavoriteAuthors);
 router.post('/:handle/favorite', authRequired, rateLimiter(MINUTE, 30), addFavoriteUser);
 router.delete('/:handle/favorite', authRequired, rateLimiter(MINUTE, 30), removeFavoriteUser);
 
