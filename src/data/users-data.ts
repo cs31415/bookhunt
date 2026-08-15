@@ -12,3 +12,22 @@ export async function isHandleAvailable(handle: string): Promise<boolean> {
   );
   return rows[0].available as boolean;
 }
+
+/**
+ * `setDiscoverable` says whether the caller sent the flag at all. A COALESCE
+ * cannot carry a boolean on its own: NULL would be indistinguishable from
+ * "make it false", which is the value that takes a public page down again.
+ */
+export async function updateUserProfile(
+  userId: number,
+  displayName: string | null,
+  handle: string | null,
+  isDiscoverable: boolean | null,
+  setDiscoverable: boolean,
+) {
+  const { rows } = await pool.query(
+    'SELECT * FROM fn_update_user_profile($1, $2, $3, $4, $5)',
+    [userId, displayName, handle, isDiscoverable, setDiscoverable],
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
