@@ -41,6 +41,9 @@ there before it ships.
 | Method | Path | Auth | Params/Body | Response |
 |--------|------|------|-------------|----------|
 | PUT | /me | Bearer | `{ displayName?, handle?, isDiscoverable?, preferences? }` | `{ user: { id, email, displayName, handle, isDiscoverable } }`. An absent field is left alone; `isDiscoverable` is the master switch for the public profile and is off by default. 400 names the offending `field`; 409 `{ code: 'HANDLE_TAKEN' }` matches registration |
+| GET | /search | None | `?q=` | `{ users: [{ handle, displayName, bookCount }] }`, up to 10, exact handle prefixes first. Only readers with a public page are findable |
+| GET | /favorites | Bearer | — | `{ users: [{ handle, displayName, isMutual }] }`. Owner-only, no public equivalent |
+| POST/DELETE | /:handle/favorite | Bearer | — | `{ ok: true }`; 404 for an unknown handle or your own. Idempotent. A mutual pair is what permits messaging, so removing one is how you block someone |
 | GET | /:handle | None | — | `{ profile: { handle, displayName, joinedAt, counts } }`. 404 for an unknown handle **and** for one whose page is private — deliberately indistinguishable |
 | GET | /:handle/library | None | `?status=&favorites=&page=&limit=` | `{ entries, total, page, pageSize }`. Hidden books never appear, and rows carry no notes or reviews: those are absent from the stored function's row type rather than filtered out |
 | GET | /handle-available | None | `?handle=` | `{ handle, available, reason }` where `handle` is the normalized form and `reason` is null when it can be claimed. Advisory only -- `/auth/register` is the authority and answers 409. Rate limited to 30/min |

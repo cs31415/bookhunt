@@ -21,6 +21,17 @@ Registered app users. Stores credentials, profile info, email-verification and p
 | verification_token_expires_at | TIMESTAMPTZ | nullable; 24 hours after the token is issued |
 | created_at | TIMESTAMPTZ DEFAULT NOW() | Account creation timestamp |
 
+### `user_favorites`
+Readers a reader has favourited, and the permission model for messaging: only someone you have favourited may reach you, so a two-way thread needs the pair in both directions. Un-favouriting is how you block.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| user_id | INT REFERENCES users(id) ON DELETE CASCADE | Who favourited |
+| favorite_user_id | INT REFERENCES users(id) ON DELETE CASCADE | Who was favourited |
+| created_at | TIMESTAMPTZ DEFAULT NOW() | |
+
+`PRIMARY KEY (user_id, favorite_user_id)` makes it idempotent; `CHECK (user_id <> favorite_user_id)` refuses self-favouriting at the table rather than in a caller. `idx_user_favorites_reverse` covers the other direction, which the mutual check reads.
+
 ### `authors`
 Book authors. Upserted automatically when books are imported from Google Books.
 
@@ -111,6 +122,11 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 - `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
 - `fn_verify_email(p_token)` → `users` row, or no rows if the token is unknown, expired or spent
 - `fn_update_user_profile(p_user_id, p_display_name, p_handle, p_is_discoverable, p_set_discoverable, p_preferences)` → profile row. `p_set_discoverable` says whether the flag was sent at all: COALESCE cannot carry a boolean, since NULL would be indistinguishable from "make it false"
+- `fn_search_users(p_query, p_limit)` → discoverable readers only
+- `fn_add_user_favorite` / `fn_remove_user_favorite(p_user_id, p_handle)` → BOOLEAN; false for an unknown handle or your own
+- `fn_get_user_favorites(p_user_id)` → owner-only list, each with `is_mutual`
+- `fn_is_mutual_favorite(p_user_id, p_other_id)` → BOOLEAN; true only when the pair exists both ways
+- `fn_get_favorite_state(p_user_id, p_handle)` → what the profile page needs about the viewer
 - `fn_get_public_profile(p_handle)` → header + counts, or no rows when unknown or not discoverable
 - `fn_get_public_library(p_handle, p_status, p_favorites_only, p_limit, p_offset)` → public rows. The `is_discoverable` gate and the `is_hidden` exclusion live in the WHERE clause so no caller can forget them; `notes` and `review` are absent from the row type entirely
 - `fn_is_handle_available(p_handle)` → BOOLEAN; advisory, matched on LOWER to agree with the index

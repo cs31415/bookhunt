@@ -14,6 +14,8 @@ BEGIN;
 \ir functions/fn_update_user_profile.sql
 \ir functions/fn_get_public_profile.sql
 \ir functions/fn_get_public_library.sql
+\ir functions/fn_search_users.sql
+\ir functions/fn_user_favorites.sql
 
 -- books & authors
 \ir functions/fn_upsert_book.sql
