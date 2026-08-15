@@ -32,3 +32,23 @@ export async function updateUserProfile(
   );
   return rows.length > 0 ? rows[0] : null;
 }
+
+/** No rows for an unknown handle and for a private one alike -- deliberately. */
+export async function getPublicProfile(handle: string) {
+  const { rows } = await pool.query('SELECT * FROM fn_get_public_profile($1)', [handle]);
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function getPublicLibrary(
+  handle: string,
+  status: string | null,
+  favoritesOnly: boolean,
+  limit: number,
+  offset: number,
+) {
+  const { rows } = await pool.query(
+    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5)',
+    [handle, status, favoritesOnly, limit, offset],
+  );
+  return rows;
+}
