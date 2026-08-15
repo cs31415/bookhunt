@@ -9,6 +9,8 @@ import { removeEntry } from '../controllers/library/remove-entry';
 import { bulkRemoveFromLibrary } from '../controllers/library/bulk-remove-from-library';
 import { addRelated } from '../controllers/library/add-related';
 import { removeRelated } from '../controllers/library/remove-related';
+import { addFavorite, removeFavorite } from '../controllers/library/set-favorite';
+import { hideEntry, showEntry } from '../controllers/library/set-hidden';
 
 const router = Router();
 
@@ -20,6 +22,12 @@ router.get('/', getLibrary);
 router.get('/search', searchLibrary);
 router.post('/bulk', bulkAddToLibrary);
 router.post('/:slug', addToLibraryBySlug);
+// Before the bare /:bookId, so "favorite" and "hidden" are read as the literal
+// sub-paths they are rather than as part of a book id.
+router.put('/:bookId/favorite', addFavorite);
+router.delete('/:bookId/favorite', removeFavorite);
+router.put('/:bookId/hidden', hideEntry);
+router.delete('/:bookId/hidden', showEntry);
 router.put('/:bookId', updateEntry);
 // Above the wildcard for the same reason /search is: otherwise "bulk" is read
 // as a bookId and parses to NaN.

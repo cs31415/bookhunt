@@ -52,6 +52,8 @@ External (Google Books/OpenLibrary) search is a separate concern — see `POST /
 |--------|------|------|------|----------|
 | GET | / | Required | `?page&limit` | `{ entries: LibraryEntryWithBook[], stats, total, page, pageSize }` |
 | POST | / | Required | `{ googleBooksId, status? }` | `{ entry }` — upserts book from Google Books data first, then adds to library |
+| PUT/DELETE | /:bookId/favorite | Bearer | — | `{ entry: { user_id, book_id, is_favorite, is_hidden } }` — PUT marks, DELETE unmarks; 404 if the book is not owned |
+| PUT/DELETE | /:bookId/hidden | Bearer | — | Same shape. PUT hides the book from the public profile, DELETE shows it again. The owner's own library is unaffected either way |
 | PUT | /:bookId | Required | `{ status?, userRating?, notes?, review? }` | `{ entry }` |
 | DELETE | /:bookId | Required | — | `{ ok: true }` |
 | POST | /:bookId/related | Required | `{ relatedBookId }` | `{ userRelated: int[] }` |

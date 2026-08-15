@@ -104,6 +104,24 @@ export async function updateLibraryEntry(
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
+/** Null when the user does not own the book; the WHERE is the ownership check. */
+export async function setLibraryFavorite(userId: number, bookId: number, isFavorite: boolean) {
+  const result = await pool.query(
+    'SELECT * FROM fn_set_library_favorite($1, $2, $3)',
+    [userId, bookId, isFavorite],
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/** Null when the user does not own the book; the WHERE is the ownership check. */
+export async function setLibraryVisibility(userId: number, bookId: number, isHidden: boolean) {
+  const result = await pool.query(
+    'SELECT * FROM fn_set_library_visibility($1, $2, $3)',
+    [userId, bookId, isHidden],
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
 export async function removeFromLibrary(userId: number, bookId: number) {
   const result = await pool.query(
     'SELECT * FROM fn_remove_from_library($1, $2)',
