@@ -78,6 +78,8 @@ Per-user bookshelf. Each row represents a book in a user's personal library, wit
 | user_rating | INT | nullable; user's personal rating (1–5 stars) |
 | review | TEXT | nullable; user's written review of the book |
 | notes | TEXT | nullable; private freeform notes (auto-saving in the UI) |
+| is_favorite | BOOLEAN NOT NULL DEFAULT FALSE | Marked a favourite by the reader. Set through `fn_set_library_favorite`, never `fn_update_library_entry`, whose COALESCE design cannot express false |
+| is_hidden | BOOLEAN NOT NULL DEFAULT FALSE | Excluded from the public profile at `bookhunt.net/<handle>`. No effect on the owner's own library |
 | user_related | INT[] DEFAULT '{}' | Book IDs the user has manually linked as related reads |
 | PRIMARY KEY (user_id, book_id) | | Composite key; a user can have each book only once |
 
@@ -125,6 +127,8 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 ### Library
 - `fn_get_user_library(p_user_id)` → all library entries with book + author data
 - `fn_add_to_library(p_user_id, p_book_id, p_status)` → upsert library entry (book must exist in books table first — call `fn_upsert_book_from_google` before this for Google Books results)
+- `fn_set_library_favorite(p_user_id, p_book_id, p_is_favorite)` → flags row, or no rows when the book is not owned
+- `fn_set_library_visibility(p_user_id, p_book_id, p_is_hidden)` → flags row, or no rows when the book is not owned
 - `fn_update_library_entry(p_user_id, p_book_id, p_status, p_user_rating, p_notes, p_review)` → updated row
 - `fn_remove_from_library(p_user_id, p_book_id)` → BOOLEAN
 - `fn_library_stats(p_user_id)` → counts by status, top subjects, top authors
