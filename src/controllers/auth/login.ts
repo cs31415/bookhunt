@@ -34,6 +34,7 @@ import { signAuthToken } from '../../lib/auth/sign-auth-token';
  *                     email: { type: string }
  *                     displayName: { type: string }
  *                     handle: { type: string }
+ *                     isDiscoverable: { type: boolean }
  *                 token: { type: string }
  *       401:
  *         description: Invalid credentials
@@ -82,6 +83,7 @@ export async function login(req: Request, res: Response) {
         email: user.email,
         displayName: user.display_name,
         handle: user.handle,
+        isDiscoverable: user.is_discoverable,
       },
       token,
     });
