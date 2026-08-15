@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { registerUser as insertUser } from '../../data/auth-data';
 import { normalizeEmail } from '../../lib/validate/normalize-email';
+import { normalizeHandle } from '../../lib/validate/normalize-handle';
 import { sendEmail } from '../../lib/email/send-email';
 import {
   VERIFICATION_TOKEN_TTL_MS,
@@ -14,15 +15,18 @@ export interface RegisteredUser {
   id: number;
   email: string;
   displayName: string;
+  handle: string;
 }
 
 /**
  * Creates an unverified account and mails it a verification link.
  *
- * Throws the raw Postgres error on a duplicate address (code 23505) for the
- * controller to map to a 409 -- both the UNIQUE on users.email and
- * idx_users_email_lower raise it, so an address that differs only in
- * capitalisation is now rejected rather than becoming a second account.
+ * Throws the raw Postgres error on a duplicate (code 23505) for the controller
+ * to map to a 409. Two things can collide now: the address, through the UNIQUE
+ * on users.email and idx_users_email_lower, and the handle through
+ * idx_users_handle_lower. The controller reads err.constraint to say which,
+ * because "already taken" about the wrong field sends the reader to change the
+ * wrong box.
  *
  * The email is sent last and cannot fail the registration: sendEmail swallows
  * its own errors, and the account is already committed by then. A reader whose
@@ -32,9 +36,11 @@ export async function registerUser(
   email: string,
   password: string,
   displayName: string,
+  handle: string,
 ): Promise<RegisteredUser> {
   const normalized = normalizeEmail(email);
   const trimmedName = displayName.trim();
+  const normalizedHandle = normalizeHandle(handle);
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const verificationToken = crypto.randomUUID();
@@ -44,6 +50,7 @@ export async function registerUser(
     normalized,
     passwordHash,
     trimmedName,
+    normalizedHandle,
     verificationToken,
     expiresAt,
   );
@@ -51,5 +58,10 @@ export async function registerUser(
   const { subject, html, text } = verificationEmail(row.display_name, verificationToken);
   await sendEmail({ to: row.email, subject, html, text });
 
-  return { id: row.id, email: row.email, displayName: row.display_name };
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    handle: row.handle,
+  };
 }

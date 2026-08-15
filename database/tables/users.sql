@@ -3,6 +3,10 @@ CREATE TABLE users (
     email                 VARCHAR(255) UNIQUE NOT NULL,
     password_hash         VARCHAR(255) NOT NULL,
     display_name          VARCHAR(255) NOT NULL,
+    -- The public identity, and the whole of the URL at bookhunt.net/<handle>.
+    -- Case is folded on the way in, so the unique index below is the real
+    -- constraint rather than a second one that only catches exact matches.
+    handle                VARCHAR(30) NOT NULL,
     preferences           JSONB DEFAULT '{}',
     is_discoverable       BOOLEAN DEFAULT FALSE,
     reset_token           VARCHAR(255) UNIQUE,
@@ -21,3 +25,4 @@ CREATE TABLE users (
 -- after which login returned whichever row Postgres yielded first. This index
 -- closes it for every insert path, including psql and the scripts/ helpers.
 CREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));
+CREATE UNIQUE INDEX idx_users_handle_lower ON users (LOWER(handle));

@@ -39,10 +39,10 @@ describe('auth-data', () => {
       const row = { id: 2, email: 'new@b.com' };
       mockQuery.mockResolvedValue({ rows: [row] });
       const expiry = new Date('2026-01-02T12:00:00Z');
-      const result = await registerUser('new@b.com', 'hash', 'Bob', 'verify-tok', expiry);
+      const result = await registerUser('new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry);
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM fn_register_user($1, $2, $3, $4, $5)',
-        ['new@b.com', 'hash', 'Bob', 'verify-tok', expiry],
+        'SELECT * FROM fn_register_user($1, $2, $3, $4, $5, $6)',
+        ['new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry],
       );
       expect(result).toEqual(row);
     });

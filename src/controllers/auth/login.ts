@@ -33,6 +33,7 @@ import { signAuthToken } from '../../lib/auth/sign-auth-token';
  *                     id: { type: integer }
  *                     email: { type: string }
  *                     displayName: { type: string }
+ *                     handle: { type: string }
  *                 token: { type: string }
  *       401:
  *         description: Invalid credentials
@@ -80,6 +81,7 @@ export async function login(req: Request, res: Response) {
         id: user.id,
         email: user.email,
         displayName: user.display_name,
+        handle: user.handle,
       },
       token,
     });

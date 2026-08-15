@@ -11,6 +11,7 @@ Registered app users. Stores credentials, profile info, email-verification and p
 | email | VARCHAR(255) UNIQUE NOT NULL | Login email; stored lowercase. `idx_users_email_lower` makes uniqueness case-insensitive |
 | password_hash | VARCHAR(255) NOT NULL | bcrypt-hashed password |
 | display_name | VARCHAR(255) NOT NULL | Public name shown in the UI |
+| handle | VARCHAR(30) NOT NULL | Public identity and the whole of the URL at `bookhunt.net/<handle>`; stored lowercase, `idx_users_handle_lower` makes uniqueness case-insensitive. Reserved words are refused so a handle cannot shadow a top-level route |
 | preferences | JSONB DEFAULT '{}' | User settings (e.g. accent color, dark mode, fonts) |
 | is_discoverable | BOOLEAN DEFAULT FALSE | Whether this user's library is visible to others |
 | reset_token | VARCHAR(255) UNIQUE | nullable; one-time token for password reset flow |
@@ -102,11 +103,12 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 ## Functions
 
 ### Auth
-- `fn_register_user(p_email, p_password_hash, p_display_name, p_verification_token, p_verification_expires_at)` → `users` row (created unverified)
+- `fn_register_user(p_email, p_password_hash, p_display_name, p_handle, p_verification_token, p_verification_expires_at)` → `users` row (created unverified)
 - `fn_find_user_by_email(p_email)` → `users` row or NULL
 - `fn_set_reset_token(p_email, p_token, p_expires_at)` → BOOLEAN
 - `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
 - `fn_verify_email(p_token)` → `users` row, or no rows if the token is unknown, expired or spent
+- `fn_is_handle_available(p_handle)` → BOOLEAN; advisory, matched on LOWER to agree with the index
 - `fn_set_verification_token(p_email, p_token, p_expires_at)` → BOOLEAN (only for accounts still unverified)
 
 ### Books & Authors
