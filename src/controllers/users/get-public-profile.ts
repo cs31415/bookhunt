@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { publicLibrary, publicProfile } from '../../models/users/public-profile';
+import { favoriteState } from '../../models/users/favorites';
 
 /**
  * @swagger
@@ -32,7 +33,15 @@ export async function getPublicProfile(req: Request, res: Response) {
       return;
     }
 
-    res.json({ profile });
+    // Only meaningful for a signed-in viewer. Absent for a guest, which the
+    // page reads as not favourited -- the same value an un-pressed heart shows.
+    if (!req.user) {
+      res.json({ profile });
+      return;
+    }
+
+    const state = await favoriteState(req.user.id, String(req.params.handle));
+    res.json({ profile: { ...profile, ...(state ?? {}) } });
   } catch (error) {
     console.error('Error fetching public profile:', error);
     res.status(500).json({ error: 'Internal server error' });
