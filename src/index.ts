@@ -16,6 +16,7 @@ import searchRoutes from './routes/search';
 import aiRoutes from './routes/ai';
 import recommendationRoutes from './routes/recommendations';
 import importRoutes from './routes/import';
+import messageRoutes from './routes/messages';
 import cannedSearchRoutes from './routes/canned-searches';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -52,6 +53,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/import', importRoutes);
+app.use('/api/messages', messageRoutes);
 app.use('/api/canned-searches', cannedSearchRoutes);
 
 app.get('/api/health', (_req, res) => {
