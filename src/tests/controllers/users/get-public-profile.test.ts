@@ -4,11 +4,14 @@ import {
   getPublicLibrary,
 } from '../../../controllers/users/get-public-profile';
 import * as model from '../../../models/users/public-profile';
+import * as favorites from '../../../models/users/favorites';
 
 jest.mock('../../../models/users/public-profile');
+jest.mock('../../../models/users/favorites');
 
 const mockProfile = model.publicProfile as jest.Mock;
 const mockLibrary = model.publicLibrary as jest.Mock;
+const mockFavoriteState = favorites.favoriteState as jest.Mock;
 
 function makeReq(handle: string, query: Record<string, unknown> = {}) {
   return { params: { handle }, query } as unknown as Request;
@@ -31,6 +34,7 @@ const profile = {
 beforeEach(() => {
   mockProfile.mockResolvedValue(profile);
   mockLibrary.mockResolvedValue({ entries: [], total: 0, page: 1, pageSize: 24 });
+  mockFavoriteState.mockResolvedValue(null);
 });
 
 describe('getPublicProfile', () => {
@@ -102,5 +106,29 @@ describe('getPublicLibrary', () => {
     await getPublicLibrary(makeReq('ada'), res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+  });
+});
+
+describe('favourite state on a profile', () => {
+  it('omits it entirely for a guest', async () => {
+    // A guest has nothing to favourite with, and the page shows an un-pressed
+    // heart for an absent flag anyway.
+    const res = makeRes();
+    await getPublicProfile(makeReq('ada'), res);
+
+    expect(res.json).toHaveBeenCalledWith({ profile });
+    expect(mockFavoriteState).not.toHaveBeenCalled();
+  });
+
+  it('carries it for a signed-in viewer', async () => {
+    mockFavoriteState.mockResolvedValue({ isFavorite: true, isMutual: false });
+
+    const req = { params: { handle: 'ada' }, query: {}, user: { id: 9 } } as unknown as Request;
+    const res = makeRes();
+    await getPublicProfile(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      profile: { ...profile, isFavorite: true, isMutual: false },
+    });
   });
 });
