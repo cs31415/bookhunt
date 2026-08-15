@@ -12,7 +12,7 @@ Registered app users. Stores credentials, profile info, email-verification and p
 | password_hash | VARCHAR(255) NOT NULL | bcrypt-hashed password |
 | display_name | VARCHAR(255) NOT NULL | Public name shown in the UI |
 | handle | VARCHAR(30) NOT NULL | Public identity and the whole of the URL at `bookhunt.net/<handle>`; stored lowercase, `idx_users_handle_lower` makes uniqueness case-insensitive. Reserved words are refused so a handle cannot shadow a top-level route |
-| preferences | JSONB DEFAULT '{}' | User settings (e.g. accent color, dark mode, fonts) |
+| preferences | JSONB DEFAULT '{}' | One document for reader settings that must survive a reload; `theme` is the first key (LOS-258). Written by merge (`||`), never assignment, so saving one key cannot drop another |
 | is_discoverable | BOOLEAN DEFAULT FALSE | Master switch for the public profile at `bookhunt.net/<handle>`. Off by default; set from settings (LOS-251) |
 | reset_token | VARCHAR(255) UNIQUE | nullable; one-time token for password reset flow |
 | reset_token_expires_at | TIMESTAMPTZ | nullable; expiry time for the reset token |
@@ -110,7 +110,7 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 - `fn_set_reset_token(p_email, p_token, p_expires_at)` → BOOLEAN
 - `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
 - `fn_verify_email(p_token)` → `users` row, or no rows if the token is unknown, expired or spent
-- `fn_update_user_profile(p_user_id, p_display_name, p_handle, p_is_discoverable, p_set_discoverable)` → profile row. `p_set_discoverable` says whether the flag was sent at all: COALESCE cannot carry a boolean, since NULL would be indistinguishable from "make it false"
+- `fn_update_user_profile(p_user_id, p_display_name, p_handle, p_is_discoverable, p_set_discoverable, p_preferences)` → profile row. `p_set_discoverable` says whether the flag was sent at all: COALESCE cannot carry a boolean, since NULL would be indistinguishable from "make it false"
 - `fn_is_handle_available(p_handle)` → BOOLEAN; advisory, matched on LOWER to agree with the index
 - `fn_set_verification_token(p_email, p_token, p_expires_at)` → BOOLEAN (only for accounts still unverified)
 

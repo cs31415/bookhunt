@@ -5,6 +5,8 @@ export interface UpdateProfileParams {
   displayName?: string;
   handle?: string;
   isDiscoverable?: boolean;
+  /** Merged into the stored document, never assigned over it. */
+  preferences?: Record<string, unknown>;
 }
 
 export interface UserProfile {
@@ -13,6 +15,7 @@ export interface UserProfile {
   displayName: string;
   handle: string;
   isDiscoverable: boolean;
+  preferences: Record<string, unknown>;
 }
 
 /**
@@ -33,6 +36,7 @@ export async function updateProfile(
     params.handle === undefined ? null : normalizeHandle(params.handle),
     params.isDiscoverable ?? null,
     params.isDiscoverable !== undefined,
+    params.preferences ?? null,
   );
 
   if (!row) return null;
@@ -43,5 +47,6 @@ export async function updateProfile(
     displayName: row.display_name,
     handle: row.handle,
     isDiscoverable: row.is_discoverable,
+    preferences: row.preferences ?? {},
   };
 }
