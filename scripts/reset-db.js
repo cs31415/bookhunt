@@ -37,7 +37,7 @@ const { Pool } = require('pg');
 // nothing in the functions depends on those rows.
 const SQL_FILES = ['drop_tables.sql', 'setup_tables.sql', 'setup_functions.sql', 'setup_data.sql'];
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '']);
-const TABLES = ['users', 'authors', 'books', 'library_entries', 'ai_summaries', 'user_pinned_searches', 'canned_search_draws'];
+const TABLES = ['users', 'authors', 'books', 'library_entries', 'user_favorites', 'ai_summaries', 'user_pinned_searches', 'canned_search_draws'];
 
 const args = process.argv.slice(2);
 const skipPrompt = args.includes('--yes') || args.includes('-y');

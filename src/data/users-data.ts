@@ -52,3 +52,30 @@ export async function getPublicLibrary(
   );
   return rows;
 }
+
+export async function searchUsers(query: string, limit: number) {
+  const { rows } = await pool.query('SELECT * FROM fn_search_users($1, $2)', [query, limit]);
+  return rows;
+}
+
+/** False when the handle is unknown, or is the caller's own. */
+export async function addUserFavorite(userId: number, handle: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT fn_add_user_favorite($1, $2) AS ok', [userId, handle]);
+  return rows[0].ok as boolean;
+}
+
+export async function removeUserFavorite(userId: number, handle: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT fn_remove_user_favorite($1, $2) AS ok', [userId, handle]);
+  return rows[0].ok as boolean;
+}
+
+export async function listUserFavorites(userId: number) {
+  const { rows } = await pool.query('SELECT * FROM fn_get_user_favorites($1)', [userId]);
+  return rows;
+}
+
+/** Null when the handle is unknown; the caller reads that as a 404. */
+export async function getFavoriteState(userId: number, handle: string) {
+  const { rows } = await pool.query('SELECT * FROM fn_get_favorite_state($1, $2)', [userId, handle]);
+  return rows.length > 0 ? rows[0] : null;
+}
