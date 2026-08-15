@@ -48,6 +48,19 @@ there before it ships.
 | GET | /:handle/library | None | `?status=&favorites=&page=&limit=` | `{ entries, total, page, pageSize }`. Hidden books never appear, and rows carry no notes or reviews: those are absent from the stored function's row type rather than filtered out |
 | GET | /handle-available | None | `?handle=` | `{ handle, available, reason }` where `handle` is the normalized form and `reason` is null when it can be claimed. Advisory only -- `/auth/register` is the authority and answers 409. Rate limited to 30/min |
 
+### Messages (`/messages`)
+Every route requires Bearer auth. Both readers must have favourited each other; un-favouriting either way stops delivery, which is how blocking works.
+
+| Method | Path | Request | Response |
+|--------|------|---------|----------|
+| GET | / | — | `{ conversations: [{ handle, displayName, lastMessage, unreadCount }] }`, newest first |
+| GET | /unread-count | — | `{ count }`. Polled by the header badge, so it stays cheap |
+| GET | /:handle | `?page=` | `{ messages, total, page, pageSize }`, oldest first |
+| POST | /:handle | `{ body }` | 201 `{ message }`; 400 empty or over 2000 chars; 403 `{ code: 'NOT_MUTUAL_FAVORITE' }`; 422 `{ code: 'MESSAGE_REJECTED' }` |
+| POST | /:handle/read | — | `{ marked }` — clears only what they sent |
+
+The two failure codes are deliberately distinct: one is fixed by favouriting someone back, the other by editing the words.
+
 ### Books (`/books`)
 | Method | Path | Auth | Params/Body | Response |
 |--------|------|------|-------------|----------|

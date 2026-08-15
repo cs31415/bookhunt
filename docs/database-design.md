@@ -32,6 +32,20 @@ Readers a reader has favourited, and the permission model for messaging: only so
 
 `PRIMARY KEY (user_id, favorite_user_id)` makes it idempotent; `CHECK (user_id <> favorite_user_id)` refuses self-favouriting at the table rather than in a caller. `idx_user_favorites_reverse` covers the other direction, which the mutual check reads.
 
+### `messages`
+Private messages. Delivery is polled, not pushed.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL PK | |
+| sender_id | INT REFERENCES users(id) ON DELETE CASCADE | |
+| recipient_id | INT REFERENCES users(id) ON DELETE CASCADE | |
+| body | TEXT NOT NULL | Filtered before insert, so a refused message is never stored |
+| created_at | TIMESTAMPTZ DEFAULT NOW() | |
+| read_at | TIMESTAMPTZ | NULL until the recipient opens the thread |
+
+`idx_messages_recipient(recipient_id, created_at DESC)` serves the inbox and the unread count; `idx_messages_thread(sender_id, recipient_id, created_at)` serves one conversation, which reads both directions as separate ranges.
+
 ### `authors`
 Book authors. Upserted automatically when books are imported from Google Books.
 
@@ -122,6 +136,8 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 - `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
 - `fn_verify_email(p_token)` → `users` row, or no rows if the token is unknown, expired or spent
 - `fn_update_user_profile(p_user_id, p_display_name, p_handle, p_is_discoverable, p_set_discoverable, p_preferences)` → profile row. `p_set_discoverable` says whether the flag was sent at all: COALESCE cannot carry a boolean, since NULL would be indistinguishable from "make it false"
+- `fn_send_message(p_sender_id, p_handle, p_body)` → the stored row, or **no rows** when the pair is not mutual. The rule is enforced here, in SQL, so no route can send around it
+- `fn_get_conversations(p_user_id)`, `fn_get_conversation(p_user_id, p_handle, …)`, `fn_mark_conversation_read`, `fn_unread_message_count`
 - `fn_search_users(p_query, p_limit)` → discoverable readers only
 - `fn_add_user_favorite` / `fn_remove_user_favorite(p_user_id, p_handle)` → BOOLEAN; false for an unknown handle or your own
 - `fn_get_user_favorites(p_user_id)` → owner-only list, each with `is_mutual`
