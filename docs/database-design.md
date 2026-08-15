@@ -32,6 +32,15 @@ Readers a reader has favourited, and the permission model for messaging: only so
 
 `PRIMARY KEY (user_id, favorite_user_id)` makes it idempotent; `CHECK (user_id <> favorite_user_id)` refuses self-favouriting at the table rather than in a caller. `idx_user_favorites_reverse` covers the other direction, which the mutual check reads.
 
+### `user_favorite_authors`
+Authors a reader has favourited. Its own table because `authors` is a shared global catalogue with no per-user join table — unlike `library_entries`, there is nowhere to hang a flag. Public, unlike `user_favorites`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| user_id | INT REFERENCES users(id) ON DELETE CASCADE | |
+| author_id | INT REFERENCES authors(id) ON DELETE CASCADE | |
+| created_at | TIMESTAMPTZ DEFAULT NOW() | Orders the list, newest first |
+
 ### `messages`
 Private messages. Delivery is polled, not pushed.
 

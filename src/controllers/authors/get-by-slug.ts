@@ -1,3 +1,4 @@
+import { isFavorite } from '../../models/authors/favorites';
 import { Request, Response } from 'express';
 import { getAuthorBySlug, getAuthorWorks, resolveProviderAuthor } from '../../models/authors/get-by-slug';
 
@@ -39,7 +40,10 @@ export async function getBySlug(req: Request, res: Response) {
 
     if (author) {
       const books = await getAuthorWorks(author, req.user?.id);
-      res.json({ author, books });
+      // Only meaningful for a signed-in reader; a guest gets false, which is
+      // what the un-pressed heart shows anyway.
+      const favorite = req.user ? await isFavorite(req.user.id, slug) : false;
+      res.json({ author, books, isFavorite: favorite });
       return;
     }
 

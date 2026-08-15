@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS canned_search_draws CASCADE;
 DROP TABLE IF EXISTS user_pinned_searches CASCADE;
 DROP TABLE IF EXISTS canned_searches CASCADE;
 DROP TABLE IF EXISTS ai_summaries CASCADE;
+DROP TABLE IF EXISTS user_favorite_authors CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS user_favorites CASCADE;
 DROP TABLE IF EXISTS library_entries CASCADE;
