@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { handleAvailable } from '../controllers/users/handle-available';
 import { updateMe } from '../controllers/users/update-me';
+import { getPublicProfile, getPublicLibrary } from '../controllers/users/get-public-profile';
 import { authRequired } from '../middleware/auth';
 import { rateLimiter } from '../middleware/rateLimiter';
 
@@ -18,5 +19,11 @@ router.get('/handle-available', rateLimiter(MINUTE, 30), handleAvailable);
 // the budget -- the ordering convention documented in routes/import.ts.
 // '/me' is a literal and stays above any future '/:handle'.
 router.put('/me', authRequired, rateLimiter(MINUTE, 20), updateMe);
+
+// Last: '/:handle' would otherwise swallow '/handle-available' and '/me'.
+// Unauthenticated by design, and rate-limited because it is the one endpoint
+// that answers questions about accounts other than the caller's.
+router.get('/:handle', rateLimiter(MINUTE, 60), getPublicProfile);
+router.get('/:handle/library', rateLimiter(MINUTE, 60), getPublicLibrary);
 
 export default router;

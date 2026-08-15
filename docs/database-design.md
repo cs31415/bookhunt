@@ -111,6 +111,8 @@ CREATE TYPE reading_status AS ENUM ('queued', 'reading', 'finished', 'abandoned'
 - `fn_reset_password(p_token, p_new_hash)` → BOOLEAN (validates token not expired, clears it)
 - `fn_verify_email(p_token)` → `users` row, or no rows if the token is unknown, expired or spent
 - `fn_update_user_profile(p_user_id, p_display_name, p_handle, p_is_discoverable, p_set_discoverable, p_preferences)` → profile row. `p_set_discoverable` says whether the flag was sent at all: COALESCE cannot carry a boolean, since NULL would be indistinguishable from "make it false"
+- `fn_get_public_profile(p_handle)` → header + counts, or no rows when unknown or not discoverable
+- `fn_get_public_library(p_handle, p_status, p_favorites_only, p_limit, p_offset)` → public rows. The `is_discoverable` gate and the `is_hidden` exclusion live in the WHERE clause so no caller can forget them; `notes` and `review` are absent from the row type entirely
 - `fn_is_handle_available(p_handle)` → BOOLEAN; advisory, matched on LOWER to agree with the index
 - `fn_set_verification_token(p_email, p_token, p_expires_at)` → BOOLEAN (only for accounts still unverified)
 
