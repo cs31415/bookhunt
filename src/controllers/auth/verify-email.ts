@@ -36,6 +36,7 @@ import { signAuthToken } from '../../lib/auth/sign-auth-token';
  *                     email: { type: string }
  *                     displayName: { type: string }
  *                     handle: { type: string }
+ *                     isDiscoverable: { type: boolean }
  *                 token: { type: string }
  *       400:
  *         description: Invalid, expired or already-used verification token
@@ -63,6 +64,7 @@ export async function verifyEmail(req: Request, res: Response) {
       email: row.email,
       displayName: row.display_name,
       handle: row.handle,
+      isDiscoverable: row.is_discoverable,
     };
     res.json({ user, token: signAuthToken(user) });
   } catch (err) {
