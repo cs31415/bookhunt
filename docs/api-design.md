@@ -40,7 +40,7 @@ there before it ships.
 ### Users (`/users`)
 | Method | Path | Auth | Params/Body | Response |
 |--------|------|------|-------------|----------|
-| PUT | /me | Bearer | `{ displayName?, handle?, isDiscoverable? }` | `{ user: { id, email, displayName, handle, isDiscoverable } }`. An absent field is left alone; `isDiscoverable` is the master switch for the public profile and is off by default. 400 names the offending `field`; 409 `{ code: 'HANDLE_TAKEN' }` matches registration |
+| PUT | /me | Bearer | `{ displayName?, handle?, isDiscoverable?, preferences? }` | `{ user: { id, email, displayName, handle, isDiscoverable } }`. An absent field is left alone; `isDiscoverable` is the master switch for the public profile and is off by default. 400 names the offending `field`; 409 `{ code: 'HANDLE_TAKEN' }` matches registration |
 | GET | /handle-available | None | `?handle=` | `{ handle, available, reason }` where `handle` is the normalized form and `reason` is null when it can be claimed. Advisory only -- `/auth/register` is the authority and answers 409. Rate limited to 30/min |
 
 ### Books (`/books`)
