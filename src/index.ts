@@ -8,6 +8,7 @@ import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
 import authRoutes from './routes/auth';
+import userRoutes from './routes/users';
 import bookRoutes from './routes/books';
 import authorRoutes from './routes/authors';
 import libraryRoutes from './routes/library';
@@ -43,6 +44,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/docs.json', (_req, res) => { res.json(swaggerSpec); });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/authors', authorRoutes);
 app.use('/api/library', libraryRoutes);

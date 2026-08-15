@@ -35,6 +35,7 @@ import { signAuthToken } from '../../lib/auth/sign-auth-token';
  *                     id: { type: integer }
  *                     email: { type: string }
  *                     displayName: { type: string }
+ *                     handle: { type: string }
  *                 token: { type: string }
  *       400:
  *         description: Invalid, expired or already-used verification token
@@ -57,7 +58,12 @@ export async function verifyEmail(req: Request, res: Response) {
       return;
     }
 
-    const user = { id: row.id, email: row.email, displayName: row.display_name };
+    const user = {
+      id: row.id,
+      email: row.email,
+      displayName: row.display_name,
+      handle: row.handle,
+    };
     res.json({ user, token: signAuthToken(user) });
   } catch (err) {
     console.error('Verify email error:', err);

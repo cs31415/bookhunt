@@ -10,6 +10,7 @@ BEGIN;
 \ir functions/fn_reset_password.sql
 \ir functions/fn_verify_email.sql
 \ir functions/fn_set_verification_token.sql
+\ir functions/fn_is_handle_available.sql
 
 -- books & authors
 \ir functions/fn_upsert_book.sql

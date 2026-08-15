@@ -15,7 +15,12 @@ const mockInsertUser = authData.registerUser as jest.Mock;
 const mockSendEmail = sendEmail as jest.Mock;
 const mockHash = bcrypt.hash as jest.Mock;
 
-const row = { id: 1, email: 'reader@example.com', display_name: 'Ada Reader' };
+const row = {
+  id: 1,
+  email: 'reader@example.com',
+  display_name: 'Ada Reader',
+  handle: 'ada',
+};
 
 beforeEach(() => {
   mockHash.mockResolvedValue('hashed');
@@ -30,7 +35,7 @@ afterEach(() => {
 
 describe('registerUser model', () => {
   it('stores the address in canonical form', async () => {
-    await registerUser('  Reader@Example.COM ', 'b00kW0rm!', 'Ada Reader');
+    await registerUser('  Reader@Example.COM ', 'b00kW0rm!', 'Ada Reader', 'Ada');
 
     // The bug this closes: the row used to keep whatever case was typed while
     // lookups matched on LOWER(email), so two accounts could share an address.
@@ -38,25 +43,27 @@ describe('registerUser model', () => {
       'reader@example.com',
       'hashed',
       'Ada Reader',
+      'ada',
       'test-uuid',
       expect.any(Date),
     );
   });
 
   it('trims the display name', async () => {
-    await registerUser('reader@example.com', 'b00kW0rm!', '  Ada Reader  ');
+    await registerUser('reader@example.com', 'b00kW0rm!', '  Ada Reader  ', 'ada');
 
     expect(mockInsertUser).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       'Ada Reader',
       expect.any(String),
+      expect.any(String),
       expect.any(Date),
     );
   });
 
   it('hashes the password rather than storing it', async () => {
-    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader');
+    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada');
 
     expect(mockHash).toHaveBeenCalledWith('b00kW0rm!', 10);
     expect(mockInsertUser).not.toHaveBeenCalledWith(
@@ -65,17 +72,21 @@ describe('registerUser model', () => {
       expect.anything(),
       expect.anything(),
       expect.anything(),
+      expect.anything(),
     );
   });
 
   it('mails a verification link that expires in 24 hours', async () => {
     const before = Date.now();
-    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader');
+    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada');
 
-    const expiresAt: Date = mockInsertUser.mock.calls[0][4];
+    const expiresAt: Date = mockInsertUser.mock.calls[0][5];
     const ttlMs = expiresAt.getTime() - before;
     expect(ttlMs).toBeGreaterThan(23 * 60 * 60 * 1000);
-    expect(ttlMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
+    // The upper bound needs slack: the model reads its own Date.now() after
+    // `before` was taken, so the measured span is 24 hours plus however long
+    // the call took. Under a loaded full-suite run that overshot a hard 24.
+    expect(ttlMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000 + 60 * 1000);
 
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -87,10 +98,11 @@ describe('registerUser model', () => {
   });
 
   it('returns the created user in camelCase', async () => {
-    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader')).resolves.toEqual({
+    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada')).resolves.toEqual({
       id: 1,
       email: 'reader@example.com',
       displayName: 'Ada Reader',
+      handle: 'ada',
     });
   });
 
@@ -101,7 +113,7 @@ describe('registerUser model', () => {
     mockSendEmail.mockResolvedValue(false);
 
     await expect(
-      registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader'),
+      registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada'),
     ).resolves.toMatchObject({ id: 1 });
   });
 
@@ -110,7 +122,7 @@ describe('registerUser model', () => {
     err.code = '23505';
     mockInsertUser.mockRejectedValue(err);
 
-    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader')).rejects.toMatchObject({
+    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada')).rejects.toMatchObject({
       code: '23505',
     });
     expect(mockSendEmail).not.toHaveBeenCalled();

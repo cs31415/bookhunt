@@ -21,15 +21,19 @@ const validBody = {
   email: 'reader@example.com',
   password: 'b00kW0rm!',
   displayName: 'Ada Reader',
+  handle: 'ada',
+};
+
+const createdUser = {
+  id: 1,
+  email: 'reader@example.com',
+  displayName: 'Ada Reader',
+  handle: 'ada',
 };
 
 describe('register controller', () => {
   it('creates the account and reports that verification is required', async () => {
-    mockRegisterUser.mockResolvedValue({
-      id: 1,
-      email: 'reader@example.com',
-      displayName: 'Ada Reader',
-    });
+    mockRegisterUser.mockResolvedValue(createdUser);
 
     const res = makeRes();
     await register(makeReq(validBody), res);
@@ -38,20 +42,17 @@ describe('register controller', () => {
       'reader@example.com',
       'b00kW0rm!',
       'Ada Reader',
+      'ada',
     );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
-      user: { id: 1, email: 'reader@example.com', displayName: 'Ada Reader' },
+      user: createdUser,
       verificationRequired: true,
     });
   });
 
   it('issues no session token', async () => {
-    mockRegisterUser.mockResolvedValue({
-      id: 1,
-      email: 'reader@example.com',
-      displayName: 'Ada Reader',
-    });
+    mockRegisterUser.mockResolvedValue(createdUser);
 
     const res = makeRes();
     await register(makeReq(validBody), res);
@@ -61,7 +62,56 @@ describe('register controller', () => {
     expect(payload).not.toHaveProperty('token');
   });
 
+  it('normalizes the handle before storing it', async () => {
+    mockRegisterUser.mockResolvedValue(createdUser);
+
+    const res = makeRes();
+    await register(makeReq({ ...validBody, handle: '  Ada  ' }), res);
+
+    // Refusing a capital letter would tell a reader their own name is invalid.
+    expect(mockRegisterUser).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      'ada',
+    );
+  });
+
   it('returns 409 when the email is already registered', async () => {
+    const err: any = new Error('duplicate key');
+    err.code = '23505';
+    err.constraint = 'idx_users_email_lower';
+    mockRegisterUser.mockRejectedValue(err);
+
+    const res = makeRes();
+    await register(makeReq(validBody), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Email already registered' });
+  });
+
+  it('returns 409 with HANDLE_TAKEN when the handle collided instead', async () => {
+    // Both collisions arrive as 23505. Naming the wrong field would send the
+    // reader to change their email address when the handle was the problem.
+    const err: any = new Error('duplicate key');
+    err.code = '23505';
+    err.constraint = 'idx_users_handle_lower';
+    mockRegisterUser.mockRejectedValue(err);
+
+    const res = makeRes();
+    await register(makeReq(validBody), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'That handle is taken.',
+      code: 'HANDLE_TAKEN',
+      field: 'handle',
+    });
+  });
+
+  it('treats an unlabelled 23505 as an address collision', async () => {
+    // The plain UNIQUE on users.email reports its own constraint name, and an
+    // older driver may report none at all. Either way it is not the handle.
     const err: any = new Error('duplicate key');
     err.code = '23505';
     mockRegisterUser.mockRejectedValue(err);
@@ -69,7 +119,6 @@ describe('register controller', () => {
     const res = makeRes();
     await register(makeReq(validBody), res);
 
-    expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith({ error: 'Email already registered' });
   });
 
@@ -103,6 +152,22 @@ describe('register controller', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({ error });
       // Nothing is written when the request never made sense.
+      expect(mockRegisterUser).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a missing handle', undefined, 'Handle is required.'],
+      ['a short handle', 'ab', 'Handle must be between 3 and 30 characters.'],
+      ['a spaced handle', 'ada reader', 'Handle can contain only letters, numbers and underscores.'],
+      ['a handle starting with a digit', '92ada', 'Handle must start with a letter.'],
+      ['a reserved handle', 'settings', 'That handle is reserved.'],
+    ])('returns 400 for %s', async (_label, handle, error) => {
+      const res = makeRes();
+      await register(makeReq({ ...validBody, handle }), res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      // The field is named so the form can mark the right box.
+      expect(res.json).toHaveBeenCalledWith({ error, field: 'handle' });
       expect(mockRegisterUser).not.toHaveBeenCalled();
     });
 

@@ -4,12 +4,13 @@ export async function registerUser(
   email: string,
   passwordHash: string,
   displayName: string,
+  handle: string,
   verificationToken: string,
   verificationExpiresAt: Date,
 ) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_register_user($1, $2, $3, $4, $5)',
-    [email, passwordHash, displayName, verificationToken, verificationExpiresAt],
+    'SELECT * FROM fn_register_user($1, $2, $3, $4, $5, $6)',
+    [email, passwordHash, displayName, handle, verificationToken, verificationExpiresAt],
   );
   return rows[0];
 }
