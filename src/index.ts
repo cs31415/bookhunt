@@ -19,6 +19,7 @@ import importRoutes from './routes/import';
 import messageRoutes from './routes/messages';
 import cannedSearchRoutes from './routes/canned-searches';
 import { requestLogger } from './middleware/requestLogger';
+import { describeSchemaGap, findSchemaGap } from './lib/schema/check-schema';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -60,8 +61,35 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(port, () => {
-  console.log(`BookHunt API running on port ${port}`);
-});
+/**
+ * Refuses to start against a database that is behind this build.
+ *
+ * Exiting rather than warning, because a container that fails to start is a
+ * deploy that visibly failed, while one serving 500s from half its routes
+ * looks healthy to everything except the reader.
+ *
+ * A connection failure is deliberately not fatal: the pool retries, nothing
+ * else here has ever required the database at boot, and turning a transient
+ * blip into a crash loop would be a worse failure than the one this prevents.
+ */
+async function start() {
+  if (process.env.SKIP_SCHEMA_CHECK !== 'true') {
+    try {
+      const gap = await findSchemaGap();
+      if (gap.missingTables.length > 0 || gap.missingFunctions.length > 0) {
+        console.error(describeSchemaGap(gap));
+        process.exit(1);
+      }
+    } catch (error) {
+      console.warn('Could not check the schema; starting anyway.', error);
+    }
+  }
+
+  app.listen(port, () => {
+    console.log(`BookHunt API running on port ${port}`);
+  });
+}
+
+start();
 
 export default app;
