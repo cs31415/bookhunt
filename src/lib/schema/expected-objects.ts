@@ -77,6 +77,7 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_remove_from_library',
   'fn_remove_many_from_library',
   'fn_library_stats',
+  'fn_set_library_ebook',
   'fn_match_library_entries',
   'fn_search_library',
   'fn_add_user_related',

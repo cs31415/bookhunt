@@ -11,6 +11,7 @@ import { addRelated } from '../controllers/library/add-related';
 import { removeRelated } from '../controllers/library/remove-related';
 import { addFavorite, removeFavorite } from '../controllers/library/set-favorite';
 import { hideEntry, showEntry } from '../controllers/library/set-hidden';
+import { markEbook, markPhysical } from '../controllers/library/set-ebook';
 
 const router = Router();
 
@@ -28,6 +29,8 @@ router.put('/:bookId/favorite', addFavorite);
 router.delete('/:bookId/favorite', removeFavorite);
 router.put('/:bookId/hidden', hideEntry);
 router.delete('/:bookId/hidden', showEntry);
+router.put('/:bookId/ebook', markEbook);
+router.delete('/:bookId/ebook', markPhysical);
 router.put('/:bookId', updateEntry);
 // Above the wildcard for the same reason /search is: otherwise "bulk" is read
 // as a bookId and parses to NaN.
