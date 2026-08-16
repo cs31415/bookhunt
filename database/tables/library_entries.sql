@@ -15,6 +15,9 @@ CREATE TABLE library_entries (
     -- Excluded from the public profile at bookhunt.net/<handle>. Has no effect
     -- on what the owner sees in their own library.
     is_hidden    BOOLEAN NOT NULL DEFAULT FALSE,
+    -- The copy the reader owns is an ebook. FALSE means a physical book, which
+    -- is why the column is NOT NULL: every shelf predating it is physical.
+    is_ebook     BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (user_id, book_id)
 );
 
