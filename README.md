@@ -35,6 +35,17 @@ psql -d <your_database> -f database/setup_functions.sql
 
 Each table and function lives in its own file under `database/tables/` and `database/functions/`. The setup scripts include them in dependency order.
 
+Those two scripts build an empty database. They create what is missing but never
+alter what is already there, so a database that predates a column needs the
+matching script in `database/alter/`, oldest first. The API checks this at boot
+and exits rather than serving 500s from half its routes; `SKIP_SCHEMA_CHECK=true`
+overrides it.
+
+Deploying schema to production is a fixed order — migrate, then ship — and one of
+the steps is a data backfill rather than SQL. The runbook lives with the rest of
+the operational docs, in
+[bookhunt-deploy](https://github.com/cs31415/bookhunt-deploy#deploying-a-change).
+
 ## Setup
 
 ```bash
