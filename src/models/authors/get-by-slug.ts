@@ -4,6 +4,7 @@ import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-c
 import { generateAuthorDetails } from '../ai/get-author-details';
 import { searchBooks, matchLibraryEntries, SearchResult } from '../ai/search';
 import { deslugify, slugifyName } from '../../lib/slug';
+import { dedupeEditions } from './dedupe-editions';
 
 export { getBooksByAuthor };
 
@@ -99,7 +100,11 @@ export async function getAuthorWorks(author: any, userId?: number): Promise<Auth
     await matchLibraryEntries(userId, works);
   }
 
-  return [...works.filter((w) => w.inLibrary), ...works.filter((w) => !w.inLibrary)];
+  // After the library match, not before: ownership is one of the things that
+  // decides which edition survives, and it is not known until here.
+  const deduped = dedupeEditions(works);
+
+  return [...deduped.filter((w) => w.inLibrary), ...deduped.filter((w) => !w.inLibrary)];
 }
 
 function titleCase(value: string): string {
