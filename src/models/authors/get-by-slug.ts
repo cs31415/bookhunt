@@ -5,6 +5,7 @@ import { generateAuthorDetails } from '../ai/get-author-details';
 import { searchBooks, matchLibraryEntries, SearchResult } from '../ai/search';
 import { deslugify, slugifyName } from '../../lib/slug';
 import { dedupeEditions } from './dedupe-editions';
+import { isStubEdition } from './is-stub-edition';
 
 export { getBooksByAuthor };
 
@@ -96,13 +97,19 @@ export async function getAuthorWorks(author: any, userId?: number): Promise<Auth
     }
   }
 
+  // Stubs go BEFORE the library match, deliberately. matchLibraryEntries is a
+  // fuzzy title match, and it marks "Cryptonomicon 8c" as owned on the strength
+  // of the reader's real Cryptonomicon -- so a guard that trusted inLibrary
+  // would protect exactly the records this is meant to remove.
+  const real = works.filter((w) => !isStubEdition(w));
+
   if (userId) {
-    await matchLibraryEntries(userId, works);
+    await matchLibraryEntries(userId, real);
   }
 
-  // After the library match, not before: ownership is one of the things that
-  // decides which edition survives, and it is not known until here.
-  const deduped = dedupeEditions(works);
+  // Dedupe after the match: ownership decides which of two editions survives,
+  // and that is not known until here.
+  const deduped = dedupeEditions(real);
 
   return [...deduped.filter((w) => w.inLibrary), ...deduped.filter((w) => !w.inLibrary)];
 }
