@@ -196,6 +196,36 @@ describe('matchLibraryEntries', () => {
     expect(books[0].inLibrary).toBe(false);
   });
 
+  // LOS-275: every row the library holds of a series answers a keyword search
+  // for one volume of it, and each shares the author. None of them is that
+  // volume, so the reader must not be told they own it.
+  it('does not read other volumes of a series as the volume asked for', async () => {
+    mockMatchByTitleData.mockResolvedValue([
+      {
+        row_index: 0,
+        book_id: 544,
+        title: 'Second Foundation',
+        author_name: 'Isaac Asimov',
+        isbn13: null,
+        status: 'queued',
+      },
+      {
+        row_index: 0,
+        book_id: 481,
+        title: "Foundation's Edge",
+        author_name: 'Isaac Asimov',
+        isbn13: null,
+        status: 'queued',
+      },
+    ]);
+    const books: any[] = [llmBook('Foundation', 'Isaac Asimov')];
+
+    await matchLibraryEntries(1, books);
+
+    expect(books[0].inLibrary).toBe(false);
+    expect(books[0].libraryStatus).toBeNull();
+  });
+
   it('does not match an id-less book whose author the LLM left out', async () => {
     mockMatchByTitleData.mockResolvedValue([
       { row_index: 0, book_id: 7, title: 'Cosmos', author_name: 'Carl Sagan', isbn13: null, status: 'read' },

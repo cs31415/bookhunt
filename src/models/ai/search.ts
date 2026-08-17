@@ -6,7 +6,7 @@ import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-c
 import { searchWithFallback } from '../../lib/books/search-with-fallback';
 import { SearchResult } from '../../lib/books/books-types';
 import { tokenizeQuery } from '../search/tokenize-query';
-import { matchesTitleAndAuthorEitherWay, scoreCandidate } from '../matching/match-book-candidate';
+import { matchesTitleAndAuthorIgnoringSubtitle, scoreCandidate } from '../matching/match-book-candidate';
 
 export type { SearchResult } from '../../lib/books/books-types';
 
@@ -75,15 +75,16 @@ async function matchById(userId: number, books: LibraryMatchable[]) {
  * Text matching against the library only -- one query for the whole batch, the
  * same way findCatalogMatches asks the catalog the same question for an import.
  *
- * Ranking picks the best candidate, but matchesTitleAndAuthorEitherWay decides
- * whether there is one at all: the title has to substantially agree *and* an
- * author token has to match. A ranked-first candidate is merely the closest row
- * in the library, which for a suggestion the caller doesn't own is still a wrong
- * answer -- and a wrong one here mislabels someone's own shelf.
+ * Ranking picks the best candidate, but matchesTitleAndAuthorIgnoringSubtitle
+ * decides whether there is one at all: the titles have to agree both ways *and*
+ * an author token has to match. A ranked-first candidate is merely the closest
+ * row in the library, which for a suggestion the caller doesn't own is still a
+ * wrong answer -- and a wrong one here mislabels someone's own shelf.
  *
- * Either way round, because the LLM answers with the full subtitle ("Broca's
+ * Subtitles are set aside, because the LLM answers with the full one ("Broca's
  * Brain: Reflections on the Romance of Science") where the catalog holds the
- * short title.
+ * short title. Nothing else is: a library holding "Second Foundation" does not
+ * hold "Foundation" (LOS-275).
  */
 async function matchByTitleAndAuthor(userId: number, books: LibraryMatchable[]) {
   const withTitles = books.filter((book) => book.title?.trim());
@@ -115,7 +116,7 @@ async function matchByTitleAndAuthor(userId: number, books: LibraryMatchable[]) 
           isbn13: row.isbn13,
         },
       }))
-      .filter(({ candidate }) => matchesTitleAndAuthorEitherWay(candidate, hint))
+      .filter(({ candidate }) => matchesTitleAndAuthorIgnoringSubtitle(candidate, hint))
       .sort((a, b) => scoreCandidate(b.candidate, hint) - scoreCandidate(a.candidate, hint))[0];
 
     if (!best) return;
