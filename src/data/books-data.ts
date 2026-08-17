@@ -41,6 +41,12 @@ export async function enrichThinBookRow(bookId: number, fields: EnrichThinBookFi
   return result.rows[0]?.enriched === true;
 }
 
+/** Replaces a cover outright, which enrichThinBookRow's COALESCE cannot do. */
+export async function setBookCover(bookId: number, coverUrl: string): Promise<boolean> {
+  const result = await pool.query('SELECT fn_set_book_cover($1, $2) AS updated', [bookId, coverUrl]);
+  return result.rows[0]?.updated === true;
+}
+
 export async function getLibraryEntry(userId: number, bookId: number) {
   const result = await pool.query(
     'SELECT * FROM library_entries WHERE user_id = $1 AND book_id = $2',
