@@ -167,30 +167,73 @@ export function matchesTitleAndAuthor(candidate: CandidateFields, hint: MatchHin
 }
 
 /**
+ * A subtitle is delimited: it follows a colon, a spaced dash, or sits in a
+ * trailing parenthetical. That punctuation is the whole signal — words a title
+ * simply carries on with are part of the title, not a subtitle, which is why
+ * "Foundation and Empire" cannot be shortened to "Foundation".
+ */
+const SUBTITLE_DELIMITER = /\s*[:;]\s+|\s+[-–—]\s+/;
+
+/** The title with any delimited subtitle or trailing parenthetical removed. */
+function mainTitle(title: string): string {
+  const stripped = (title ?? '')
+    .trim()
+    // "Dune (Dune Chronicles, Book 1)" -> "Dune". Repeated, because a title can
+    // trail more than one: "Foundation (Foundation, #1) (Everyman's Library)".
+    .replace(/(\s*[([][^)\]]*[)\]])+$/, '')
+    .split(SUBTITLE_DELIMITER)[0]
+    .trim();
+  // A title that is *only* a parenthetical, or only punctuation, keeps its
+  // original text rather than reducing to nothing and matching everything.
+  return tokenize(stripped).length > 0 ? stripped : (title ?? '').trim();
+}
+
+/** Whether two titles cover each other well enough to name the same book. */
+function titlesAgree(a: string, b: string): boolean {
+  return titleOverlap(a, b) >= TITLE_CONFIRM_OVERLAP && titleOverlap(b, a) >= TITLE_CONFIRM_OVERLAP;
+}
+
+/**
  * Whether candidate and hint name the same book when either side may be the one
- * carrying a subtitle.
+ * omitting a subtitle.
  *
  * matchesTitleAndAuthor measures overlap in one direction only — how much of the
  * *hint's* title the candidate covers — which is right wherever the hint is the
- * terse side, as a CSV cell is. It is wrong when the
- * hint is the verbose side: an LLM answers with "Broca's Brain: Reflections on
- * the Romance of Science" for a catalog row titled "Broca's Brain", and every
- * catalog token is present but only a third of the LLM's, so the one-way test
- * rejects a book the reader plainly owns. Trying it both ways accepts either
- * side omitting a subtitle.
+ * terse side, as a CSV cell is. It is wrong when the hint is the verbose side: an
+ * LLM answers with "Broca's Brain: Reflections on the Romance of Science" for a
+ * catalog row titled "Broca's Brain", and every catalog token is present but only
+ * a third of the LLM's, so the one-way test rejects a book the reader plainly
+ * owns.
  *
- * The cost is that a short title now matches any longer one containing it —
- * "Chronicle" against "The Wind-Up Bird Chronicle" — bounded by the author
- * having to agree as well. Worth it where the two sides are a catalog row and a
- * model's answer, both describing books someone already owns; not worth it for
- * the one-directional callers, which keep matchesTitleAndAuthor.
+ * Accepting either direction outright was the first answer to that and it claimed
+ * far too much: any short title is contained in a longer one, so the hint
+ * "Foundation" matched a library holding "Second Foundation" and told the reader
+ * they owned a book they do not (LOS-275). Both directions have to hold, and the
+ * subtitle case is served by dropping the subtitle rather than by loosening the
+ * comparison.
+ *
+ * Only when exactly one side carries a subtitle, because a series prefix puts the
+ * distinguishing words *after* the colon: "Star Wars: Heir to the Empire" and
+ * "Star Wars: Darth Bane" both reduce to "Star Wars", and stripping both sides
+ * would fuse two unrelated books.
  */
-export function matchesTitleAndAuthorEitherWay(candidate: CandidateFields, hint: MatchHint): boolean {
-  return (
-    matchesTitleAndAuthor(candidate, hint) ||
-    matchesTitleAndAuthor(
-      { title: hint.title, authors: hint.author ? [hint.author] : [] },
-      { title: candidate.title, author: candidate.authors[0] ?? null },
-    )
-  );
+export function matchesTitleAndAuthorIgnoringSubtitle(
+  candidate: CandidateFields,
+  hint: MatchHint,
+): boolean {
+  // The same strictness as matchesTitleAndAuthor: the author has to confirm the
+  // identification, so absent on either side is never a match.
+  if (!hint.author || candidate.authors.length === 0) return false;
+  if (!anyTokenMatches(hint.author, candidate.authors)) return false;
+
+  const candidateTitle = candidate.title ?? '';
+  if (titlesAgree(candidateTitle, hint.title)) return true;
+
+  const candidateMain = mainTitle(candidateTitle);
+  const hintMain = mainTitle(hint.title);
+  const candidateHasSubtitle = candidateMain !== candidateTitle.trim();
+  const hintHasSubtitle = hintMain !== hint.title.trim();
+  if (candidateHasSubtitle === hintHasSubtitle) return false;
+
+  return titlesAgree(candidateMain, hintMain);
 }
