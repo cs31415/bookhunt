@@ -17,7 +17,12 @@ CREATE TABLE library_entries (
     is_hidden    BOOLEAN NOT NULL DEFAULT FALSE,
     -- The copy the reader owns is an ebook. FALSE means a physical book, which
     -- is why the column is NOT NULL: every shelf predating it is physical.
+    --
+    -- Independent of is_audiobook rather than two values of one enum: owning
+    -- both the Kindle and the Audible copy of a book is ordinary, and this is
+    -- one row per (reader, book). Neither set means physical.
     is_ebook     BOOLEAN NOT NULL DEFAULT FALSE,
+    is_audiobook BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (user_id, book_id)
 );
 

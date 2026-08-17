@@ -41,7 +41,7 @@ describe('addToLibraryBySlug controller', () => {
 
       await addToLibraryBySlug(makeReq('a-book'), res);
 
-      expect(mockAddExistingToLibrary).toHaveBeenCalledWith(7, 5, 'queued');
+      expect(mockAddExistingToLibrary).toHaveBeenCalledWith(7, 5, 'queued', { isEbook: false, isAudiobook: false });
       expect(mockAddToLibrary).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({ entry, book: { id: 5, slug: 'a-book' } });
     });
@@ -53,7 +53,36 @@ describe('addToLibraryBySlug controller', () => {
 
       await addToLibraryBySlug(makeReq('a-book', { status: 'reading' }), res);
 
-      expect(mockAddExistingToLibrary).toHaveBeenCalledWith(7, 5, 'reading');
+      expect(mockAddExistingToLibrary).toHaveBeenCalledWith(7, 5, 'reading', { isEbook: false, isAudiobook: false });
+    });
+
+    // A CSV import reads the format from the same row as the title, so it is
+    // set in this write rather than by a second request per book (LOS-273).
+    it('passes the format flags through', async () => {
+      mockGetBookBySlug.mockResolvedValue({ id: 5, slug: 'a-book' });
+      mockAddExistingToLibrary.mockResolvedValue({});
+      const res = makeRes();
+
+      await addToLibraryBySlug(makeReq('a-book', { isEbook: true, isAudiobook: true }), res);
+
+      expect(mockAddExistingToLibrary).toHaveBeenCalledWith(7, 5, 'queued', {
+        isEbook: true,
+        isAudiobook: true,
+      });
+    });
+
+    // Read with === true, so a body that says "true" or 1 cannot set a flag.
+    it('treats a non-boolean flag as unset', async () => {
+      mockGetBookBySlug.mockResolvedValue({ id: 5, slug: 'a-book' });
+      mockAddExistingToLibrary.mockResolvedValue({});
+      const res = makeRes();
+
+      await addToLibraryBySlug(makeReq('a-book', { isEbook: 'true' }), res);
+
+      expect(mockAddExistingToLibrary).toHaveBeenCalledWith(7, 5, 'queued', {
+        isEbook: false,
+        isAudiobook: false,
+      });
     });
   });
 
@@ -76,6 +105,8 @@ describe('addToLibraryBySlug controller', () => {
         googleBooksId: 'gid',
         slug: 'a-new-book',
         enrich: true,
+        isEbook: false,
+        isAudiobook: false,
       });
       expect(mockAddExistingToLibrary).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({ entry, book: { id: 9, slug: 'a-new-book' } });

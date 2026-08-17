@@ -31,7 +31,7 @@ describe('addToLibrary model', () => {
     const result = await addToLibrary(1, baseParams);
 
     expect(mockUpsertBook).toHaveBeenCalledWith(baseParams);
-    expect(mockAddToLibrary).toHaveBeenCalledWith(1, 10, 'queued');
+    expect(mockAddToLibrary).toHaveBeenCalledWith(1, 10, 'queued', { isEbook: undefined, isAudiobook: undefined });
     expect(result).toEqual({ entry: { id: 10, status: 'queued' }, book: { id: 10, slug: 'a-book' } });
   });
 
@@ -41,7 +41,7 @@ describe('addToLibrary model', () => {
 
     await addToLibrary(2, { ...baseParams, status: 'read' });
 
-    expect(mockAddToLibrary).toHaveBeenCalledWith(2, 5, 'read');
+    expect(mockAddToLibrary).toHaveBeenCalledWith(2, 5, 'read', { isEbook: undefined, isAudiobook: undefined });
   });
 
   it('adds a book sourced from OpenLibrary (no googleBooksId)', async () => {

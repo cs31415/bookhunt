@@ -45,6 +45,8 @@ const VALID_STATUSES = new Set(['queued', 'reading', 'finished', 'abandoned']);
  *               coverUrl: { type: string }
  *               isbn13: { type: string }
  *               language: { type: string }
+ *               isEbook: { type: boolean, default: false, description: "The copy the reader owns is an ebook" }
+ *               isAudiobook: { type: boolean, default: false, description: "Independent of isEbook; neither means physical" }
  *     responses:
  *       200:
  *         description: Library entry (existing or newly created), plus the catalog book's real id/slug
@@ -73,9 +75,16 @@ export async function addToLibraryBySlug(req: Request, res: Response) {
       return;
     }
 
+    // `=== true` rather than a truthy read: these arrive from a request body,
+    // and a malformed one must not be able to set a flag by accident.
+    const format = {
+      isEbook: req.body?.isEbook === true,
+      isAudiobook: req.body?.isAudiobook === true,
+    };
+
     const existing = await getBookBySlug(slug);
     if (existing) {
-      const entry = await addExistingToLibraryModel(userId, existing.id, status);
+      const entry = await addExistingToLibraryModel(userId, existing.id, status, format);
       res.json({ entry, book: { id: existing.id, slug: existing.slug } });
       return;
     }
@@ -98,6 +107,7 @@ export async function addToLibraryBySlug(req: Request, res: Response) {
     // provider's search response knew and does not want a lookup per row.
     const { entry, book } = await upsertAndAddModel(userId, {
       ...req.body,
+      ...format,
       slug,
       enrich: req.body?.enrich !== false,
     });

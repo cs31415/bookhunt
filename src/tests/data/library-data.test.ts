@@ -106,10 +106,23 @@ describe('library-data', () => {
       mockQuery.mockResolvedValue({ rows: [row] });
       const result = await addToLibrary(1, 10, 'read');
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM fn_add_to_library($1, $2, $3)',
-        [1, 10, 'read'],
+        'SELECT * FROM fn_add_to_library($1, $2, $3, $4, $5)',
+        [1, 10, 'read', false, false],
       );
       expect(result).toEqual(row);
+    });
+
+    it('passes the format flags through', async () => {
+      mockQuery.mockResolvedValue({ rows: [{}] });
+      await addToLibrary(1, 10, 'read', { isEbook: true, isAudiobook: true });
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [1, 10, 'read', true, true]);
+    });
+
+    // The flags arrive from a request body, so anything but true is false.
+    it('sends false for a flag that is absent or malformed', async () => {
+      mockQuery.mockResolvedValue({ rows: [{}] });
+      await addToLibrary(1, 10, 'read', { isEbook: 'yes' as unknown as boolean });
+      expect(mockQuery).toHaveBeenCalledWith(expect.any(String), [1, 10, 'read', false, false]);
     });
   });
 
