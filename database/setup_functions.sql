@@ -23,6 +23,7 @@ BEGIN;
 \ir functions/fn_upsert_book.sql
 \ir functions/fn_get_book_by_slug.sql
 \ir functions/fn_enrich_thin_book.sql
+\ir functions/fn_set_book_cover.sql
 \ir functions/fn_get_book_by_google_id.sql
 \ir functions/fn_get_books_by_ids.sql
 \ir functions/fn_get_books_by_google_ids.sql

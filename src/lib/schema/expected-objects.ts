@@ -58,6 +58,7 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_upsert_book',
   'fn_get_book_by_slug',
   'fn_enrich_thin_book',
+  'fn_set_book_cover',
   'fn_get_book_by_google_id',
   'fn_get_books_by_ids',
   'fn_get_books_by_google_ids',
