@@ -12,7 +12,15 @@ describe('addExistingToLibrary model', () => {
 
     const result = await addExistingToLibrary(1, 2, 'queued');
 
-    expect(mockAddToLibrary).toHaveBeenCalledWith(1, 2, 'queued');
+    expect(mockAddToLibrary).toHaveBeenCalledWith(1, 2, 'queued', {});
     expect(result).toEqual(entry);
+  });
+
+  it('carries the format an import read from its file', async () => {
+    mockAddToLibrary.mockResolvedValue({});
+
+    await addExistingToLibrary(1, 2, 'queued', { isAudiobook: true });
+
+    expect(mockAddToLibrary).toHaveBeenCalledWith(1, 2, 'queued', { isAudiobook: true });
   });
 });

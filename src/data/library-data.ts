@@ -81,10 +81,20 @@ export async function upsertBook(params: UpsertBookParams) {
   return result.rows[0];
 }
 
-export async function addToLibrary(userId: number, bookId: number, status: string) {
+export interface LibraryFormatFlags {
+  isEbook?: boolean;
+  isAudiobook?: boolean;
+}
+
+export async function addToLibrary(
+  userId: number,
+  bookId: number,
+  status: string,
+  format: LibraryFormatFlags = {},
+) {
   const result = await pool.query(
-    'SELECT * FROM fn_add_to_library($1, $2, $3)',
-    [userId, bookId, status],
+    'SELECT * FROM fn_add_to_library($1, $2, $3, $4, $5)',
+    [userId, bookId, status, format.isEbook === true, format.isAudiobook === true],
   );
   return result.rows[0];
 }
@@ -127,6 +137,15 @@ export async function setLibraryEbook(userId: number, bookId: number, isEbook: b
   const result = await pool.query(
     'SELECT * FROM fn_set_library_ebook($1, $2, $3)',
     [userId, bookId, isEbook],
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/** Null when the user does not own the book; the WHERE is the ownership check. */
+export async function setLibraryAudiobook(userId: number, bookId: number, isAudiobook: boolean) {
+  const result = await pool.query(
+    'SELECT * FROM fn_set_library_audiobook($1, $2, $3)',
+    [userId, bookId, isAudiobook],
   );
   return result.rows.length > 0 ? result.rows[0] : null;
 }

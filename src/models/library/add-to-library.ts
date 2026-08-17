@@ -20,6 +20,9 @@ interface AddToLibraryParams {
   language?: string | null;
   hue?: string | null;
   status?: string;
+  /** The format the reader owns, when the source knows it (LOS-273). */
+  isEbook?: boolean;
+  isAudiobook?: boolean;
   /**
    * Whether to go to the provider for whatever this payload is missing.
    *
@@ -39,7 +42,10 @@ interface AddToLibraryParams {
 export async function addToLibrary(userId: number, params: AddToLibraryParams) {
   const resolved = params.enrich === false ? {} : await resolveEditionFields(params);
   const book = await upsertBook({ ...params, ...resolved });
-  const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued');
+  const entry = await addToLibraryData(userId, book.id, params.status ?? 'queued', {
+    isEbook: params.isEbook,
+    isAudiobook: params.isAudiobook,
+  });
 
   // Deliberately not categorized here. This is the path the CSV import uses,
   // one request per row and six at a time, so tagging here made a 20-book import

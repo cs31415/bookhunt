@@ -43,6 +43,7 @@ BEGIN;
 \ir functions/fn_set_library_favorite.sql
 \ir functions/fn_set_library_visibility.sql
 \ir functions/fn_set_library_ebook.sql
+\ir functions/fn_set_library_audiobook.sql
 \ir functions/fn_remove_from_library.sql
 \ir functions/fn_remove_many_from_library.sql
 \ir functions/fn_library_stats.sql
