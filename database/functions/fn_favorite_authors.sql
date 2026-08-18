@@ -40,22 +40,27 @@ END;
 $$;
 
 -- The owner's own list. book_count is how many of that author's books this
--- reader owns, so the tab shows something beyond a name.
+-- reader owns, so the tab shows something beyond a name. is_hidden says whether
+-- a visitor sees the author at all (LOS-282) -- the owner always does.
+--
+-- DROP is required because adding a column changes the RETURNS TABLE row type,
+-- which CREATE OR REPLACE cannot do in place.
+DROP FUNCTION IF EXISTS fn_get_favorite_authors(INT);
 CREATE OR REPLACE FUNCTION fn_get_favorite_authors(
     p_user_id INT
 )
-RETURNS TABLE (name VARCHAR, slug VARCHAR, book_count BIGINT)
+RETURNS TABLE (name VARCHAR, slug VARCHAR, book_count BIGINT, is_hidden BOOLEAN)
 LANGUAGE plpgsql AS $$
 BEGIN
     RETURN QUERY
-    SELECT a.name, a.slug, COUNT(le.book_id)
+    SELECT a.name, a.slug, COUNT(le.book_id), ufa.is_hidden
     FROM user_favorite_authors ufa
     JOIN authors a ON a.id = ufa.author_id
     LEFT JOIN books b ON b.author_id = a.id
     LEFT JOIN library_entries le
            ON le.book_id = b.id AND le.user_id = p_user_id
     WHERE ufa.user_id = p_user_id
-    GROUP BY a.name, a.slug, ufa.created_at
+    GROUP BY a.name, a.slug, ufa.is_hidden, ufa.created_at
     ORDER BY ufa.created_at DESC;
 END;
 $$;
@@ -79,6 +84,7 @@ BEGIN
            ON le.book_id = b.id AND le.user_id = u.id AND NOT le.is_hidden
     WHERE LOWER(u.handle) = LOWER(p_handle)
       AND u.is_discoverable
+      AND NOT ufa.is_hidden
     GROUP BY a.name, a.slug, ufa.created_at
     ORDER BY ufa.created_at DESC;
 END;
@@ -95,5 +101,30 @@ BEGIN
         JOIN authors a ON a.id = ufa.author_id
         WHERE ufa.user_id = p_user_id AND a.slug = p_slug
     );
+END;
+$$;
+
+-- Keeps a favourited author off the public page, or puts them back. Returns
+-- false when the reader has not favourited that author, which is what tells the
+-- route to answer 404 rather than silently doing nothing.
+CREATE OR REPLACE FUNCTION fn_set_favorite_author_visibility(
+    p_user_id   INT,
+    p_slug      VARCHAR,
+    p_is_hidden BOOLEAN
+) RETURNS BOOLEAN
+LANGUAGE plpgsql AS $$
+DECLARE
+    target_id INT;
+    updated   INT;
+BEGIN
+    SELECT a.id INTO target_id FROM authors a WHERE a.slug = p_slug;
+    IF target_id IS NULL THEN RETURN FALSE; END IF;
+
+    UPDATE user_favorite_authors
+    SET is_hidden = p_is_hidden
+    WHERE user_id = p_user_id AND author_id = target_id;
+
+    GET DIAGNOSTICS updated = ROW_COUNT;
+    RETURN updated > 0;
 END;
 $$;

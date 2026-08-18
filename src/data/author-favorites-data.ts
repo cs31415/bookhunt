@@ -21,6 +21,19 @@ export async function listPublicFavoriteAuthors(handle: string) {
   return rows;
 }
 
+/** False when the reader has not favourited that author, so the route can 404. */
+export async function setFavoriteAuthorVisibility(
+  userId: number,
+  slug: string,
+  isHidden: boolean,
+): Promise<boolean> {
+  const { rows } = await pool.query(
+    'SELECT fn_set_favorite_author_visibility($1, $2, $3) AS ok',
+    [userId, slug, isHidden],
+  );
+  return rows[0].ok as boolean;
+}
+
 export async function isFavoriteAuthor(userId: number, slug: string): Promise<boolean> {
   const { rows } = await pool.query('SELECT fn_is_favorite_author($1, $2) AS ok', [userId, slug]);
   return rows[0].ok as boolean;

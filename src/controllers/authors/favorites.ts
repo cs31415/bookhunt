@@ -3,6 +3,7 @@ import {
   favoriteAuthor,
   myFavoriteAuthors,
   publicFavoriteAuthors,
+  setAuthorVisibility,
   unfavoriteAuthor,
 } from '../../models/authors/favorites';
 
@@ -88,3 +89,50 @@ function handle(add: boolean) {
 
 export const addAuthorFavorite = handle(true);
 export const removeAuthorFavorite = handle(false);
+
+/**
+ * @swagger
+ * /authors/{slug}/favorite/hidden:
+ *   put:
+ *     tags: [Authors]
+ *     summary: Keep a favourite author off your public page
+ *     description: >
+ *       The author stays favourited and stays on your own list; only the public
+ *       page at bookhunt.net/{handle} stops showing them. The counterpart to
+ *       PUT /library/{bookId}/hidden, and shaped the same way.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Hidden }
+ *       404: { description: Not one of your favourite authors }
+ *   delete:
+ *     tags: [Authors]
+ *     summary: Show a hidden favourite author on your public page again
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Shown }
+ *       404: { description: Not one of your favourite authors }
+ */
+function handleVisibility(isHidden: boolean) {
+  return async function setHidden(req: Request, res: Response) {
+    try {
+      const ok = await setAuthorVisibility(req.user!.id, String(req.params.slug), isHidden);
+
+      if (!ok) {
+        // Covers an unknown slug and an author this reader never favourited
+        // alike: in both cases there is no row to hide.
+        res.status(404).json({ error: 'No such favourite author' });
+        return;
+      }
+
+      res.json({ author: { slug: String(req.params.slug), isHidden } });
+    } catch (error) {
+      console.error('Error setting favorite author visibility:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}
+
+// PUT hides, DELETE reveals -- the verb carries the state, exactly as it does
+// for a book, so neither route needs a body.
+export const hideAuthorFavorite = handleVisibility(true);
+export const showAuthorFavorite = handleVisibility(false);
