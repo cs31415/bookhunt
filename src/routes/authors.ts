@@ -5,6 +5,8 @@ import {
   getFavoriteAuthors,
   addAuthorFavorite,
   removeAuthorFavorite,
+  hideAuthorFavorite,
+  showAuthorFavorite,
 } from '../controllers/authors/favorites';
 import { rateLimiter } from '../middleware/rateLimiter';
 
@@ -18,5 +20,8 @@ router.get('/favorites', authRequired, rateLimiter(MINUTE, 60), getFavoriteAutho
 router.get('/:slug', authOptional, getBySlug);
 router.post('/:slug/favorite', authRequired, rateLimiter(MINUTE, 30), addAuthorFavorite);
 router.delete('/:slug/favorite', authRequired, rateLimiter(MINUTE, 30), removeAuthorFavorite);
+// Visibility of an existing favourite, mirroring /library/:bookId/hidden.
+router.put('/:slug/favorite/hidden', authRequired, rateLimiter(MINUTE, 30), hideAuthorFavorite);
+router.delete('/:slug/favorite/hidden', authRequired, rateLimiter(MINUTE, 30), showAuthorFavorite);
 
 export default router;

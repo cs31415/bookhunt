@@ -55,6 +55,7 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_get_favorite_authors',
   'fn_get_public_favorite_authors',
   'fn_is_favorite_author',
+  'fn_set_favorite_author_visibility',
   'fn_upsert_book',
   'fn_get_book_by_slug',
   'fn_enrich_thin_book',

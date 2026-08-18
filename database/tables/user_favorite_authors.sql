@@ -9,6 +9,9 @@ CREATE TABLE user_favorite_authors (
     user_id    INT REFERENCES users(id) ON DELETE CASCADE,
     author_id  INT REFERENCES authors(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    -- Kept off the public page without being un-favourited, the same
+    -- distinction library_entries.is_hidden draws for a book (LOS-282).
+    is_hidden  BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (user_id, author_id)
 );
 
