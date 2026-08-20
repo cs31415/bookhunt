@@ -14,7 +14,10 @@ AS $$
 BEGIN
     UPDATE users
     SET verification_token            = p_token,
-        verification_token_expires_at = p_expires_at
+        verification_token_expires_at = p_expires_at,
+        -- Cleared with the new token, or the fresh link would be born spent:
+        -- fn_verify_email refuses any token whose used_at is set (LOS-298).
+        verification_token_used_at    = NULL
     WHERE LOWER(email) = LOWER(p_email)
       AND email_verified_at IS NULL;
 

@@ -38,8 +38,14 @@ import { signAuthToken } from '../../lib/auth/sign-auth-token';
  *                     handle: { type: string }
  *                     isDiscoverable: { type: boolean }
  *                 token: { type: string }
+ *       409:
+ *         description: >
+ *           This exact link was used before. The address is already confirmed,
+ *           so there is nothing to do but sign in. Carries code
+ *           ALREADY_VERIFIED, and deliberately no session token: one link, one
+ *           sign-in, or anyone who ever saw the email keeps a way in.
  *       400:
- *         description: Invalid, expired or already-used verification token
+ *         description: Unknown or expired verification token
  */
 export async function verifyEmail(req: Request, res: Response) {
   const { token } = req.body ?? {};
@@ -52,10 +58,22 @@ export async function verifyEmail(req: Request, res: Response) {
   try {
     const row = await verifyEmailModel(token);
 
-    // Unknown, expired and already-spent are one case here. Distinguishing them
-    // would tell someone feeding in guessed tokens which ones exist.
+    // Unknown and expired are one case: distinguishing them would tell someone
+    // feeding in guessed tokens which ones exist.
     if (!row) {
       res.status(400).json({ error: 'This verification link is invalid or has expired.' });
+      return;
+    }
+
+    // A link we really did send, presented a second time (LOS-298). Safe to
+    // name, because holding the token is proof of having received the email --
+    // and the row carries no user fields, so nothing about the account travels
+    // back to whoever presented it.
+    if (row.already_used) {
+      res.status(409).json({
+        error: 'That address is already confirmed. Sign in to carry on.',
+        code: 'ALREADY_VERIFIED',
+      });
       return;
     }
 
