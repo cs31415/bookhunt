@@ -1,4 +1,5 @@
 import { OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
+import { curateSubjects } from './curate-subjects';
 import { loggedFetch } from './logged-fetch';
 import { BooksProviderError } from './books-provider-error';
 import { SearchResult } from './books-types';
@@ -54,7 +55,9 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
       isbn13,
       language: null,
       blurb: null,
-      categories: doc.subject || [],
+      // Every subject any cataloguer ever attached to any edition, in every
+      // language, call numbers and list tags included (LOS-300).
+      categories: curateSubjects(doc.subject || []),
       moods: [],
       inLibrary: false,
       libraryStatus: null,
