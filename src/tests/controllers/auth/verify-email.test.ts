@@ -40,12 +40,29 @@ describe('verifyEmail controller', () => {
     });
   });
 
+  it('names a link that was already used, and mints nothing from it', async () => {
+    // A link we really did send, presented a second time. Safe to name: holding
+    // the token is proof of having received the email (LOS-298).
+    mockVerifyEmail.mockResolvedValue({ already_used: true });
+
+    const res = makeRes();
+    await verifyEmail(makeReq({ token: 'tok-1' }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'That address is already confirmed. Sign in to carry on.',
+      code: 'ALREADY_VERIFIED',
+    });
+    // One link, one sign-in: a replay must not carry a session back.
+    expect(mockSignAuthToken).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['an unknown token', null],
     ['an expired token', null],
   ])('returns 400 for %s', async (_label, result) => {
-    // The stored function cannot distinguish unknown from expired from spent,
-    // and neither should the reply.
+    // Unknown and expired stay one case: telling them apart would tell someone
+    // feeding in guessed tokens which ones exist.
     mockVerifyEmail.mockResolvedValue(result);
 
     const res = makeRes();
