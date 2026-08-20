@@ -40,7 +40,8 @@ describe('searchGoogleBooks', () => {
       isbn13: '9781234567890',
       language: 'en',
       blurb: 'About cats',
-      categories: ['Science > Life Sciences > Zoology'],
+      // The adapter curates: a BISAC path arrives, its top level is what we keep.
+      categories: ['Science'],
       moods: [],
       inLibrary: false,
       libraryStatus: null,

@@ -1,4 +1,5 @@
 import { EditionDetails, SearchResult } from './books-types';
+import { curateSubjects } from './curate-subjects';
 import { loggedFetch } from './logged-fetch';
 import { BooksProviderError } from './books-provider-error';
 import { stripHtml } from '../text/strip-html';
@@ -53,7 +54,8 @@ function mapGoogleBooksVolume(item: any): SearchResult {
     isbn13: isbn13Entry?.identifier || null,
     language: info.language || null,
     blurb: stripHtml(info.description),
-    categories: info.categories || [],
+    // BISAC paths: "SCIENCE / Life Sciences / General" (LOS-300).
+    categories: curateSubjects(info.categories || []),
     moods: [],
     inLibrary: false,
     libraryStatus: null,

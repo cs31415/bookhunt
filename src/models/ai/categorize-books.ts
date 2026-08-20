@@ -5,6 +5,7 @@ import {
 } from '../../data/ai-data';
 import { foldThemes } from './fold-themes';
 import { categorizeBooksExternal } from './categorize-books-external';
+import { curateSubjects } from '../../lib/books/curate-subjects';
 
 // Enough of the catalog's vocabulary for the model to find a fit, without the
 // prompt turning into a list the books themselves have to compete with.
@@ -60,7 +61,9 @@ export async function categorizeBooks(books: BookToCategorize[]): Promise<Catego
     const moods = foldThemes(result.moods, moodVocabulary);
 
     await updateBookAiMetadata(book.id, categories, themes, moods);
-    await appendBookSubjects(book.id, categories);
+    // books.genres keeps the model's wording; books.subjects is curated, so
+    // one set of rules decides what that column may hold (LOS-300).
+    await appendBookSubjects(book.id, curateSubjects(categories));
 
     categorized.push({ id: book.id, categories, themes, moods });
   }
