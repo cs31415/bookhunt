@@ -49,6 +49,7 @@ BEGIN;
 \ir functions/fn_library_stats.sql
 \ir functions/fn_match_library_entries.sql
 \ir functions/fn_search_library.sql
+\ir functions/fn_export_library.sql
 \ir functions/fn_add_user_related.sql
 \ir functions/fn_remove_user_related.sql
 
