@@ -70,6 +70,16 @@ export async function getPublicProfile(req: Request, res: Response) {
  *         name: favorites
  *         schema: { type: boolean }
  *       - in: query
+ *         name: q
+ *         description: Narrows the shelf to books whose title or author matches.
+ *         schema: { type: string }
+ *       - in: query
+ *         name: subject
+ *         description: >
+ *           Narrows the shelf to one category. Matched whole rather than as a
+ *           substring, so "Fiction" does not pull in "Science Fiction".
+ *         schema: { type: string }
+ *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
  *       - in: query

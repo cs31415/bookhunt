@@ -12,13 +12,26 @@
 --
 -- One function with filters rather than three near-identical ones: the library,
 -- currently-reading and favourites tabs differ only by p_status and
--- p_favorites_only.
+-- p_favorites_only, and as of LOS-304 the search box and the category pills are
+-- two more filters on the same query rather than a route of their own.
+--
+-- Adding parameters changes the overload set, so the old signature has to go
+-- before this one is created -- the same reason fn_get_user_library carries its
+-- own DROPs.
+DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT);
 CREATE OR REPLACE FUNCTION fn_get_public_library(
     p_handle         VARCHAR,
     p_status         reading_status DEFAULT NULL,
     p_favorites_only BOOLEAN        DEFAULT FALSE,
     p_limit          INT            DEFAULT 24,
-    p_offset         INT            DEFAULT 0
+    p_offset         INT            DEFAULT 0,
+    -- Matches title or author. NULL means no search, which is not the same as
+    -- an empty string: the caller trims and passes NULL rather than '%%'.
+    p_query          TEXT           DEFAULT NULL,
+    -- One category, as clicked on a pill. Compared case-insensitively but
+    -- whole: a pill carries the exact subject, so a substring match would let
+    -- "Fiction" pull in "Science Fiction".
+    p_subject        TEXT           DEFAULT NULL
 ) RETURNS TABLE (
     book_id      INT,
     status       reading_status,
@@ -72,6 +85,15 @@ BEGIN
       AND NOT le.is_hidden
       AND (p_status IS NULL OR le.status = p_status)
       AND (NOT p_favorites_only OR le.is_favorite)
+      AND (
+          p_query IS NULL
+          OR b.title ILIKE '%' || p_query || '%'
+          OR a.name  ILIKE '%' || p_query || '%'
+      )
+      AND (
+          p_subject IS NULL
+          OR EXISTS (SELECT 1 FROM unnest(b.subjects) x WHERE LOWER(x) = LOWER(p_subject))
+      )
     ORDER BY le.date_added DESC
     LIMIT p_limit OFFSET p_offset;
 END;
