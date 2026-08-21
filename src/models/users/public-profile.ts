@@ -1,4 +1,5 @@
 import { getPublicLibrary, getPublicProfile } from '../../data/users-data';
+import type { PublicLibraryFilters } from '../../data/users-data';
 
 const DEFAULT_PAGE_SIZE = 24;
 const MAX_PAGE_SIZE = 60;
@@ -57,7 +58,20 @@ function asFilter(value: unknown): string | null {
 
 const STATUSES = new Set(['queued', 'reading', 'finished', 'abandoned']);
 
-export async function publicLibrary(handle: string, query: PublicLibraryQuery) {
+export interface ParsedLibraryQuery {
+  page: number;
+  pageSize: number;
+  /** True when the query asked for something that cannot match anything. */
+  rejected: boolean;
+  filters: PublicLibraryFilters;
+}
+
+/**
+ * One parser for both addresses a shelf has: the handle and the share token
+ * (LOS-305). Shared rather than copied, so search, categories, paging and the
+ * unrecognised-status rule cannot come to differ between them.
+ */
+export function publicLibraryFilters(query: PublicLibraryQuery): ParsedLibraryQuery {
   const page = Math.max(1, Number(query.page) || 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(query.limit) || DEFAULT_PAGE_SIZE));
 
@@ -65,18 +79,27 @@ export async function publicLibrary(handle: string, query: PublicLibraryQuery) {
   // typo that quietly returned the whole shelf would look like it worked.
   const status =
     typeof query.status === 'string' && STATUSES.has(query.status) ? query.status : null;
-  if (typeof query.status === 'string' && status === null) {
-    return { entries: [], total: 0, page, pageSize };
-  }
 
-  const rows = await getPublicLibrary(handle, {
-    status,
-    favoritesOnly: query.favorites === 'true',
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    query: asFilter(query.q),
-    subject: asFilter(query.subject),
-  });
+  return {
+    page,
+    pageSize,
+    rejected: typeof query.status === 'string' && status === null,
+    filters: {
+      status,
+      favoritesOnly: query.favorites === 'true',
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      query: asFilter(query.q),
+      subject: asFilter(query.subject),
+    },
+  };
+}
+
+export async function publicLibrary(handle: string, query: PublicLibraryQuery) {
+  const { page, pageSize, rejected, filters } = publicLibraryFilters(query);
+  if (rejected) return { entries: [], total: 0, page, pageSize };
+
+  const rows = await getPublicLibrary(handle, filters);
 
   return {
     entries: rows,
