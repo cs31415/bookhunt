@@ -14,6 +14,28 @@ export async function getUserLibrary(userId: number, { limit, offset }: GetUserL
   return result.rows;
 }
 
+export interface ExportLibraryRow {
+  title: string;
+  author_name: string;
+  publisher: string | null;
+  isbn13: string | null;
+  status: string;
+  is_favorite: boolean;
+  total_count: string;
+}
+
+/** Every row, hidden ones included: an export is the owner's own backup. */
+export async function exportLibraryRows(
+  userId: number,
+  { limit, offset }: GetUserLibraryParams,
+): Promise<ExportLibraryRow[]> {
+  const result = await pool.query(
+    'SELECT * FROM fn_export_library($1, $2, $3)',
+    [userId, limit, offset],
+  );
+  return result.rows;
+}
+
 export interface SearchUserLibraryParams {
   terms: string[] | null;
   phrase: string | null;

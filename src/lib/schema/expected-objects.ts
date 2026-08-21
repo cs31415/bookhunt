@@ -83,6 +83,7 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_set_library_audiobook',
   'fn_match_library_entries',
   'fn_search_library',
+  'fn_export_library',
   'fn_add_user_related',
   'fn_remove_user_related',
   'fn_search_books',

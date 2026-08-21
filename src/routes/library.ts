@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { authRequired } from '../middleware/auth';
+import { rateLimiter } from '../middleware/rateLimiter';
 import { getLibrary } from '../controllers/library/get-library';
 import { searchLibrary } from '../controllers/library/search-library';
+import { exportLibrary } from '../controllers/library/export-library';
 import { addToLibraryBySlug } from '../controllers/library/add-to-library-by-slug';
 import { bulkAddToLibrary } from '../controllers/library/bulk-add-to-library';
 import { updateEntry } from '../controllers/library/update-entry';
@@ -22,6 +24,10 @@ router.get('/', getLibrary);
 // Above the /:slug routes: a literal path has to be matched before the wildcard
 // that would otherwise swallow it.
 router.get('/search', searchLibrary);
+// A literal, above /:slug for the same reason /search is. The only rate limit
+// in this router: every other route touches one entry, while this one reads the
+// whole library and is worth nothing to call twice in a row.
+router.get('/export', rateLimiter(60 * 60 * 1000, 10), exportLibrary);
 router.post('/bulk', bulkAddToLibrary);
 router.post('/:slug', addToLibraryBySlug);
 // Before the bare /:bookId, so "favorite" and "hidden" are read as the literal
