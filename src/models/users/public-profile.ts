@@ -38,6 +38,21 @@ export interface PublicLibraryQuery {
   limit?: unknown;
   status?: unknown;
   favorites?: unknown;
+  /** Title or author (LOS-304). */
+  q?: unknown;
+  /** One category, as clicked on a pill. */
+  subject?: unknown;
+}
+
+/**
+ * Trimmed, with blank read as absent. A search box that has been typed into and
+ * cleared again sends an empty string, and that means "no filter" rather than
+ * "match the empty string".
+ */
+function asFilter(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 const STATUSES = new Set(['queued', 'reading', 'finished', 'abandoned']);
@@ -54,13 +69,14 @@ export async function publicLibrary(handle: string, query: PublicLibraryQuery) {
     return { entries: [], total: 0, page, pageSize };
   }
 
-  const rows = await getPublicLibrary(
-    handle,
+  const rows = await getPublicLibrary(handle, {
     status,
-    query.favorites === 'true',
-    pageSize,
-    (page - 1) * pageSize,
-  );
+    favoritesOnly: query.favorites === 'true',
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    query: asFilter(query.q),
+    subject: asFilter(query.subject),
+  });
 
   return {
     entries: rows,

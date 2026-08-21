@@ -39,16 +39,29 @@ export async function getPublicProfile(handle: string) {
   return rows.length > 0 ? rows[0] : null;
 }
 
-export async function getPublicLibrary(
-  handle: string,
-  status: string | null,
-  favoritesOnly: boolean,
-  limit: number,
-  offset: number,
-) {
+export interface PublicLibraryFilters {
+  status: string | null;
+  favoritesOnly: boolean;
+  limit: number;
+  offset: number;
+  /** Title or author. Null means no search (LOS-304). */
+  query: string | null;
+  /** One category, as clicked on a pill. */
+  subject: string | null;
+}
+
+export async function getPublicLibrary(handle: string, filters: PublicLibraryFilters) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5)',
-    [handle, status, favoritesOnly, limit, offset],
+    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5, $6, $7)',
+    [
+      handle,
+      filters.status,
+      filters.favoritesOnly,
+      filters.limit,
+      filters.offset,
+      filters.query,
+      filters.subject,
+    ],
   );
   return rows;
 }
