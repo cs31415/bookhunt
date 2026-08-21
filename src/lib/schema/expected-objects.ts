@@ -39,6 +39,11 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_update_user_profile',
   'fn_get_public_profile',
   'fn_get_public_library',
+  // LOS-305: the unlisted share link.
+  'fn_set_share_token',
+  'fn_get_share_token',
+  'fn_get_profile_by_token',
+  'fn_get_library_by_token',
   'fn_search_users',
   'fn_add_user_favorite',
   'fn_remove_user_favorite',

@@ -2,6 +2,13 @@ import { Router } from 'express';
 import { handleAvailable } from '../controllers/users/handle-available';
 import { updateMe } from '../controllers/users/update-me';
 import { getPublicProfile, getPublicLibrary } from '../controllers/users/get-public-profile';
+import {
+  createShareLink,
+  deleteShareLink,
+  getLibraryByShareToken,
+  getProfileByShareToken,
+  getShareLink,
+} from '../controllers/users/share-link';
 import { getPublicFavoriteAuthors } from '../controllers/authors/favorites';
 import {
   searchUsers,
@@ -27,8 +34,21 @@ router.get('/handle-available', rateLimiter(MINUTE, 30), handleAvailable);
 // '/me' is a literal and stays above any future '/:handle'.
 router.put('/me', authRequired, rateLimiter(MINUTE, 20), updateMe);
 
+// The unlisted share link (LOS-305). '/me/...' literals, beside the PUT above.
+// authRequired before rateLimiter, as everywhere else in this file.
+router.get('/me/share-link', authRequired, rateLimiter(MINUTE, 30), getShareLink);
+router.post('/me/share-link', authRequired, rateLimiter(MINUTE, 10), createShareLink);
+router.delete('/me/share-link', authRequired, rateLimiter(MINUTE, 10), deleteShareLink);
+
 // Literals, all above '/:handle' for the same reason '/me' is.
 router.get('/search', rateLimiter(MINUTE, 60), searchUsers);
+
+// The token is the whole credential, so these are limited harder than the
+// handle routes below: guessing a UUID is hopeless, but there is no reason to
+// let anyone try at 60 a minute. Unauthenticated by design -- holding the link
+// is the authorisation, and a session adds nothing to it.
+router.get('/by-token/:token', rateLimiter(MINUTE, 20), getProfileByShareToken);
+router.get('/by-token/:token/library', rateLimiter(MINUTE, 20), getLibraryByShareToken);
 router.get('/favorites', authRequired, rateLimiter(MINUTE, 60), getFavorites);
 
 // Last: '/:handle' would otherwise swallow '/handle-available' and '/me'.

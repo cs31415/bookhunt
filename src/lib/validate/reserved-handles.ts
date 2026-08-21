@@ -27,6 +27,9 @@ export const RESERVED_HANDLES = new Set([
   'messages',
   'favorites',
   'discover',
+  // The unlisted share address, /s/<token> (LOS-305). One letter, but the
+  // route is real and would otherwise be shadowed by whoever claimed it.
+  's',
 
   // Routes we can see coming, and the ones any web app eventually wants.
   'about',

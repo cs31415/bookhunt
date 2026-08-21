@@ -66,6 +66,43 @@ export async function getPublicLibrary(handle: string, filters: PublicLibraryFil
   return rows;
 }
 
+/** The token a reader currently holds, or null if they have none. */
+export async function getShareToken(userId: number): Promise<string | null> {
+  const { rows } = await pool.query('SELECT fn_get_share_token($1) AS token', [userId]);
+  return (rows[0]?.token as string | null) ?? null;
+}
+
+/** Pass null to revoke. Returns what is now stored, not what was asked for. */
+export async function setShareToken(
+  userId: number,
+  token: string | null,
+): Promise<string | null> {
+  const { rows } = await pool.query('SELECT fn_set_share_token($1, $2) AS token', [userId, token]);
+  return (rows[0]?.token as string | null) ?? null;
+}
+
+/** Null for an unknown or revoked token alike; the caller 404s both. */
+export async function getProfileByToken(token: string) {
+  const { rows } = await pool.query('SELECT * FROM fn_get_profile_by_token($1)', [token]);
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function getLibraryByToken(token: string, filters: PublicLibraryFilters) {
+  const { rows } = await pool.query(
+    'SELECT * FROM fn_get_library_by_token($1, $2, $3, $4, $5, $6, $7)',
+    [
+      token,
+      filters.status,
+      filters.favoritesOnly,
+      filters.limit,
+      filters.offset,
+      filters.query,
+      filters.subject,
+    ],
+  );
+  return rows;
+}
+
 export async function searchUsers(query: string, limit: number) {
   const { rows } = await pool.query('SELECT * FROM fn_search_users($1, $2)', [query, limit]);
   return rows;
