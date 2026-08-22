@@ -45,6 +45,46 @@ describe('requestLogger', () => {
     expect(line).toMatch(/^GET \/api\/books\/42 200 \d+(\.\d+)?ms$/);
   });
 
+  // A share token is a bearer credential and travels in the path, where
+  // SENSITIVE_FIELDS never sees it. The BFF strips it too, but every browser
+  // request is forwarded here and api.bookhunt.net is a direct surface
+  // besides, so both loggers have to do it (LOS-307).
+  it('never logs an unlisted share token', () => {
+    const req = makeReq('GET', '/api/users/by-token/9f8e7d6c-secret-token');
+    const res = makeRes(404);
+    requestLogger(req, res, next);
+
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).not.toContain('9f8e7d6c-secret-token');
+    expect(line).toContain('/api/users/by-token/[REDACTED]');
+  });
+
+  it('keeps the rest of the route when it strips the token', () => {
+    const req = makeReq('GET', '/api/users/by-token/9f8e7d6c-secret-token/library?tab=reading');
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).not.toContain('9f8e7d6c-secret-token');
+    expect(line).toContain('/api/users/by-token/[REDACTED]/library?tab=reading');
+  });
+
+  it('leaves every other path alone', () => {
+    const req = makeReq('GET', '/api/users/ada/library');
+    const res = makeRes(200);
+    requestLogger(req, res, next);
+
+    (res as unknown as EventEmitter).emit('finish');
+
+    const [line] = logSpy.mock.calls[0];
+    expect(line).toContain('/api/users/ada/library');
+    expect(line).not.toContain('[REDACTED]');
+  });
+
   it('logs the actual status code set on the response', () => {
     const req = makeReq('POST', '/api/auth/register');
     const res = makeRes(201);
