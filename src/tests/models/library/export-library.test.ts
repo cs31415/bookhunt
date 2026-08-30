@@ -18,6 +18,8 @@ function row(overrides: Record<string, unknown> = {}) {
     publisher: 'Ace',
     isbn13: '9780441013593',
     status: 'finished',
+    is_ebook: false,
+    is_audiobook: false,
     is_favorite: false,
     total_count: '1',
     ...overrides,
@@ -42,8 +44,46 @@ describe('exportLibrary', () => {
         publisher: 'Ace',
         isbn: '9780441013593',
         status: 'finished',
+        format: 'physical',
       },
     ]);
+  });
+
+  /*
+   * Without this the round trip loses what a reader owns: the CSV importer
+   * reads a format column, so an export without one makes every book physical
+   * on the way back in (LOS-347).
+   */
+  it('carries the format, so an ebook comes back an ebook', async () => {
+    mockExportRows.mockResolvedValue([row({ is_ebook: true })]);
+
+    const result = await exportLibrary(1);
+
+    expect(result.books[0].format).toBe('ebook');
+  });
+
+  it('calls an audiobook an audiobook', async () => {
+    mockExportRows.mockResolvedValue([row({ is_audiobook: true })]);
+
+    const result = await exportLibrary(1);
+
+    expect(result.books[0].format).toBe('audiobook');
+  });
+
+  // The two flags are independent in the schema but the importer's column is
+  // one word, so a row claiming both has to pick one.
+  it('calls a book that claims both an ebook', async () => {
+    mockExportRows.mockResolvedValue([row({ is_ebook: true, is_audiobook: true })]);
+
+    const result = await exportLibrary(1);
+
+    expect(result.books[0].format).toBe('ebook');
+  });
+
+  it('calls everything else physical', async () => {
+    const result = await exportLibrary(1);
+
+    expect(result.books[0].format).toBe('physical');
   });
 
   // A machine-readable file carries the machine-readable word, not the label

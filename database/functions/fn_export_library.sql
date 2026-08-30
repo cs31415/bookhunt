@@ -3,8 +3,8 @@
 -- Its own function rather than a filter on fn_get_user_library, because the two
 -- want different columns. The shelf needs covers, hues, ratings and tags to
 -- draw a card; an export needs publisher and isbn13, which the shelf function
--- does not return at all -- and those two are exactly what makes an exported
--- file re-importable.
+-- does not return at all -- and those, with the format flags, are exactly what
+-- makes an exported file re-importable.
 --
 -- No visibility gate of any kind. This is the owner reading their own rows, so
 -- hidden entries are included: a backup that silently dropped the books a
@@ -22,6 +22,8 @@ CREATE OR REPLACE FUNCTION fn_export_library(
     publisher    VARCHAR,
     isbn13       VARCHAR,
     status       reading_status,
+    is_ebook     BOOLEAN,
+    is_audiobook BOOLEAN,
     is_favorite  BOOLEAN,
     total_count  BIGINT
 )
@@ -34,6 +36,12 @@ BEGIN
         b.publisher,
         b.isbn13,
         le.status,
+        -- What the reader owns. Without these an export drops which books are
+        -- ebooks or audiobooks, so a round trip through the CSV importer --
+        -- which reads a format column -- silently makes everything physical
+        -- (LOS-347).
+        le.is_ebook,
+        le.is_audiobook,
         le.is_favorite,
         COUNT(*) OVER ()::BIGINT AS total_count
     FROM library_entries le

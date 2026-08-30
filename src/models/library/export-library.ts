@@ -28,6 +28,12 @@ export interface ExportedBook {
    * machine-readable word.
    */
   status: string;
+  /**
+   * One word rather than the two booleans the shelf stores, because that is
+   * what the CSV importer reads back (LOS-347). 'physical' is the absence of
+   * the other two, which is how the importer treats a missing format as well.
+   */
+  format: 'ebook' | 'audiobook' | 'physical';
 }
 
 export interface LibraryExport {
@@ -51,6 +57,10 @@ function toBook(row: ExportLibraryRow): ExportedBook {
     publisher: row.publisher,
     isbn: row.isbn13,
     status: row.status,
+    // Ebook wins a row claiming both. The flags are independent in the schema
+    // but the importer's column is one word, and a reader who set both is
+    // likelier to be reading than listening.
+    format: row.is_ebook ? 'ebook' : row.is_audiobook ? 'audiobook' : 'physical',
   };
 }
 
