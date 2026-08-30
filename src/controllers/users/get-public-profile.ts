@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { publicLibrary, publicProfile } from '../../models/users/public-profile';
+import { publicLibrary, publicProfile, publicLibraryFacets } from '../../models/users/public-profile';
 import { favoriteState } from '../../models/users/favorites';
 
 /**
@@ -106,6 +106,46 @@ export async function getPublicLibrary(req: Request, res: Response) {
     res.json(await publicLibrary(handle, req.query));
   } catch (error) {
     console.error('Error fetching public library:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * @openapi
+ * /users/{handle}/library/facets:
+ *   get:
+ *     summary: The filter values this reader's public shelf offers
+ *     description: >
+ *       Computed over the whole shelf, not over a page. A caller holding one
+ *       page cannot derive these: it would offer whichever values landed on
+ *       that page, and they would change as the reader paged.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: handle
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Values grouped by facet
+ *       404:
+ *         description: No such public profile
+ */
+export async function getPublicLibraryFacetValues(req: Request, res: Response) {
+  try {
+    const handle = String(req.params.handle);
+
+    // Asked first, for the same reason the library route asks: an empty shelf
+    // and a private one must give different answers.
+    const profile = await publicProfile(handle);
+    if (!profile) {
+      res.status(404).json({ error: 'No such profile' });
+      return;
+    }
+
+    res.json(await publicLibraryFacets(handle));
+  } catch (error) {
+    console.error('Error fetching public library facets:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

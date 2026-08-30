@@ -39,6 +39,9 @@ export async function getPublicProfile(handle: string) {
   return rows.length > 0 ? rows[0] : null;
 }
 
+/** Pills per facet. Mirrors the cap the library rail applies to its own. */
+const FACET_LIMIT = 12;
+
 export interface PublicLibraryFilters {
   status: string | null;
   favoritesOnly: boolean;
@@ -48,11 +51,14 @@ export interface PublicLibraryFilters {
   query: string | null;
   /** One category, as clicked on a pill. */
   subject: string | null;
+  /** One mood, and one theme, matched the same whole-value way (LOS-342). */
+  mood: string | null;
+  theme: string | null;
 }
 
 export async function getPublicLibrary(handle: string, filters: PublicLibraryFilters) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5, $6, $7)',
+    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5, $6, $7, $8, $9)',
     [
       handle,
       filters.status,
@@ -61,8 +67,34 @@ export async function getPublicLibrary(handle: string, filters: PublicLibraryFil
       filters.offset,
       filters.query,
       filters.subject,
+      filters.mood,
+      filters.theme,
     ],
   );
+  return rows;
+}
+
+/**
+ * The filter values the whole shelf offers, which a page of it cannot answer.
+ *
+ * Its own query rather than a field on the library response: the shelf is
+ * fetched again on every filter change and every page, and the facets do not
+ * move between those. Sending them each time would be sending the same answer
+ * twenty times over.
+ */
+export async function getPublicLibraryFacets(handle: string, limit = FACET_LIMIT) {
+  const { rows } = await pool.query('SELECT * FROM fn_get_public_library_facets($1, $2)', [
+    handle,
+    limit,
+  ]);
+  return rows;
+}
+
+export async function getLibraryFacetsByToken(token: string, limit = FACET_LIMIT) {
+  const { rows } = await pool.query('SELECT * FROM fn_get_library_facets_by_token($1, $2)', [
+    token,
+    limit,
+  ]);
   return rows;
 }
 
@@ -89,7 +121,7 @@ export async function getProfileByToken(token: string) {
 
 export async function getLibraryByToken(token: string, filters: PublicLibraryFilters) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_get_library_by_token($1, $2, $3, $4, $5, $6, $7)',
+    'SELECT * FROM fn_get_library_by_token($1, $2, $3, $4, $5, $6, $7, $8, $9)',
     [
       token,
       filters.status,
@@ -98,6 +130,8 @@ export async function getLibraryByToken(token: string, filters: PublicLibraryFil
       filters.offset,
       filters.query,
       filters.subject,
+      filters.mood,
+      filters.theme,
     ],
   );
   return rows;

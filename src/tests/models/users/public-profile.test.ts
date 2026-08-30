@@ -1,5 +1,9 @@
-import { publicLibrary } from '../../../models/users/public-profile';
-import { getPublicLibrary } from '../../../data/users-data';
+import {
+  groupFacets,
+  publicLibrary,
+  publicLibraryFacets,
+} from '../../../models/users/public-profile';
+import { getPublicLibrary, getPublicLibraryFacets } from '../../../data/users-data';
 
 jest.mock('../../../data/users-data');
 
@@ -79,5 +83,102 @@ describe('publicLibrary filters', () => {
     await publicLibrary('ada', { q: 'dune', page: 3, limit: 24 });
 
     expect(filtersFrom()).toMatchObject({ limit: 24, offset: 48 });
+  });
+});
+
+describe('mood and theme filters (LOS-342)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetPublicLibrary.mockResolvedValue([]);
+  });
+
+  it('passes a mood through', async () => {
+    await publicLibrary('ada', { mood: 'Bleak' });
+
+    expect(filtersFrom().mood).toBe('Bleak');
+  });
+
+  it('passes a theme through', async () => {
+    await publicLibrary('ada', { theme: 'Exile' });
+
+    expect(filtersFrom().theme).toBe('Exile');
+  });
+
+  // Same rule the search box and the category pill already follow.
+  it('reads a blank mood as no filter', async () => {
+    await publicLibrary('ada', { mood: '   ' });
+
+    expect(filtersFrom().mood).toBeNull();
+  });
+
+  it('reads an absent theme as no filter', async () => {
+    await publicLibrary('ada', {});
+
+    expect(filtersFrom().theme).toBeNull();
+  });
+
+  it('carries all four filters at once', async () => {
+    await publicLibrary('ada', {
+      q: 'dune',
+      subject: 'Science Fiction',
+      mood: 'Bleak',
+      theme: 'Exile',
+    });
+
+    expect(filtersFrom()).toMatchObject({
+      query: 'dune',
+      subject: 'Science Fiction',
+      mood: 'Bleak',
+      theme: 'Exile',
+    });
+  });
+});
+
+describe('groupFacets', () => {
+  it('sorts flat rows into the shape the rail renders', () => {
+    expect(
+      groupFacets([
+        { facet: 'subject', value: 'Fiction' },
+        { facet: 'subject', value: 'History' },
+        { facet: 'mood', value: 'Bleak' },
+        { facet: 'theme', value: 'Exile' },
+        { facet: 'status', value: 'finished' },
+      ]),
+    ).toEqual({
+      subject: ['Fiction', 'History'],
+      mood: ['Bleak'],
+      theme: ['Exile'],
+      status: ['finished'],
+    });
+  });
+
+  // A shelf with no moods yet is the ordinary case, not an error: FilterGroup
+  // renders nothing for an empty group.
+  it('gives every facet an empty list rather than leaving it undefined', () => {
+    expect(groupFacets([])).toEqual({ subject: [], mood: [], theme: [], status: [] });
+  });
+
+  // Guards against a future facet in SQL quietly becoming an undefined push.
+  it('ignores a facet name it does not know', () => {
+    expect(groupFacets([{ facet: 'decade', value: '1970s' }])).toEqual({
+      subject: [],
+      mood: [],
+      theme: [],
+      status: [],
+    });
+  });
+
+  it('groups what the facets query returns', async () => {
+    (getPublicLibraryFacets as jest.Mock).mockResolvedValue([
+      { facet: 'subject', value: 'Fiction', books: 24 },
+      { facet: 'subject', value: 'History', books: 6 },
+    ]);
+
+    expect(await publicLibraryFacets('ada')).toEqual({
+      subject: ['Fiction', 'History'],
+      mood: [],
+      theme: [],
+      status: [],
+    });
   });
 });
