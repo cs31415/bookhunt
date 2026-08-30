@@ -19,6 +19,7 @@
 -- before this one is created -- the same reason fn_get_user_library carries its
 -- own DROPs.
 DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT);
+DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION fn_get_public_library(
     p_handle         VARCHAR,
     p_status         reading_status DEFAULT NULL,
@@ -31,7 +32,12 @@ CREATE OR REPLACE FUNCTION fn_get_public_library(
     -- One category, as clicked on a pill. Compared case-insensitively but
     -- whole: a pill carries the exact subject, so a substring match would let
     -- "Fiction" pull in "Science Fiction".
-    p_subject        TEXT           DEFAULT NULL
+    p_subject        TEXT           DEFAULT NULL,
+    -- Mood and theme, matched the same whole-value way as p_subject. The rows
+    -- already carry both arrays; until now only the caller could filter on
+    -- them, and only over the page it happened to be holding.
+    p_mood           TEXT           DEFAULT NULL,
+    p_theme          TEXT           DEFAULT NULL
 ) RETURNS TABLE (
     book_id      INT,
     status       reading_status,
@@ -93,6 +99,14 @@ BEGIN
       AND (
           p_subject IS NULL
           OR EXISTS (SELECT 1 FROM unnest(b.subjects) x WHERE LOWER(x) = LOWER(p_subject))
+      )
+      AND (
+          p_mood IS NULL
+          OR EXISTS (SELECT 1 FROM unnest(b.moods) x WHERE LOWER(x) = LOWER(p_mood))
+      )
+      AND (
+          p_theme IS NULL
+          OR EXISTS (SELECT 1 FROM unnest(b.themes) x WHERE LOWER(x) = LOWER(p_theme))
       )
     ORDER BY le.date_added DESC
     LIMIT p_limit OFFSET p_offset;

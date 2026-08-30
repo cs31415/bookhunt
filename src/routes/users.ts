@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { handleAvailable } from '../controllers/users/handle-available';
 import { updateMe } from '../controllers/users/update-me';
-import { getPublicProfile, getPublicLibrary } from '../controllers/users/get-public-profile';
+import { getPublicProfile, getPublicLibrary, getPublicLibraryFacetValues } from '../controllers/users/get-public-profile';
 import {
   createShareLink,
   deleteShareLink,
   getLibraryByShareToken,
   getProfileByShareToken,
   getShareLink,
+  getLibraryFacetsByShareToken,
 } from '../controllers/users/share-link';
 import { getPublicFavoriteAuthors } from '../controllers/authors/favorites';
 import {
@@ -49,6 +50,11 @@ router.get('/search', rateLimiter(MINUTE, 60), searchUsers);
 // is the authorisation, and a session adds nothing to it.
 router.get('/by-token/:token', rateLimiter(MINUTE, 20), getProfileByShareToken);
 router.get('/by-token/:token/library', rateLimiter(MINUTE, 20), getLibraryByShareToken);
+router.get(
+  '/by-token/:token/library/facets',
+  rateLimiter(MINUTE, 20),
+  getLibraryFacetsByShareToken,
+);
 router.get('/favorites', authRequired, rateLimiter(MINUTE, 60), getFavorites);
 
 // Last: '/:handle' would otherwise swallow '/handle-available' and '/me'.
@@ -56,6 +62,8 @@ router.get('/favorites', authRequired, rateLimiter(MINUTE, 60), getFavorites);
 // that answers questions about accounts other than the caller's.
 router.get('/:handle', rateLimiter(MINUTE, 60), getPublicProfile);
 router.get('/:handle/library', rateLimiter(MINUTE, 60), getPublicLibrary);
+// Before nothing in particular, but kept beside the shelf it describes.
+router.get('/:handle/library/facets', rateLimiter(MINUTE, 60), getPublicLibraryFacetValues);
 router.get('/:handle/favorite-authors', rateLimiter(MINUTE, 60), getPublicFavoriteAuthors);
 router.post('/:handle/favorite', authRequired, rateLimiter(MINUTE, 30), addFavoriteUser);
 router.delete('/:handle/favorite', authRequired, rateLimiter(MINUTE, 30), removeFavoriteUser);

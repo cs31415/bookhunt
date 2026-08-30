@@ -1,4 +1,4 @@
-import { getPublicLibrary, getPublicProfile } from '../../data/users-data';
+import { getPublicLibrary, getPublicProfile, getPublicLibraryFacets } from '../../data/users-data';
 import type { PublicLibraryFilters } from '../../data/users-data';
 
 const DEFAULT_PAGE_SIZE = 24;
@@ -43,6 +43,9 @@ export interface PublicLibraryQuery {
   q?: unknown;
   /** One category, as clicked on a pill. */
   subject?: unknown;
+  /** One mood, and one theme (LOS-342). */
+  mood?: unknown;
+  theme?: unknown;
 }
 
 /**
@@ -91,8 +94,37 @@ export function publicLibraryFilters(query: PublicLibraryQuery): ParsedLibraryQu
       offset: (page - 1) * pageSize,
       query: asFilter(query.q),
       subject: asFilter(query.subject),
+      mood: asFilter(query.mood),
+      theme: asFilter(query.theme),
     },
   };
+}
+
+/**
+ * The values a shelf's filters can take, over the whole shelf.
+ *
+ * Grouped into the shape the rail renders rather than returned as flat rows:
+ * the caller wants "the moods", and doing the grouping here means the two
+ * addresses a shelf has cannot come to group it differently.
+ */
+export interface ShelfFacets {
+  subject: string[];
+  mood: string[];
+  theme: string[];
+  status: string[];
+}
+
+export function groupFacets(rows: { facet: string; value: string }[]): ShelfFacets {
+  const grouped: ShelfFacets = { subject: [], mood: [], theme: [], status: [] };
+  for (const row of rows) {
+    const bucket = grouped[row.facet as keyof ShelfFacets];
+    if (bucket) bucket.push(row.value);
+  }
+  return grouped;
+}
+
+export async function publicLibraryFacets(handle: string): Promise<ShelfFacets> {
+  return groupFacets(await getPublicLibraryFacets(handle));
 }
 
 export async function publicLibrary(handle: string, query: PublicLibraryQuery) {

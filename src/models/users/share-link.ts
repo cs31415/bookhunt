@@ -4,9 +4,11 @@ import {
   getProfileByToken,
   getShareToken,
   setShareToken,
+  getLibraryFacetsByToken,
 } from '../../data/users-data';
 import type { PublicLibraryQuery } from './public-profile';
-import { publicLibraryFilters } from './public-profile';
+import { groupFacets, publicLibraryFilters } from './public-profile';
+import type { ShelfFacets } from './public-profile';
 import type { PublicProfile } from './public-profile';
 
 /**
@@ -82,4 +84,13 @@ export async function libraryByToken(token: string, query: PublicLibraryQuery) {
     page: parsed.page,
     pageSize: parsed.pageSize,
   };
+}
+
+/**
+ * The unlisted shelf's facets. Shares groupFacets with the public one, so the
+ * two addresses a shelf has cannot come to describe it differently -- the same
+ * reason publicLibraryFilters is shared rather than copied.
+ */
+export async function libraryFacetsByToken(token: string): Promise<ShelfFacets> {
+  return groupFacets(await getLibraryFacetsByToken(token));
 }

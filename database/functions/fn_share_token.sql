@@ -94,7 +94,13 @@ $$;
 
 -- The shelf of a shared profile. Carries the same filters the public library
 -- grew in LOS-304, so a shared page searches and filters exactly as the public
--- one does rather than being a lesser copy of it.
+-- one does rather than being a lesser copy of it. LOS-342 added mood and theme
+-- to both for the same reason.
+--
+-- Adding parameters changes the overload set, so the old signatures have to go
+-- before this one is created.
+DROP FUNCTION IF EXISTS fn_get_library_by_token(VARCHAR, reading_status, BOOLEAN, INT, INT);
+DROP FUNCTION IF EXISTS fn_get_library_by_token(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION fn_get_library_by_token(
     p_token          VARCHAR,
     p_status         reading_status DEFAULT NULL,
@@ -102,7 +108,9 @@ CREATE OR REPLACE FUNCTION fn_get_library_by_token(
     p_limit          INT            DEFAULT 24,
     p_offset         INT            DEFAULT 0,
     p_query          TEXT           DEFAULT NULL,
-    p_subject        TEXT           DEFAULT NULL
+    p_subject        TEXT           DEFAULT NULL,
+    p_mood           TEXT           DEFAULT NULL,
+    p_theme          TEXT           DEFAULT NULL
 ) RETURNS TABLE (
     book_id      INT,
     status       reading_status,
@@ -168,6 +176,14 @@ BEGIN
       AND (
           p_subject IS NULL
           OR EXISTS (SELECT 1 FROM unnest(b.subjects) x WHERE LOWER(x) = LOWER(p_subject))
+      )
+      AND (
+          p_mood IS NULL
+          OR EXISTS (SELECT 1 FROM unnest(b.moods) x WHERE LOWER(x) = LOWER(p_mood))
+      )
+      AND (
+          p_theme IS NULL
+          OR EXISTS (SELECT 1 FROM unnest(b.themes) x WHERE LOWER(x) = LOWER(p_theme))
       )
     ORDER BY le.date_added DESC
     LIMIT p_limit OFFSET p_offset;

@@ -5,6 +5,7 @@ import {
   profileByToken,
   regenerateShareToken,
   revokeShareToken,
+  libraryFacetsByToken,
 } from '../../models/users/share-link';
 
 /**
@@ -173,6 +174,44 @@ export async function getLibraryByShareToken(req: Request, res: Response) {
     res.json(await libraryByToken(token, req.query));
   } catch (error) {
     console.error('Error fetching shared library:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * @openapi
+ * /users/by-token/{token}/library/facets:
+ *   get:
+ *     summary: The filter values an unlisted shelf offers
+ *     description: >
+ *       The token is the whole credential, as on the shelf route itself.
+ *       Computed over the whole shelf rather than a page.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Values grouped by facet
+ *       404:
+ *         description: No such shared profile
+ */
+export async function getLibraryFacetsByShareToken(req: Request, res: Response) {
+  try {
+    unlistedHeaders(res);
+    const token = String(req.params.token);
+
+    const profile = await profileByToken(token);
+    if (!profile) {
+      res.status(404).json({ error: 'No such profile' });
+      return;
+    }
+
+    res.json(await libraryFacetsByToken(token));
+  } catch (error) {
+    console.error('Error fetching shared library facets:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
