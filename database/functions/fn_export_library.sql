@@ -12,6 +12,19 @@
 --
 -- Paginated so the caller can walk it without holding a whole library in one
 -- result set. total_count comes back on every row, as it does elsewhere.
+-- DROP is required, not tidy. The return type gains is_ebook and is_audiobook
+-- (LOS-347), and CREATE OR REPLACE cannot change the row type defined by OUT
+-- parameters -- Postgres refuses with "cannot change return type of existing
+-- function" and, under ON_ERROR_STOP, takes the rest of setup_functions.sql
+-- down with it.
+--
+-- This opens a window, the same one fn_register_user and fn_add_to_library
+-- open: between this drop and the API restarting, the running API calls a
+-- function that does not exist and an export fails. Every other path is
+-- untouched, and an export is a rare deliberate act rather than something a
+-- page does on load -- but it is why the functions step is not a place to stop.
+DROP FUNCTION IF EXISTS fn_export_library(INT, INT, INT);
+
 CREATE OR REPLACE FUNCTION fn_export_library(
     p_user_id INT,
     p_limit   INT DEFAULT 500,
