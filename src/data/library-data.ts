@@ -20,6 +20,8 @@ export interface ExportLibraryRow {
   publisher: string | null;
   isbn13: string | null;
   status: string;
+  is_ebook: boolean;
+  is_audiobook: boolean;
   is_favorite: boolean;
   total_count: string;
 }

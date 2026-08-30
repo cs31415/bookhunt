@@ -36,6 +36,7 @@ import { exportLibrary as exportLibraryModel } from '../../models/library/export
  *                       publisher: { type: string, nullable: true }
  *                       isbn: { type: string, nullable: true }
  *                       status: { type: string, enum: [queued, reading, finished, abandoned] }
+ *                       format: { type: string, enum: [ebook, audiobook, physical] }
  *                 favorites:
  *                   type: object
  *                   properties:
