@@ -9,10 +9,13 @@ CREATE TABLE users (
     handle                VARCHAR(30) NOT NULL,
     preferences           JSONB DEFAULT '{}',
     is_discoverable       BOOLEAN DEFAULT FALSE,
-    -- Whether reviews appear on the public page at all. FALSE by default, and
-    -- that is not a detail: anything else retroactively publishes text written
-    -- when the column was called notes and documented as private (LOS-266).
-    share_reviews   BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Whether reviews appear on the public page at all.
+    --
+    -- TRUE by default as of LOS-266: a review is written to be read, and the
+    -- switch that governs it only does anything once a reader has made their
+    -- page public in the first place -- which is itself off by default and a
+    -- deliberate act. The private-by-default guarantee lives on that switch.
+    share_reviews   BOOLEAN NOT NULL DEFAULT TRUE,
     reset_token           VARCHAR(255) UNIQUE,
     reset_token_expires_at TIMESTAMPTZ,
     -- NULL until the address is proven. Login refuses an unverified account

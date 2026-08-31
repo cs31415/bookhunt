@@ -43,7 +43,7 @@ const HANDLE_CONSTRAINT = 'idx_users_handle_lower';
  *         description: The handle is taken (code HANDLE_TAKEN, field handle)
  */
 export async function updateMe(req: Request, res: Response) {
-  const { displayName, handle, isDiscoverable, preferences } = req.body ?? {};
+  const { displayName, handle, isDiscoverable, shareReviews, preferences } = req.body ?? {};
 
   if (displayName !== undefined) {
     const error = validateDisplayName(displayName);
@@ -69,6 +69,11 @@ export async function updateMe(req: Request, res: Response) {
     return;
   }
 
+  if (shareReviews !== undefined && typeof shareReviews !== 'boolean') {
+    res.status(400).json({ error: 'shareReviews must be true or false.' });
+    return;
+  }
+
   // A plain object, not an array and not null. The column is one document
   // merged key by key, so anything else would either be discarded by the merge
   // or, in the case of null, silently mean "no change" when the caller meant
@@ -86,6 +91,7 @@ export async function updateMe(req: Request, res: Response) {
       displayName,
       handle: normalizedHandle,
       isDiscoverable,
+      shareReviews,
       preferences,
     });
 

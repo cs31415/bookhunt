@@ -30,6 +30,45 @@ beforeEach(() => {
 });
 
 describe('updateMe controller', () => {
+  /*
+   * The controller destructures the body, so a field it does not name is
+   * silently dropped -- the model sees undefined, reads it as "unchanged", and
+   * the response returns the old value. That is exactly what happened to
+   * shareReviews: the switch appeared to do nothing and reset itself.
+   *
+   * Tested here rather than only on the model, because the model was already
+   * right and its test passed throughout (LOS-266).
+   */
+  it('passes shareReviews through, rather than dropping it', async () => {
+    const res = makeRes();
+    await updateMe(makeReq({ shareReviews: true }), res);
+
+    expect(mockUpdateProfile).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ shareReviews: true }),
+    );
+  });
+
+  // False is the value that turns it off, so it must survive as a value rather
+  // than being read as absent.
+  it('passes shareReviews false, not as an absence', async () => {
+    const res = makeRes();
+    await updateMe(makeReq({ shareReviews: false }), res);
+
+    expect(mockUpdateProfile).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ shareReviews: false }),
+    );
+  });
+
+  it('refuses a shareReviews that is not a boolean', async () => {
+    const res = makeRes();
+    await updateMe(makeReq({ shareReviews: 'yes' }), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockUpdateProfile).not.toHaveBeenCalled();
+  });
+
   it('passes only the fields that were sent', async () => {
     const res = makeRes();
     await updateMe(makeReq({ displayName: 'Ada R.' }), res);
@@ -38,6 +77,7 @@ describe('updateMe controller', () => {
       displayName: 'Ada R.',
       handle: undefined,
       isDiscoverable: undefined,
+      shareReviews: undefined,
     });
     expect(res.json).toHaveBeenCalledWith({ user: profile });
   });
