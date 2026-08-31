@@ -21,6 +21,8 @@ CREATE OR REPLACE FUNCTION fn_get_user_library(
     date_read    TIMESTAMPTZ,
     user_rating  INT,
     review       TEXT,
+    -- NULL means this book follows the reader's global setting (LOS-266).
+    share_review BOOLEAN,
     user_related INT[],
     is_favorite  BOOLEAN,
     is_hidden    BOOLEAN,
@@ -51,6 +53,7 @@ BEGIN
         le.date_read,
         le.user_rating,
         le.review,
+        le.share_review,
         le.user_related,
         le.is_favorite,
         le.is_hidden,
