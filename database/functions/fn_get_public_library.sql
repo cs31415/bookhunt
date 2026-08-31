@@ -29,6 +29,8 @@ DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, 
 DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT);
 -- And the nine-argument one, whose row type gains `review` (LOS-266).
 DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT, TEXT, TEXT);
+-- And the ten-argument one, which gains p_book_id (LOS-360).
+DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION fn_get_public_library(
     p_handle         VARCHAR,
     p_status         reading_status DEFAULT NULL,
@@ -46,7 +48,14 @@ CREATE OR REPLACE FUNCTION fn_get_public_library(
     -- already carry both arrays; until now only the caller could filter on
     -- them, and only over the page it happened to be holding.
     p_mood           TEXT           DEFAULT NULL,
-    p_theme          TEXT           DEFAULT NULL
+    p_theme          TEXT           DEFAULT NULL,
+    -- One book rather than a page of them (LOS-360), for showing a reader's own
+    -- entry for a book a visitor arrived at from their shelf.
+    --
+    -- A parameter here rather than a second function on purpose: the sharing
+    -- gate in the SELECT is the thing that must never be got wrong, and a
+    -- second query would be a second place for it to drift out of step.
+    p_book_id        INT            DEFAULT NULL
 ) RETURNS TABLE (
     book_id      INT,
     status       reading_status,
@@ -104,6 +113,7 @@ BEGIN
     WHERE LOWER(u.handle) = LOWER(p_handle)
       AND u.is_discoverable
       AND NOT le.is_hidden
+      AND (p_book_id IS NULL OR le.book_id = p_book_id)
       AND (p_status IS NULL OR le.status = p_status)
       AND (NOT p_favorites_only OR le.is_favorite)
       AND (

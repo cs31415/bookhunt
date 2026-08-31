@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { handleAvailable } from '../controllers/users/handle-available';
 import { updateMe } from '../controllers/users/update-me';
 import { getPublicProfile, getPublicLibrary, getPublicLibraryFacetValues } from '../controllers/users/get-public-profile';
+import { getPublicLibraryEntry } from '../controllers/users/get-public-library-entry';
 import {
   createShareLink,
   deleteShareLink,
@@ -64,6 +65,9 @@ router.get('/:handle', rateLimiter(MINUTE, 60), getPublicProfile);
 router.get('/:handle/library', rateLimiter(MINUTE, 60), getPublicLibrary);
 // Before nothing in particular, but kept beside the shelf it describes.
 router.get('/:handle/library/facets', rateLimiter(MINUTE, 60), getPublicLibraryFacetValues);
+// After the literal /facets, which would otherwise be read as a bookId and
+// parse to NaN -- the same ordering rule as everywhere else in this file.
+router.get('/:handle/library/:bookId', rateLimiter(MINUTE, 60), getPublicLibraryEntry);
 router.get('/:handle/favorite-authors', rateLimiter(MINUTE, 60), getPublicFavoriteAuthors);
 router.post('/:handle/favorite', authRequired, rateLimiter(MINUTE, 30), addFavoriteUser);
 router.delete('/:handle/favorite', authRequired, rateLimiter(MINUTE, 30), removeFavoriteUser);
