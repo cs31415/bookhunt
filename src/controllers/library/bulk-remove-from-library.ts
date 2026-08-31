@@ -16,7 +16,7 @@ const MAX_BOOKS = 20;
  *       Only the library entry goes. The books stay in the catalog — they are shared, and
  *       another reader may own the same ones — so this is not a way to delete a book.
  *
- *       What it does destroy is the entry: status, rating, review and notes go with it, and
+ *       What it does destroy is the entry: status, rating and review go with it, and
  *       there is no undo. It also prunes the removed books from the `user_related` lists of
  *       the caller's surviving entries, so nothing goes on pointing at a book they no longer
  *       have.

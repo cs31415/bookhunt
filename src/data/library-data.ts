@@ -128,12 +128,11 @@ export async function updateLibraryEntry(
   bookId: number,
   status: string | null,
   userRating: number | null,
-  notes: string | null,
   review: string | null,
 ) {
   const result = await pool.query(
-    'SELECT * FROM fn_update_library_entry($1, $2, $3, $4, $5, $6)',
-    [userId, bookId, status, userRating, notes, review],
+    'SELECT * FROM fn_update_library_entry($1, $2, $3, $4, $5)',
+    [userId, bookId, status, userRating, review],
   );
   return result.rows.length > 0 ? result.rows[0] : null;
 }

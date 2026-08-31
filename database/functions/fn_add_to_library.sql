@@ -10,6 +10,9 @@
 -- beside a five-argument one with defaults makes fn_add_to_library(1, 2,
 -- 'queued') ambiguous, and Postgres refuses the call outright.
 DROP FUNCTION IF EXISTS fn_add_to_library(INT, INT, reading_status);
+-- And the five-argument one, whose row type loses `notes` (LOS-266). Changing a
+-- RETURNS TABLE changes the return type, which CREATE OR REPLACE cannot do.
+DROP FUNCTION IF EXISTS fn_add_to_library(INT, INT, reading_status, BOOLEAN, BOOLEAN);
 CREATE OR REPLACE FUNCTION fn_add_to_library(
     p_user_id      INT,
     p_book_id      INT,
@@ -24,7 +27,6 @@ CREATE OR REPLACE FUNCTION fn_add_to_library(
     date_read    TIMESTAMPTZ,
     user_rating  INT,
     review       TEXT,
-    notes        TEXT,
     user_related INT[]
 )
 LANGUAGE plpgsql AS $$
@@ -37,7 +39,7 @@ BEGIN
 
     RETURN QUERY
     SELECT le.user_id, le.book_id, le.status, le.date_added, le.date_read,
-           le.user_rating, le.review, le.notes, le.user_related
+           le.user_rating, le.review, le.user_related
     FROM library_entries le
     WHERE le.user_id = p_user_id AND le.book_id = p_book_id;
 END;

@@ -6,7 +6,7 @@ import { updateEntry as updateEntryModel } from '../../models/library/update-ent
  * /library/{bookId}:
  *   put:
  *     tags: [Library]
- *     summary: Update a library entry (status, rating, notes, review)
+ *     summary: Update a library entry (status, rating, review)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -22,7 +22,7 @@ import { updateEntry as updateEntryModel } from '../../models/library/update-ent
  *             properties:
  *               status: { type: string, enum: [queued, reading, finished, abandoned] }
  *               userRating: { type: integer, minimum: 1, maximum: 5 }
- *               notes: { type: string }
+
  *               review: { type: string }
  *     responses:
  *       200:
