@@ -5,8 +5,11 @@ CREATE TABLE library_entries (
     date_added   TIMESTAMPTZ DEFAULT NOW(),
     date_read    TIMESTAMPTZ,
     user_rating  INT,
+    -- The reader's own words about the book. Called notes until LOS-266, which
+    -- is what it had always been: the column named review was plumbed end to
+    -- end and never written, so the schema promised a public/private split the
+    -- product never built.
     review       TEXT,
-    notes        TEXT,
     user_related INT[] DEFAULT '{}',
     -- Set through fn_set_library_favorite, not fn_update_library_entry: that
     -- function is COALESCE-based, where NULL means unchanged, so a boolean

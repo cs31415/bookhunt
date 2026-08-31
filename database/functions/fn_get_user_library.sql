@@ -4,6 +4,11 @@
 -- type, which CREATE OR REPLACE cannot do in place.
 DROP FUNCTION IF EXISTS fn_get_user_library(INT);
 DROP FUNCTION IF EXISTS fn_get_user_library(INT, INT, INT);
+-- The row type loses `notes`, which LOS-266 folded into `review`. Changing a
+-- RETURNS TABLE changes the return type, and CREATE OR REPLACE cannot do that,
+-- so the old signature has to go first.
+DROP FUNCTION IF EXISTS fn_get_user_library(INT, INT, INT);
+
 CREATE OR REPLACE FUNCTION fn_get_user_library(
     p_user_id INT,
     p_limit   INT DEFAULT 24,
@@ -16,7 +21,6 @@ CREATE OR REPLACE FUNCTION fn_get_user_library(
     date_read    TIMESTAMPTZ,
     user_rating  INT,
     review       TEXT,
-    notes        TEXT,
     user_related INT[],
     is_favorite  BOOLEAN,
     is_hidden    BOOLEAN,
@@ -47,7 +51,6 @@ BEGIN
         le.date_read,
         le.user_rating,
         le.review,
-        le.notes,
         le.user_related,
         le.is_favorite,
         le.is_hidden,

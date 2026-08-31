@@ -6,7 +6,7 @@
 --   1. It returns nothing unless is_discoverable is true. The gate lives in the
 --      WHERE clause rather than in a caller, so no future route can forget it.
 --   2. It always excludes hidden entries.
---   3. notes and review are absent from the row type entirely. Leaving them out
+--   3. review is absent from the row type entirely. Leaving it out
 --      of the shape, rather than trusting every caller to drop them, is what
 --      makes it impossible to leak a private note through a new endpoint.
 --

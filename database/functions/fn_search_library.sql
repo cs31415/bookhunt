@@ -23,6 +23,11 @@
 -- which CREATE OR REPLACE cannot do in place -- same reason fn_get_user_library
 -- carries one.
 DROP FUNCTION IF EXISTS fn_search_library(INT, TEXT[], TEXT, reading_status, TEXT, INT, INT);
+-- The row type loses `notes`, which LOS-266 folded into `review`. Changing a
+-- RETURNS TABLE changes the return type, and CREATE OR REPLACE cannot do that,
+-- so the old signature has to go first.
+DROP FUNCTION IF EXISTS fn_search_library(INT, TEXT[], TEXT, reading_status, TEXT, INT, INT);
+
 CREATE OR REPLACE FUNCTION fn_search_library(
     p_user_id INT,
     p_terms   TEXT[]         DEFAULT NULL,
@@ -39,7 +44,6 @@ CREATE OR REPLACE FUNCTION fn_search_library(
     date_read    TIMESTAMPTZ,
     user_rating  INT,
     review       TEXT,
-    notes        TEXT,
     user_related INT[],
     is_favorite  BOOLEAN,
     is_hidden    BOOLEAN,
@@ -72,7 +76,6 @@ BEGIN
             le.date_read,
             le.user_rating,
             le.review,
-            le.notes,
             le.user_related,
             le.is_favorite,
             le.is_hidden,
@@ -133,7 +136,7 @@ BEGIN
     )
     SELECT
         s.user_id, s.book_id, s.status, s.date_added, s.date_read,
-        s.user_rating, s.review, s.notes, s.user_related,
+        s.user_rating, s.review, s.user_related,
         s.is_favorite, s.is_hidden, s.is_ebook, s.is_audiobook,
         s.title, s.book_slug, s.author_name, s.author_slug,
         s.year, s.pages, s.rating, s.subjects, s.moods, s.themes, s.cover_url, s.hue,

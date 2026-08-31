@@ -55,7 +55,7 @@ export async function getPublicProfile(req: Request, res: Response) {
  *     tags: [Users]
  *     summary: A reader's public library
  *     description: >
- *       Hidden books never appear, and the rows carry no notes or reviews --
+ *       Hidden books never appear, and the rows carry no review --
  *       those are absent from the stored function's row type, not filtered out
  *       here. Answers 404 on the same terms as the profile above.
  *     parameters:
