@@ -10,6 +10,11 @@ CREATE TABLE library_entries (
     -- end and never written, so the schema promised a public/private split the
     -- product never built.
     review       TEXT,
+    -- Whether this one review is published, overriding users.share_reviews.
+    -- Nullable on purpose: NULL means inherit, so COALESCE gives three states
+    -- from one column and a per-book choice survives a change to the global
+    -- one (LOS-266).
+    share_review BOOLEAN,
     user_related INT[] DEFAULT '{}',
     -- Set through fn_set_library_favorite, not fn_update_library_entry: that
     -- function is COALESCE-based, where NULL means unchanged, so a boolean

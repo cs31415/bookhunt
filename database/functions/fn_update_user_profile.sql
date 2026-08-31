@@ -16,6 +16,11 @@
 -- Returns no rows when the id matches nothing, which cannot happen behind
 -- authRequired but is the honest answer if it ever does.
 DROP FUNCTION IF EXISTS fn_update_user_profile(INT, VARCHAR, VARCHAR, BOOLEAN, BOOLEAN);
+-- And the six-argument one. It gains the share_reviews pair and returns the
+-- column too (LOS-266) -- either change alone would need this, since new
+-- parameters make CREATE OR REPLACE define an overload rather than replace, and
+-- a changed RETURNS TABLE it cannot do at all.
+DROP FUNCTION IF EXISTS fn_update_user_profile(INT, VARCHAR, VARCHAR, BOOLEAN, BOOLEAN, JSONB);
 
 CREATE OR REPLACE FUNCTION fn_update_user_profile(
     p_user_id           INT,
@@ -23,6 +28,10 @@ CREATE OR REPLACE FUNCTION fn_update_user_profile(
     p_handle            VARCHAR DEFAULT NULL,
     p_is_discoverable   BOOLEAN DEFAULT NULL,
     p_set_discoverable  BOOLEAN DEFAULT FALSE,
+    -- Same pair, same reason: a boolean cannot say "unchanged" on its own, so a
+    -- companion flag says whether the caller meant to set it (LOS-266).
+    p_share_reviews     BOOLEAN DEFAULT NULL,
+    p_set_share_reviews BOOLEAN DEFAULT FALSE,
     p_preferences       JSONB   DEFAULT NULL
 )
 RETURNS TABLE(
@@ -31,6 +40,7 @@ RETURNS TABLE(
     display_name    VARCHAR,
     handle          VARCHAR,
     is_discoverable BOOLEAN,
+    share_reviews   BOOLEAN,
     preferences     JSONB
 )
 LANGUAGE plpgsql
@@ -40,6 +50,10 @@ BEGIN
     UPDATE users u
     SET display_name    = COALESCE(p_display_name, u.display_name),
         handle          = COALESCE(p_handle, u.handle),
+        share_reviews   = CASE
+                            WHEN p_set_share_reviews THEN p_share_reviews
+                            ELSE u.share_reviews
+                          END,
         is_discoverable = CASE
                             WHEN p_set_discoverable THEN p_is_discoverable
                             ELSE u.is_discoverable
@@ -47,6 +61,7 @@ BEGIN
         preferences     = COALESCE(u.preferences, '{}'::JSONB)
                           || COALESCE(p_preferences, '{}'::JSONB)
     WHERE u.id = p_user_id
-    RETURNING u.id, u.email, u.display_name, u.handle, u.is_discoverable, u.preferences;
+    RETURNING u.id, u.email, u.display_name, u.handle, u.is_discoverable,
+              u.share_reviews, u.preferences;
 END;
 $$;

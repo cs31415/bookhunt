@@ -83,6 +83,7 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_add_to_library',
   'fn_update_library_entry',
   'fn_set_library_favorite',
+  'fn_set_library_review_sharing',
   'fn_set_library_visibility',
   'fn_remove_from_library',
   'fn_remove_many_from_library',

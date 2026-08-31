@@ -6,9 +6,16 @@
 --   1. It returns nothing unless is_discoverable is true. The gate lives in the
 --      WHERE clause rather than in a caller, so no future route can forget it.
 --   2. It always excludes hidden entries.
---   3. review is absent from the row type entirely. Leaving it out
---      of the shape, rather than trusting every caller to drop them, is what
---      makes it impossible to leak a private note through a new endpoint.
+--   3. review is returned only when it has been published, and the gate is in
+--      the SELECT rather than in a caller -- the same shape as the
+--      is_discoverable gate above it, so no route written later can bypass it.
+--
+--      This is a trade, and worth stating (LOS-266). Until now the guarantee
+--      was structural: review was not in the row type at all, so no endpoint
+--      could leak it however badly written. It is now a SQL-level gate --
+--      single-place and enforced for every caller, but no longer impossible by
+--      construction. Worth paying only because every read goes through this one
+--      expression.
 --
 -- One function with filters rather than three near-identical ones: the library,
 -- currently-reading and favourites tabs differ only by p_status and
@@ -20,6 +27,8 @@
 -- own DROPs.
 DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT);
 DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT);
+-- And the nine-argument one, whose row type gains `review` (LOS-266).
+DROP FUNCTION IF EXISTS fn_get_public_library(VARCHAR, reading_status, BOOLEAN, INT, INT, TEXT, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION fn_get_public_library(
     p_handle         VARCHAR,
     p_status         reading_status DEFAULT NULL,
@@ -57,6 +66,9 @@ CREATE OR REPLACE FUNCTION fn_get_public_library(
     themes       TEXT[],
     cover_url    VARCHAR,
     hue          VARCHAR,
+    -- NULL where the reader has not published this one, which is the same thing
+    -- a visitor sees for a book with no review at all.
+    review       TEXT,
     total_count  BIGINT
 )
 LANGUAGE plpgsql AS $$
@@ -81,6 +93,9 @@ BEGIN
         b.themes,
         b.cover_url,
         b.hue,
+        -- The per-book override wins in both directions; NULL falls through to
+        -- the reader's global setting, which is FALSE unless they changed it.
+        CASE WHEN COALESCE(le.share_review, u.share_reviews) THEN le.review ELSE NULL END AS review,
         COUNT(*) OVER ()::BIGINT AS total_count
     FROM library_entries le
     JOIN users   u ON u.id = le.user_id

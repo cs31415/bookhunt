@@ -146,6 +146,24 @@ export async function setLibraryFavorite(userId: number, bookId: number, isFavor
   return result.rows.length > 0 ? result.rows[0] : null;
 }
 
+/**
+ * Null when the user does not own the book; the WHERE is the ownership check.
+ *
+ * `share` is a tri-state and null is one of its values -- "follow the global
+ * setting" -- not an absence, so it is passed straight through (LOS-266).
+ */
+export async function setLibraryReviewSharing(
+  userId: number,
+  bookId: number,
+  share: boolean | null,
+) {
+  const result = await pool.query(
+    'SELECT * FROM fn_set_library_review_sharing($1, $2, $3)',
+    [userId, bookId, share],
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
 /** Null when the user does not own the book; the WHERE is the ownership check. */
 export async function setLibraryVisibility(userId: number, bookId: number, isHidden: boolean) {
   const result = await pool.query(
