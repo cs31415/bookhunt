@@ -127,6 +127,32 @@ export async function publicLibraryFacets(handle: string): Promise<ShelfFacets> 
   return groupFacets(await getPublicLibraryFacets(handle));
 }
 
+/**
+ * One reader's entry for one book, as a visitor may see it (LOS-360).
+ *
+ * Goes through the same function as the shelf, with its book filter set, rather
+ * than a query of its own: the sharing gate lives in that SELECT, and a second
+ * query would be a second place for it to drift out of step.
+ *
+ * Null when the reader has no such entry, when their page is not listed, and
+ * when the book is hidden -- all of which are the same answer to a visitor, and
+ * deliberately indistinguishable.
+ */
+export async function publicLibraryEntry(handle: string, bookId: number) {
+  const rows = await getPublicLibrary(handle, {
+    status: null,
+    favoritesOnly: false,
+    limit: 1,
+    offset: 0,
+    query: null,
+    subject: null,
+    mood: null,
+    theme: null,
+    bookId,
+  });
+  return rows[0] ?? null;
+}
+
 export async function publicLibrary(handle: string, query: PublicLibraryQuery) {
   const { page, pageSize, rejected, filters } = publicLibraryFilters(query);
   if (rejected) return { entries: [], total: 0, page, pageSize };

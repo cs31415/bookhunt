@@ -65,11 +65,13 @@ export interface PublicLibraryFilters {
   /** One mood, and one theme, matched the same whole-value way (LOS-342). */
   mood: string | null;
   theme: string | null;
+  /** One book rather than a page of them (LOS-360). Null means the whole shelf. */
+  bookId?: number | null;
 }
 
 export async function getPublicLibrary(handle: string, filters: PublicLibraryFilters) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+    'SELECT * FROM fn_get_public_library($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
     [
       handle,
       filters.status,
@@ -80,6 +82,7 @@ export async function getPublicLibrary(handle: string, filters: PublicLibraryFil
       filters.subject,
       filters.mood,
       filters.theme,
+      filters.bookId ?? null,
     ],
   );
   return rows;
