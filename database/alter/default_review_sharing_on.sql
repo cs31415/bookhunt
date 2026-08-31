@@ -1,0 +1,15 @@
+-- Reviews share by default for new accounts (LOS-266).
+--
+-- The column arrived FALSE, on the reasoning that any other default
+-- retroactively publishes text written when it was called `notes`. That still
+-- holds for rows that already exist, which is why this changes the default and
+-- **does not backfill**.
+--
+-- Deliberately not `UPDATE users SET share_reviews = TRUE`. This file is
+-- re-runnable like every other script in alter/, and a backfill here would
+-- re-publish for any reader who had since turned it off -- silently, on a
+-- later deploy, with no way to tell that from a fresh account.
+--
+-- Backfilling existing rows is a one-off decision, made once, by hand, with
+-- eyes on who it affects. It is not a migration.
+ALTER TABLE users ALTER COLUMN share_reviews SET DEFAULT TRUE;
