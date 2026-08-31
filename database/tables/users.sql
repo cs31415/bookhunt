@@ -9,6 +9,10 @@ CREATE TABLE users (
     handle                VARCHAR(30) NOT NULL,
     preferences           JSONB DEFAULT '{}',
     is_discoverable       BOOLEAN DEFAULT FALSE,
+    -- Whether reviews appear on the public page at all. FALSE by default, and
+    -- that is not a detail: anything else retroactively publishes text written
+    -- when the column was called notes and documented as private (LOS-266).
+    share_reviews   BOOLEAN NOT NULL DEFAULT FALSE,
     reset_token           VARCHAR(255) UNIQUE,
     reset_token_expires_at TIMESTAMPTZ,
     -- NULL until the address is proven. Login refuses an unverified account

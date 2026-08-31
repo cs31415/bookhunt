@@ -43,6 +43,7 @@ BEGIN;
 \ir functions/fn_add_to_library.sql
 \ir functions/fn_update_library_entry.sql
 \ir functions/fn_set_library_favorite.sql
+\ir functions/fn_set_library_review_sharing.sql
 \ir functions/fn_set_library_visibility.sql
 \ir functions/fn_set_library_ebook.sql
 \ir functions/fn_set_library_audiobook.sql

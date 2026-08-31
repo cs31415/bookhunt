@@ -12,6 +12,7 @@ import { bulkRemoveFromLibrary } from '../controllers/library/bulk-remove-from-l
 import { addRelated } from '../controllers/library/add-related';
 import { removeRelated } from '../controllers/library/remove-related';
 import { addFavorite, removeFavorite } from '../controllers/library/set-favorite';
+import { setReviewSharing } from '../controllers/library/set-review-sharing';
 import { hideEntry, showEntry } from '../controllers/library/set-hidden';
 import { markEbook, markPhysical } from '../controllers/library/set-ebook';
 import { markAudiobook, clearAudiobook } from '../controllers/library/set-audiobook';
@@ -34,6 +35,8 @@ router.post('/:slug', addToLibraryBySlug);
 // sub-paths they are rather than as part of a book id.
 router.put('/:bookId/favorite', addFavorite);
 router.delete('/:bookId/favorite', removeFavorite);
+// Three states, so a body rather than two verbs (LOS-266).
+router.put('/:bookId/review-sharing', setReviewSharing);
 router.put('/:bookId/hidden', hideEntry);
 router.delete('/:bookId/hidden', showEntry);
 router.put('/:bookId/ebook', markEbook);

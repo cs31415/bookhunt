@@ -24,11 +24,22 @@ export async function updateUserProfile(
   handle: string | null,
   isDiscoverable: boolean | null,
   setDiscoverable: boolean,
+  shareReviews: boolean | null,
+  setShareReviews: boolean,
   preferences: Record<string, unknown> | null,
 ) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_update_user_profile($1, $2, $3, $4, $5, $6)',
-    [userId, displayName, handle, isDiscoverable, setDiscoverable, preferences],
+    'SELECT * FROM fn_update_user_profile($1, $2, $3, $4, $5, $6, $7, $8)',
+    [
+      userId,
+      displayName,
+      handle,
+      isDiscoverable,
+      setDiscoverable,
+      shareReviews,
+      setShareReviews,
+      preferences,
+    ],
   );
   return rows.length > 0 ? rows[0] : null;
 }
