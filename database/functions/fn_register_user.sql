@@ -59,13 +59,18 @@ BEGIN
         UPDATE invite_codes
            SET used_at = NOW(), used_by_user_id = v_user_id
          WHERE LOWER(code) = LOWER(p_invite_code)
-           AND used_at IS NULL;
+           AND used_at IS NULL
+           -- Expiry is checked in the same predicate rather than before it, so
+           -- an expired code takes the same path as a spent one: one refusal,
+           -- nothing for a caller to tell apart.
+           AND (expires_at IS NULL OR expires_at > NOW());
 
         GET DIAGNOSTICS v_claimed = ROW_COUNT;
 
         IF v_claimed = 0 THEN
-            -- Unknown and already-used are one error on purpose: telling them
-            -- apart would let someone test codes against this endpoint.
+            -- Unknown, already-used and expired are one error on purpose:
+            -- telling them apart would let someone test codes against this
+            -- endpoint.
             -- 22023 invalid_parameter_value, which nothing else on this path
             -- raises, so the controller can map it without matching messages.
             RAISE EXCEPTION 'invite code is not available'

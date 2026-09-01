@@ -19,8 +19,14 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     code            VARCHAR(64) NOT NULL,
     note            VARCHAR(255),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ,
     used_at         TIMESTAMPTZ,
     used_by_user_id INT REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invite_codes_code_lower ON invite_codes (LOWER(code));
+
+-- Separate, so a database that already ran the first version of this script
+-- picks up the column too.
+ALTER TABLE invite_codes
+    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;

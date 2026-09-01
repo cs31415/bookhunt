@@ -10,6 +10,11 @@ CREATE TABLE invite_codes (
     -- Who it was minted for, in words. Only ever read by a person.
     note            VARCHAR(255),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- A code that never expires is a credential with no end date: one that
+    -- leaks into a forwarded email or a screenshot works forever. NULL means
+    -- no expiry, which mint-invite does not offer but a hand-written INSERT
+    -- can, so the column does not force a decision it cannot inform.
+    expires_at      TIMESTAMPTZ,
     -- Both NULL until claimed, and written together by fn_register_user.
     used_at         TIMESTAMPTZ,
     -- SET NULL rather than CASCADE: deleting an account should not erase the

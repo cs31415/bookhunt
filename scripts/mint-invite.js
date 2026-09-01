@@ -4,6 +4,7 @@
  *   node scripts/mint-invite.js                     -- lists every code
  *   node scripts/mint-invite.js --new "for Sam"     -- mints one, with a note
  *   node scripts/mint-invite.js --new "..." -n 5    -- mints five
+ *   node scripts/mint-invite.js --new "..." -d 30   -- expiring in 30 days
  *
  * CommonJS, because there is no tsx on the droplet: this runs through the api
  * container against the bind-mounted scripts directory.
@@ -31,6 +32,14 @@ if (fs.existsSync(envPath)) {
 
 const { Pool } = require('pg');
 
+/*
+ * Codes expire by default. One that never does is a credential with no end
+ * date, and an invite tends to end up forwarded, screenshotted or left in an
+ * inbox for years. Fourteen days is long enough to be an invitation and short
+ * enough that a stale one is not a way in.
+ */
+const DEFAULT_DAYS = 14;
+
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const GROUPS = 3;
 const GROUP_LEN = 4;
@@ -57,6 +66,8 @@ async function main() {
   const countIndex = args.indexOf('-n');
   const count = countIndex === -1 ? 1 : Math.max(1, parseInt(args[countIndex + 1], 10) || 1);
   const note = newIndex === -1 ? null : args[newIndex + 1] || null;
+  const daysIndex = args.indexOf('-d');
+  const days = daysIndex === -1 ? DEFAULT_DAYS : parseInt(args[daysIndex + 1], 10) || DEFAULT_DAYS;
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -64,14 +75,20 @@ async function main() {
     if (newIndex !== -1) {
       for (let i = 0; i < count; i += 1) {
         const code = mintCode();
-        await pool.query('INSERT INTO invite_codes (code, note) VALUES ($1, $2)', [code, note]);
-        console.log(code + (note ? `   (${note})` : ''));
+        await pool.query(
+          `INSERT INTO invite_codes (code, note, expires_at)
+           VALUES ($1, $2, NOW() + ($3 || ' days')::interval)`,
+          [code, note, String(days)],
+        );
+        console.log(`${code}   expires in ${days} days${note ? `   (${note})` : ''}`);
       }
       console.log('');
     }
 
     const { rows } = await pool.query(
-      `SELECT c.code, c.note, c.created_at, c.used_at, u.handle AS used_by
+      `SELECT c.code, c.note, c.created_at, c.used_at, c.expires_at,
+              c.expires_at IS NOT NULL AND c.expires_at <= NOW() AS expired,
+              u.handle AS used_by
          FROM invite_codes c
          LEFT JOIN users u ON u.id = c.used_by_user_id
         ORDER BY c.created_at`,
@@ -87,11 +104,17 @@ async function main() {
     for (const row of rows) {
       // A code whose user was later deleted keeps used_at, so it still reads as
       // spent rather than quietly becoming available again.
-      const state = row.used_at ? (row.used_by ? `@${row.used_by}` : 'used') : 'unused';
+      // Spent beats expired: a code that was used before it lapsed was still
+      // used, and reporting it as expired would suggest nobody got in with it.
+      const state = row.used_at
+        ? (row.used_by ? `@${row.used_by}` : 'used')
+        : row.expired
+          ? 'expired'
+          : 'unused';
       console.log(`${row.code.padEnd(14)}  ${state.padEnd(9)}  ${row.note || ''}`);
     }
-    const unused = rows.filter((r) => !r.used_at).length;
-    console.log(`\n${rows.length} total, ${unused} unused.`);
+    const usable = rows.filter((r) => !r.used_at && !r.expired).length;
+    console.log(`\n${rows.length} total, ${usable} still usable.`);
   } finally {
     await pool.end();
   }
