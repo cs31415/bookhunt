@@ -7,10 +7,12 @@ export async function registerUser(
   handle: string,
   verificationToken: string,
   verificationExpiresAt: Date,
+  /** Null when REGISTRATION_MODE=open. The function claims it, not this. */
+  inviteCode: string | null,
 ) {
   const { rows } = await pool.query(
-    'SELECT * FROM fn_register_user($1, $2, $3, $4, $5, $6)',
-    [email, passwordHash, displayName, handle, verificationToken, verificationExpiresAt],
+    'SELECT * FROM fn_register_user($1, $2, $3, $4, $5, $6, $7)',
+    [email, passwordHash, displayName, handle, verificationToken, verificationExpiresAt, inviteCode],
   );
   return rows[0];
 }

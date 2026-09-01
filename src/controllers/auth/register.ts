@@ -5,6 +5,7 @@ import { validatePassword } from '../../lib/validate/validate-password';
 import { validateDisplayName } from '../../lib/validate/validate-display-name';
 import { validateHandle } from '../../lib/validate/validate-handle';
 import { normalizeHandle } from '../../lib/validate/normalize-handle';
+import { invitesRequired } from '../../lib/registration-mode';
 
 // idx_users_handle_lower is the only handle constraint; everything else that
 // raises 23505 on this table is about the address.
@@ -61,7 +62,22 @@ const HANDLE_CONSTRAINT = 'idx_users_handle_lower';
  *           HANDLE_TAKEN, field handle)
  */
 export async function register(req: Request, res: Response) {
-  const { email, password, displayName, handle } = req.body ?? {};
+  const { email, password, displayName, handle, inviteCode } = req.body ?? {};
+
+  /*
+   * Checked before anything else, and before any work is done. A closed door
+   * should not first tell a caller whether an address is already registered
+   * (LOS-376).
+   */
+  const needsInvite = invitesRequired();
+  if (needsInvite && (typeof inviteCode !== 'string' || inviteCode.trim() === '')) {
+    res.status(403).json({
+      error: 'BookHunt is invite-only at the moment.',
+      code: 'INVITE_REQUIRED',
+      field: 'inviteCode',
+    });
+    return;
+  }
 
   if (!isValidEmail(email)) {
     res.status(400).json({ error: 'A valid email address is required.' });
@@ -90,12 +106,31 @@ export async function register(req: Request, res: Response) {
   }
 
   try {
-    const user = await registerUser(email, password, displayName, normalizedHandle);
+    const user = await registerUser(
+      email,
+      password,
+      displayName,
+      normalizedHandle,
+      needsInvite ? inviteCode.trim() : null,
+    );
     res.status(201).json({ user, verificationRequired: true });
   } catch (err: any) {
     // Both collisions arrive as 23505. Saying "already registered" about the
     // address when it was the handle that clashed sends the reader to change
     // the wrong field, so the constraint name decides which message they get.
+    /*
+     * Raised by fn_register_user when the code is unknown or already spent. The
+     * two are one message on purpose: distinguishing them would turn this
+     * endpoint into an oracle for testing codes.
+     */
+    if (err.code === '22023') {
+      res.status(403).json({
+        error: 'That invite code is not valid.',
+        code: 'INVITE_INVALID',
+        field: 'inviteCode',
+      });
+      return;
+    }
     if (err.code === '23505') {
       if (err.constraint === HANDLE_CONSTRAINT) {
         res.status(409).json({ error: 'That handle is taken.', code: 'HANDLE_TAKEN', field: 'handle' });

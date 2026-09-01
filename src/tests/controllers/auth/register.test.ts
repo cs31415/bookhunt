@@ -22,6 +22,9 @@ const validBody = {
   password: 'b00kW0rm!',
   displayName: 'Ada Reader',
   handle: 'ada',
+  // Registration is invite-only by default now (LOS-376), so a body without
+  // this is refused before any of the other validation runs.
+  inviteCode: 'GNRU-XC5B-QGXT',
 };
 
 const createdUser = {
@@ -43,6 +46,7 @@ describe('register controller', () => {
       'b00kW0rm!',
       'Ada Reader',
       'ada',
+      'GNRU-XC5B-QGXT',
     );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({
@@ -74,6 +78,7 @@ describe('register controller', () => {
       expect.any(String),
       expect.any(String),
       'ada',
+      expect.any(String),
     );
   });
 
@@ -171,9 +176,20 @@ describe('register controller', () => {
       expect(mockRegisterUser).not.toHaveBeenCalled();
     });
 
-    it('returns 400 rather than 500 for an absent body', async () => {
+    // 403 rather than 400 since LOS-376: a body with no invite code is turned
+    // away at the gate, before there is anything to validate. The point of this
+    // test is unchanged -- an absent body must not become a 500.
+    it('refuses an absent body rather than throwing', async () => {
       const res = makeRes();
       await register(makeReq(undefined), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.status).not.toHaveBeenCalledWith(500);
+    });
+
+    it('still returns 400 for a malformed body that carries a code', async () => {
+      const res = makeRes();
+      await register(makeReq({ inviteCode: 'GNRU-XC5B-QGXT' }), res);
 
       expect(res.status).toHaveBeenCalledWith(400);
     });
@@ -187,5 +203,112 @@ describe('register controller', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+  });
+
+  /*
+   * The gate itself (LOS-376). Registration was open, and 64 of the 66 accounts
+   * it produced were bots, each followed by a password-reset request so the
+   * server was mailing harvested addresses.
+   */
+  describe('the invite gate', () => {
+    const { inviteCode, ...bodyWithoutCode } = validBody;
+
+    afterEach(() => {
+      delete process.env.REGISTRATION_MODE;
+    });
+
+    it('refuses a registration with no code', async () => {
+      const res = makeRes();
+      await register(makeReq(bodyWithoutCode), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'INVITE_REQUIRED', field: 'inviteCode' }),
+      );
+    });
+
+    // The whole point: a refused registration must not send mail. The model is
+    // what sends it, so never reaching the model is the assertion.
+    it('does not reach the model, so no email is sent', async () => {
+      await register(makeReq(bodyWithoutCode), makeRes());
+
+      expect(mockRegisterUser).not.toHaveBeenCalled();
+    });
+
+    // Checked first, before the address is even looked at. A closed door should
+    // not tell a caller whether an address is already registered.
+    it('refuses before validating anything else', async () => {
+      const res = makeRes();
+      await register(makeReq({ ...bodyWithoutCode, email: 'not-an-email' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.status).not.toHaveBeenCalledWith(400);
+    });
+
+    it('treats a blank code as no code', async () => {
+      const res = makeRes();
+      await register(makeReq({ ...bodyWithoutCode, inviteCode: '   ' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('trims the code before claiming it', async () => {
+      mockRegisterUser.mockResolvedValue(createdUser);
+
+      await register(makeReq({ ...validBody, inviteCode: '  GNRU-XC5B-QGXT  ' }), makeRes());
+
+      expect(mockRegisterUser).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'GNRU-XC5B-QGXT',
+      );
+    });
+
+    /*
+     * fn_register_user raises 22023 for a code that is unknown or already
+     * spent. Both arrive as one message on purpose -- telling them apart would
+     * make this endpoint an oracle for testing codes.
+     */
+    it('reports a spent or unknown code as one refusal', async () => {
+      mockRegisterUser.mockRejectedValue(Object.assign(new Error('nope'), { code: '22023' }));
+
+      const res = makeRes();
+      await register(makeReq(validBody), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'INVITE_INVALID', field: 'inviteCode' }),
+      );
+    });
+
+    it('lets a registration through with no code when the mode is open', async () => {
+      process.env.REGISTRATION_MODE = 'open';
+      mockRegisterUser.mockResolvedValue(createdUser);
+
+      const res = makeRes();
+      await register(makeReq(bodyWithoutCode), res);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      // Null, so the function claims nothing.
+      expect(mockRegisterUser).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        null,
+      );
+    });
+
+    // An unset or misspelt variable must close the door, not open it.
+    it('requires a code when the mode is anything but open', async () => {
+      process.env.REGISTRATION_MODE = 'opne';
+
+      const res = makeRes();
+      await register(makeReq(bodyWithoutCode), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
   });
 });

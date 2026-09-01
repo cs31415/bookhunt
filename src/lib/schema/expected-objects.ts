@@ -26,6 +26,7 @@ export const EXPECTED_TABLES: readonly string[] = [
   'canned_searches',
   'user_pinned_searches',
   'canned_search_draws',
+  'invite_codes',
 ];
 
 export const EXPECTED_FUNCTIONS: readonly string[] = [

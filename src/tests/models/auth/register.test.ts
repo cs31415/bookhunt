@@ -35,7 +35,7 @@ afterEach(() => {
 
 describe('registerUser model', () => {
   it('stores the address in canonical form', async () => {
-    await registerUser('  Reader@Example.COM ', 'b00kW0rm!', 'Ada Reader', 'Ada');
+    await registerUser('  Reader@Example.COM ', 'b00kW0rm!', 'Ada Reader', 'Ada', 'CODE-1');
 
     // The bug this closes: the row used to keep whatever case was typed while
     // lookups matched on LOWER(email), so two accounts could share an address.
@@ -46,11 +46,12 @@ describe('registerUser model', () => {
       'ada',
       'test-uuid',
       expect.any(Date),
+      'CODE-1',
     );
   });
 
   it('trims the display name', async () => {
-    await registerUser('reader@example.com', 'b00kW0rm!', '  Ada Reader  ', 'ada');
+    await registerUser('reader@example.com', 'b00kW0rm!', '  Ada Reader  ', 'ada', 'CODE-1');
 
     expect(mockInsertUser).toHaveBeenCalledWith(
       expect.any(String),
@@ -59,11 +60,12 @@ describe('registerUser model', () => {
       expect.any(String),
       expect.any(String),
       expect.any(Date),
+      'CODE-1',
     );
   });
 
   it('hashes the password rather than storing it', async () => {
-    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada');
+    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', 'CODE-1');
 
     expect(mockHash).toHaveBeenCalledWith('b00kW0rm!', 10);
     expect(mockInsertUser).not.toHaveBeenCalledWith(
@@ -78,7 +80,7 @@ describe('registerUser model', () => {
 
   it('mails a verification link that expires in 24 hours', async () => {
     const before = Date.now();
-    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada');
+    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', 'CODE-1');
 
     const expiresAt: Date = mockInsertUser.mock.calls[0][5];
     const ttlMs = expiresAt.getTime() - before;
@@ -98,7 +100,7 @@ describe('registerUser model', () => {
   });
 
   it('returns the created user in camelCase', async () => {
-    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada')).resolves.toEqual({
+    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', 'CODE-1')).resolves.toEqual({
       id: 1,
       email: 'reader@example.com',
       displayName: 'Ada Reader',
@@ -113,7 +115,7 @@ describe('registerUser model', () => {
     mockSendEmail.mockResolvedValue(false);
 
     await expect(
-      registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada'),
+      registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', 'CODE-1'),
     ).resolves.toMatchObject({ id: 1 });
   });
 
@@ -122,9 +124,42 @@ describe('registerUser model', () => {
     err.code = '23505';
     mockInsertUser.mockRejectedValue(err);
 
-    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada')).rejects.toMatchObject({
+    await expect(registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', 'CODE-1')).rejects.toMatchObject({
       code: '23505',
     });
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The whole reason registration is gated (LOS-376). fn_register_user raises
+   * on a spent or unknown code, which rolls its own insert back -- so the model
+   * must return before it reaches sendEmail. If it did not, a bot could still
+   * make this server mail any address it liked simply by guessing wrong, which
+   * is precisely the abuse LOS-363 found.
+   */
+  it('sends no email when the invite code is refused', async () => {
+    mockInsertUser.mockRejectedValue(
+      Object.assign(new Error('invite code is not available'), { code: '22023' }),
+    );
+
+    await expect(
+      registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', 'SPENT'),
+    ).rejects.toMatchObject({ code: '22023' });
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('passes null through when no code is required', async () => {
+    await registerUser('reader@example.com', 'b00kW0rm!', 'Ada Reader', 'ada', null);
+
+    expect(mockInsertUser).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.any(Date),
+      null,
+    );
   });
 });
