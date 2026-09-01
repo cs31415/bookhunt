@@ -27,6 +27,7 @@ export const EXPECTED_TABLES: readonly string[] = [
   'user_pinned_searches',
   'canned_search_draws',
   'invite_codes',
+  'invite_requests',
 ];
 
 export const EXPECTED_FUNCTIONS: readonly string[] = [
@@ -102,4 +103,7 @@ export const EXPECTED_FUNCTIONS: readonly string[] = [
   'fn_recommendations',
   'fn_get_ai_summary',
   'fn_save_ai_summary',
+  'fn_create_invite_request',
+  'fn_pending_invite_requests',
+  'fn_mark_invite_requests_notified',
 ];

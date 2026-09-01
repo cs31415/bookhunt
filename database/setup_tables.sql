@@ -16,5 +16,6 @@ BEGIN;
 \ir tables/user_pinned_searches.sql
 \ir tables/canned_search_draws.sql
 \ir tables/invite_codes.sql
+\ir tables/invite_requests.sql
 
 COMMIT;

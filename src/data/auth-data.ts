@@ -55,3 +55,17 @@ export async function setVerificationToken(email: string, token: string, expires
     [email, token, expiresAt],
   );
 }
+
+export async function createInviteRequest(email: string, note: string | null) {
+  await pool.query('SELECT fn_create_invite_request($1, $2)', [email, note]);
+}
+
+export async function pendingInviteRequests(limit: number) {
+  const { rows } = await pool.query('SELECT * FROM fn_pending_invite_requests($1)', [limit]);
+  return rows;
+}
+
+export async function markInviteRequestsNotified(ids: number[]) {
+  const { rows } = await pool.query('SELECT fn_mark_invite_requests_notified($1) AS count', [ids]);
+  return rows[0].count as number;
+}

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { register } from '../controllers/auth/register';
 import { login } from '../controllers/auth/login';
 import { forgotPassword } from '../controllers/auth/forgot-password';
+import { requestInvite } from '../controllers/auth/request-invite';
 import { resetPassword } from '../controllers/auth/reset-password';
 import { verifyEmail } from '../controllers/auth/verify-email';
 import { resendVerification } from '../controllers/auth/resend-verification';
@@ -21,6 +22,9 @@ const FIFTEEN_MINUTES = 15 * 60 * 1000;
 router.post('/register', rateLimiter(HOUR, 10), register);
 router.post('/login', rateLimiter(FIFTEEN_MINUTES, 20), login);
 router.post('/forgot-password', rateLimiter(HOUR, 5), forgotPassword);
+// Tighter than register's 10/hour: this one writes a row for anybody who asks,
+// and there is no reason for a person to ask five times in an hour (LOS-381).
+router.post('/request-invite', rateLimiter(HOUR, 5), requestInvite);
 router.post('/reset-password', rateLimiter(HOUR, 10), resetPassword);
 router.post('/verify-email', rateLimiter(HOUR, 20), verifyEmail);
 router.post('/resend-verification', rateLimiter(HOUR, 5), resendVerification);
