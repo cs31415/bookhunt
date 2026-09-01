@@ -39,12 +39,27 @@ describe('auth-data', () => {
       const row = { id: 2, email: 'new@b.com' };
       mockQuery.mockResolvedValue({ rows: [row] });
       const expiry = new Date('2026-01-02T12:00:00Z');
-      const result = await registerUser('new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry);
+      const result = await registerUser(
+        'new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry, 'CODE-1',
+      );
       expect(mockQuery).toHaveBeenCalledWith(
-        'SELECT * FROM fn_register_user($1, $2, $3, $4, $5, $6)',
-        ['new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry],
+        'SELECT * FROM fn_register_user($1, $2, $3, $4, $5, $6, $7)',
+        ['new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry, 'CODE-1'],
       );
       expect(result).toEqual(row);
+    });
+
+    // Open mode. The function treats null as "claim nothing" (LOS-376).
+    it('passes a null invite code straight through', async () => {
+      mockQuery.mockResolvedValue({ rows: [{}] });
+      const expiry = new Date();
+
+      await registerUser('new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry, null);
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.any(String),
+        ['new@b.com', 'hash', 'Bob', 'bob', 'verify-tok', expiry, null],
+      );
     });
   });
 

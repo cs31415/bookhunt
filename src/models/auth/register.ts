@@ -31,12 +31,20 @@ export interface RegisteredUser {
  * The email is sent last and cannot fail the registration: sendEmail swallows
  * its own errors, and the account is already committed by then. A reader whose
  * mail never arrives recovers through resend-verification.
+ *
+ * That ordering is also what makes the invite gate airtight (LOS-376). A code
+ * that is spent or unknown raises inside fn_register_user, so insertUser throws
+ * and this function returns before sendEmail is reached. No account, and --
+ * the point of the whole exercise -- no mail sent to the address that was
+ * offered up.
  */
 export async function registerUser(
   email: string,
   password: string,
   displayName: string,
   handle: string,
+  /** Null when REGISTRATION_MODE=open; the controller decides, not this. */
+  inviteCode: string | null,
 ): Promise<RegisteredUser> {
   const normalized = normalizeEmail(email);
   const trimmedName = displayName.trim();
@@ -53,6 +61,7 @@ export async function registerUser(
     normalizedHandle,
     verificationToken,
     expiresAt,
+    inviteCode,
   );
 
   const { subject, html, text } = verificationEmail(row.display_name, verificationToken);
