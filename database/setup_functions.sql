@@ -5,6 +5,9 @@ BEGIN;
 
 -- auth
 \ir functions/fn_register_user.sql
+\ir functions/fn_create_invite_request.sql
+\ir functions/fn_pending_invite_requests.sql
+\ir functions/fn_mark_invite_requests_notified.sql
 \ir functions/fn_find_user_by_email.sql
 \ir functions/fn_set_reset_token.sql
 \ir functions/fn_reset_password.sql
