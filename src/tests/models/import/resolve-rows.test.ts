@@ -825,4 +825,48 @@ describe('resolveImportRows', () => {
       expect(rows[2].candidates).toHaveLength(1);
     });
   });
+
+  /*
+   * The fallback used to name open_library outright, so BOOKS_SEARCH_PROVIDERS
+   * governed search while import went on calling a second catalogue whatever the
+   * configuration said (LOS-389). These pin the switch, since nothing else does:
+   * the other tests in this file leave the variable unset and therefore get the
+   * default two-provider chain.
+   */
+  describe('the provider chain switch', () => {
+    afterEach(() => {
+      delete process.env.BOOKS_SEARCH_PROVIDERS;
+    });
+
+    it('never reaches the fallback when the chain is Google alone', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books';
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(googleSearch).toHaveBeenCalled();
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    // The case the fallback exists for (LOS-168): a generic title with a
+    // publisher and no author, which Google alone cannot separate.
+    it('still reaches it when the chain names a second provider', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books,open_library';
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+
+    // Unset must not silently disable it; that would be a behaviour change
+    // disguised as configuration.
+    it('keeps the previous behaviour when the variable is unset', async () => {
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+  });
 });

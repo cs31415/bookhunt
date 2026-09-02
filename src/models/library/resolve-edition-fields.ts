@@ -1,3 +1,4 @@
+import { isProviderEnabled } from '../../lib/books/provider-chain';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { BooksProvider } from '../../lib/books/books-types';
 
@@ -21,12 +22,18 @@ export async function resolveEditionFields(params: EditionFieldSource): Promise<
 
   if (!needsLookup) return unchanged;
 
+  /*
+   * Picked by which id the row carries, but only among providers the chain
+   * allows (LOS-389). A row resolved by Open Library keeps its id forever, so
+   * without this check a configuration naming Google alone would still call
+   * Open Library for every one of those rows.
+   */
   let provider: BooksProvider;
   let id: string;
-  if (params.googleBooksId) {
+  if (params.googleBooksId && isProviderEnabled('google_books')) {
     provider = 'google_books';
     id = params.googleBooksId;
-  } else if (params.openLibraryId) {
+  } else if (params.openLibraryId && isProviderEnabled('open_library')) {
     provider = 'open_library';
     id = params.openLibraryId;
   } else {
