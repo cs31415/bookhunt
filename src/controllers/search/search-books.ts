@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { searchBooks as searchBooksModel } from '../../models/search/search-books';
+import { AllProvidersFailedError } from '../../lib/books/all-providers-failed-error';
 
 /**
  * @swagger
@@ -72,6 +73,22 @@ export async function searchBooks(req: Request, res: Response) {
     const result = await searchBooksModel(req.query, userId);
     res.json(result);
   } catch (error) {
+    /*
+     * The catalogue was never reached, as distinct from reaching it and finding
+     * nothing (LOS-318). Answering 200 with an empty list here would tell a
+     * reader their book does not exist, when what happened is that we could not
+     * look. 503 says come back, and names the retry.
+     */
+    if (error instanceof AllProvidersFailedError) {
+      console.error('Book search: every provider failed:', error.providers, error);
+      res.status(503).json({
+        error: error.rateLimited
+          ? 'Book search is busy right now. Please try again in a minute.'
+          : 'Book search is unavailable right now. Please try again shortly.',
+        code: 'SEARCH_UNAVAILABLE',
+      });
+      return;
+    }
     console.error('Error searching books:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
