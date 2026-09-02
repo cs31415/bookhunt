@@ -3,6 +3,7 @@ import { upsertBook } from '../../data/library-data';
 import { searchBooks } from '../ai/search';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { BooksProvider, SearchResult } from '../../lib/books/books-types';
+import { pickBestCandidate } from '../../lib/books/rank-candidates';
 import { deslugify, slugifyName, authorSlugMatches } from '../../lib/slug';
 import { cacheGet } from '../../lib/cache/cache-get';
 import { cacheSet } from '../../lib/cache/cache-set';
@@ -23,14 +24,6 @@ const RESOLVE_MISS_TTL_SECONDS = 7 * 24 * 60 * 60;
 export interface ProviderIdHint {
   source: BooksProvider;
   id: string;
-}
-
-// True when any author credited on the search result matches the requested
-// author-slug hint. Used to reject a result whose slug happens to collide with
-// the requested title but is by a different author (e.g. /books/anthem?a=ayn-rand
-// resolving to an unrelated "Anthems and Anthem Composers").
-function matchesAuthorHint(match: SearchResult, authorSlug: string): boolean {
-  return match.authors.some((name) => authorSlugMatches(slugifyName(name), authorSlug));
 }
 
 async function resolveMatch(
@@ -64,13 +57,22 @@ async function resolveMatch(
     return match ?? null;
   }
 
-  // With a hint, pull a few candidates and prefer the first that is actually by
-  // the requested author, so a stronger-ranked title by a different author
-  // doesn't win. Fall back to the top result when none credit the author
-  // (providers sometimes omit author metadata) rather than 404ing.
+  /*
+   * With a hint, pull a few candidates and score them rather than taking the
+   * first that credits the author (LOS-361).
+   *
+   * The old rule was `find(matchesAuthorHint) ?? matches[0]`, and a Tamil
+   * edition credits Morgan Housel exactly as well as the English one does -- so
+   * whichever Google happened to rank first won, and
+   * /books/the-psychology-of-money-tamil is the result. Its title became the
+   * slug, so the wrong edition ended up in the URL rather than only in the
+   * metadata.
+   *
+   * Falls back to the provider's top result when nothing scores, rather than
+   * 404ing: providers sometimes omit author metadata entirely.
+   */
   const matches = await searchBooks(query, 5);
-  if (matches.length === 0) return null;
-  return matches.find((match) => matchesAuthorHint(match, authorSlug)) ?? matches[0];
+  return pickBestCandidate(matches, title, authorSlug);
 }
 
 /**
