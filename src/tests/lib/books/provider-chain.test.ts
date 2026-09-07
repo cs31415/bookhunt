@@ -50,3 +50,55 @@ describe('providerChain', () => {
     expect(fallbackProvider()).toBe('open_library');
   });
 });
+
+/*
+ * A regression guard for the call site that was missed (LOS-389).
+ *
+ * fillEditionDetails in models/books/get-by-slug.ts chose its provider with a
+ * ternary — `book.google_books_id ? 'google_books' : 'open_library'` — which a
+ * grep for `provider = 'open_library'` does not match. It went on calling Open
+ * Library on every view of a page whose row carried an Open Library id, and it
+ * is the path that overwrites blurb, publisher and pages, so it is how a
+ * Serbian blurb reached Sagan's Cosmos through two supposedly clean reimports.
+ *
+ * The lesson is the search, not the line: look for the provider strings
+ * themselves, not for one shape of assignment.
+ */
+describe('provider literals outside the adapter layer', () => {
+  it('are all guarded by isProviderEnabled', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '../../../');
+    const files = [
+      'models/books/get-by-slug.ts',
+      'models/library/resolve-edition-fields.ts',
+    ];
+
+    for (const file of files) {
+      const text = fs.readFileSync(path.join(root, file), 'utf8');
+      for (const [i, line] of text.split('\n').entries()) {
+        const names = /'(open_library|google_books)'/.test(line);
+        if (!names) continue;
+
+        /*
+         * Only assignments matter. `source: x ? 'google_books' : …` as an
+         * object property is a label recording where a match came from, and
+         * labelling is not calling.
+         *
+         * The bug this guards against was an assignment:
+         *   const source: BooksProvider = book.google_books_id ? … : 'open_library'
+         * so requiring `=` still catches it.
+         */
+        if (!line.includes('=')) continue;
+
+        const guarded =
+          line.includes('isProviderEnabled') ||
+          /^\s*(provider|source) = '/.test(line);
+        expect(`${file}:${i + 1} ${line.trim()}`).toEqual(
+          guarded ? `${file}:${i + 1} ${line.trim()}` : 'guarded by isProviderEnabled',
+        );
+      }
+    }
+  });
+});
+

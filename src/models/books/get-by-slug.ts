@@ -1,5 +1,6 @@
 import { getBookBySlug, getLibraryEntry, enrichThinBookRow } from '../../data/books-data';
 import { upsertBook } from '../../data/library-data';
+import { isProviderEnabled } from '../../lib/books/provider-chain';
 import { searchBooks } from '../ai/search';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { BooksProvider, SearchResult } from '../../lib/books/books-types';
@@ -38,7 +39,9 @@ async function resolveMatch(
   authorSlug?: string,
   providerId?: ProviderIdHint,
 ): Promise<SearchResult | null> {
-  if (providerId) {
+  // The hint arrives in a query string, so it can name a provider the chain
+  // excludes. Ignoring it falls through to the text search below (LOS-389).
+  if (providerId && isProviderEnabled(providerId.source)) {
     const adapter = getBooksProviderAdapter(providerId.source);
     if (adapter.getById) {
       try {
@@ -131,7 +134,18 @@ async function fillEditionDetails(book: any) {
   const key = cacheKey('books:edition-miss', RESOLVE_MISS_VERSION, book.slug);
   if (await cacheGet<true>(key)) return book;
 
-  const source: BooksProvider = book.google_books_id ? 'google_books' : 'open_library';
+  /*
+   * The id says which provider *could* answer; the chain says whether it is
+   * allowed to (LOS-389). A row keeps its Open Library id forever, so without
+   * this a configuration naming Google alone still called Open Library on every
+   * view of one of those pages -- and this is the path that overwrites blurb,
+   * publisher and pages, which is how a Serbian blurb landed on Sagan's Cosmos.
+   */
+  const source: BooksProvider | null = book.google_books_id
+    ? (isProviderEnabled('google_books') ? 'google_books' : null)
+    : (isProviderEnabled('open_library') ? 'open_library' : null);
+  if (!source) return book;
+
   const adapter = getBooksProviderAdapter(source);
   if (!adapter?.getEditionDetails) return book;
 

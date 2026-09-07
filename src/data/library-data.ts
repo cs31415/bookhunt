@@ -96,7 +96,11 @@ export async function upsertBook(params: UpsertBookParams) {
     params.language ?? null,
     params.hue ?? null,
     params.openLibraryId ?? null,
-    params.source ?? 'google_books',
+    // Derived, not defaulted. This used to fall back to 'google_books'
+    // whatever the row actually was, so every Open Library row was labelled
+    // google_books -- which made the column useless for telling where a book
+    // came from, and sent more than one investigation down the wrong path.
+    params.source ?? (params.googleBooksId ? 'google_books' : params.openLibraryId ? 'open_library' : 'google_books'),
   ];
   const result = await pool.query(
     'SELECT * FROM fn_upsert_book($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)',
