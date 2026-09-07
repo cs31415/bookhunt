@@ -363,6 +363,15 @@ export async function resolveImportRows(
   const catalogMatches = await findCatalogMatches(rows, userId);
   const alreadyOwned = (index: number) => catalogMatches[index]?.inLibrary === true;
 
+  /*
+   * The last provider error each row saw, kept so the summary at the end can
+   * say *why* a row found nothing (LOS-392). The rounds below used to count
+   * failures and discard the errors, which left an import reporting that some
+   * rows did not resolve with no way to tell a rate limit from a network blip
+   * from a book the catalogue genuinely does not have.
+   */
+  const rowErrors = new Map<number, BooksProviderError>();
+
   let pending = rows
     .map((hint, index) => ({ hint, index }))
     .filter(({ index }) => !alreadyOwned(index));
@@ -383,6 +392,7 @@ export async function resolveImportRows(
         // 429 means the provider is rationing us, not that this row is unlucky.
         // Retrying the batch would spend the rest of the budget on failures.
         if (error.status === 429) openCircuit(primaryProvider());
+        rowErrors.set(index, error);
         failed.push({ hint, index });
       }
     });
@@ -408,5 +418,72 @@ export async function resolveImportRows(
     }
   });
 
+  reportUnresolved(rows, collected, rowErrors, alreadyOwned);
+
   return rows.map((hint, index) => assembleRow(hint, collected[index], catalogMatches[index]));
+}
+
+/**
+ * What did not resolve, and why, printed once at the end of an import
+ * (LOS-392).
+ *
+ * Per-row logging during the run is unreadable at 300 rows and scrolls the
+ * useful part off the screen; a count alone ("12 rows failed") says nothing
+ * actionable. This names each book and, where a provider actually errored,
+ * quotes the provider's own message -- which is the difference between "we were
+ * rate limited, run it again" and "the catalogue does not have this book".
+ *
+ * Silent when everything resolved. A clean import should print nothing, so that
+ * output means something went wrong rather than being scrolled past by habit.
+ */
+function reportUnresolved(
+  rows: ImportRowHint[],
+  collected: SearchResult[][],
+  rowErrors: Map<number, BooksProviderError>,
+  alreadyOwned: (index: number) => boolean,
+): void {
+  const unresolved = rows
+    .map((hint, index) => ({ hint, index }))
+    .filter(({ index }) => !alreadyOwned(index) && collected[index].length === 0);
+
+  if (unresolved.length === 0) return;
+
+  const errored = unresolved.filter(({ index }) => rowErrors.has(index));
+  const notFound = unresolved.filter(({ index }) => !rowErrors.has(index));
+
+  console.warn(`\n[import] ${unresolved.length} of ${rows.length} rows did not resolve:`);
+
+  /*
+   * The provider failed on these, so they are worth retrying. Listed first
+   * because they are the ones an operator can do something about.
+   */
+  if (errored.length > 0) {
+    console.warn(`  ${errored.length} because a provider errored:`);
+    for (const { hint, index } of errored) {
+      const error = rowErrors.get(index)!;
+      const status = error.status === null ? 'no response' : `HTTP ${error.status}`;
+      const cause = error.cause instanceof Error ? ` (${error.cause.message})` : '';
+      console.warn(`    ${describeRow(hint)}\n      ${error.provider}: ${status}${cause}`);
+    }
+  }
+
+  /*
+   * The provider answered and had nothing. Not an error, and retrying will not
+   * change it -- these need a different title, an ISBN, or picking by hand.
+   */
+  if (notFound.length > 0) {
+    console.warn(`  ${notFound.length} because no provider had a match:`);
+    for (const { hint } of notFound) {
+      console.warn(`    ${describeRow(hint)}`);
+    }
+  }
+}
+
+/** A row as a person would recognise it, for the summary above. */
+function describeRow(hint: ImportRowHint): string {
+  const parts = [hint.title];
+  if (hint.author) parts.push(`by ${hint.author}`);
+  if (hint.isbn) parts.push(`[${hint.isbn}]`);
+  else if (hint.publisher) parts.push(`(${hint.publisher})`);
+  return parts.join(' ');
 }
