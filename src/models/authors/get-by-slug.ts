@@ -1,6 +1,6 @@
 import { getAuthorBySlug as fetchAuthorBySlug, getBooksByAuthor, updateAuthorDetails, createAuthor } from '../../data/authors-data';
 import { getAuthorDetailsWithFallback } from '../../lib/books/get-author-details-with-fallback';
-import { parseBooksProviderConfig } from '../../lib/books/parse-books-provider-config';
+import { providerChain } from '../../lib/books/provider-chain';
 import { generateAuthorDetails } from '../ai/get-author-details';
 import { searchBooks, matchLibraryEntries, SearchResult } from '../ai/search';
 import { deslugify, slugifyName } from '../../lib/slug';
@@ -21,17 +21,17 @@ async function enrichAuthor(author: any) {
 
   if (!birthYear || !bio) {
     /*
-     * A separate chain from search (LOS-318). Search runs Google alone now --
-     * Open Library supplied 2 of 328 books and is throttled to 1 req/sec -- but
-     * Open Library is the only adapter with getAuthorDetails, and the only
-     * alternative below is an LLM.
+     * The same chain as everything else (LOS-389). This had a variable of its
+     * own briefly, so that Open Library could keep supplying author details
+     * after search stopped using it -- one switch is easier to reason about than
+     * two that can disagree.
      *
-     * That is the whole argument for keeping it here. A sourced birth year from
-     * a catalogue is worth more than a generated one, because the failure modes
-     * are not comparable: a missing bio is a gap, an invented birth year is a
-     * false statement about a real person under their own name.
+     * The cost, since it is not obvious: Open Library is the only adapter with
+     * getAuthorDetails, so a Google-only chain sends every author to the LLM
+     * fallback below. A missing bio is a gap; an invented birth year is a false
+     * statement about a real person under their own name.
      */
-    const chain = parseBooksProviderConfig('BOOKS_AUTHOR_PROVIDERS');
+    const chain = providerChain();
     const details = await getAuthorDetailsWithFallback(chain, author.name);
     birthYear = birthYear || details.birthYear;
     bio = bio || details.bio;
@@ -188,7 +188,7 @@ export async function resolveProviderAuthor(slug: string, userId?: number) {
     // The author chain, not the search one (LOS-318). Same reasoning as
     // enrichAuthor above: Open Library is the only source of author details
     // that is not a language model.
-    const chain = parseBooksProviderConfig('BOOKS_AUTHOR_PROVIDERS');
+    const chain = providerChain();
     const details = await getAuthorDetailsWithFallback(chain, name);
     birthYear = details.birthYear;
     bio = details.bio;

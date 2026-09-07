@@ -825,4 +825,110 @@ describe('resolveImportRows', () => {
       expect(rows[2].candidates).toHaveLength(1);
     });
   });
+
+  /*
+   * The fallback used to name open_library outright, so BOOKS_SEARCH_PROVIDERS
+   * governed search while import went on calling a second catalogue whatever the
+   * configuration said (LOS-389). These pin the switch, since nothing else does:
+   * the other tests in this file leave the variable unset and therefore get the
+   * default two-provider chain.
+   */
+  describe('the provider chain switch', () => {
+    afterEach(() => {
+      delete process.env.BOOKS_SEARCH_PROVIDERS;
+    });
+
+    it('never reaches the fallback when the chain is Google alone', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books';
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(googleSearch).toHaveBeenCalled();
+      expect(openLibrarySearch).not.toHaveBeenCalled();
+    });
+
+    // The case the fallback exists for (LOS-168): a generic title with a
+    // publisher and no author, which Google alone cannot separate.
+    it('still reaches it when the chain names a second provider', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books,open_library';
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+
+    // Unset must not silently disable it; that would be a behaviour change
+    // disguised as configuration.
+    it('keeps the previous behaviour when the variable is unset', async () => {
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(openLibrarySearch).toHaveBeenCalled();
+    });
+  });
+
+  /*
+   * A summary at the end, because per-row logging is unreadable at 300 rows and
+   * a bare count says nothing actionable (LOS-392). The rounds used to discard
+   * the error objects entirely, so an import could report that rows failed with
+   * no way to tell a rate limit from a book the catalogue does not have.
+   */
+  describe('the unresolved summary', () => {
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books';
+      process.env.BOOKS_PRIMARY_ATTEMPTS = '1';
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+      delete process.env.BOOKS_SEARCH_PROVIDERS;
+      delete process.env.BOOKS_PRIMARY_ATTEMPTS;
+    });
+
+    const output = () => warn.mock.calls.map((c) => c.join(' ')).join('\n');
+
+    it('names the book and quotes the provider error', async () => {
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 503));
+
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      expect(output()).toContain('Dune by Frank Herbert');
+      expect(output()).toContain('google_books: HTTP 503');
+    });
+
+    // A provider that answered and had nothing is a different problem from one
+    // that errored: retrying will not change it.
+    it('separates a genuine miss from a provider failure', async () => {
+      googleSearch.mockResolvedValue([]);
+
+      await resolveImportRows([{ title: 'Nonexistent Book' }], null);
+
+      expect(output()).toContain('no provider had a match');
+      expect(output()).not.toContain('a provider errored');
+    });
+
+    it('reports a rate limit as such, so it reads as worth retrying', async () => {
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 429));
+
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      expect(output()).toContain('HTTP 429');
+    });
+
+    // A clean import prints nothing, so output means something went wrong
+    // rather than being scrolled past by habit.
+    it('says nothing when every row resolved', async () => {
+      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Dune' })]);
+
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      expect(output()).not.toContain('did not resolve');
+    });
+  });
 });

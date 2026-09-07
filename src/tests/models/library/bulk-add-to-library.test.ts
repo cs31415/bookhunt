@@ -84,7 +84,15 @@ describe('bulkAddToLibrary model', () => {
 
     expect(entries).toHaveLength(1);
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toEqual({ index: 1, googleBooksId: 'gid2', reason: 'fetch failed' });
+    // title and authorName ride along so the end-of-import summary can name the
+    // book rather than only its row number (LOS-392).
+    expect(errors[0]).toMatchObject({
+      index: 1,
+      googleBooksId: 'gid2',
+      title: 'Book Two',
+      authorName: 'Author B',
+      reason: 'fetch failed',
+    });
   });
 
   it('returns all entries and empty errors when all succeed', async () => {

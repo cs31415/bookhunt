@@ -3,6 +3,7 @@ import path from 'path';
 const root = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(root, '.env.local'), override: true, quiet: true });
 dotenv.config({ path: path.join(root, '.env'), quiet: true });
+import { providerChain } from './lib/books/provider-chain';
 import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -87,6 +88,11 @@ async function start() {
 
   app.listen(port, () => {
     console.log(`BookHunt API running on port ${port}`);
+    // Printed at boot because the alternative is silence (LOS-389). A stale
+    // process holding an old BOOKS_SEARCH_PROVIDERS looks exactly like a
+    // working one, and cost two full reimports before anyone noticed the
+    // configuration on disk was not the configuration in effect.
+    console.log(`[books] provider chain: ${providerChain().join(', ')}`);
   });
 }
 

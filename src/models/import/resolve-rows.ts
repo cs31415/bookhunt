@@ -1,6 +1,7 @@
 import { SearchResult } from '../../lib/books/books-types';
 import { BooksProviderError } from '../../lib/books/books-provider-error';
 import { isCircuitOpen, openCircuit } from '../../lib/books/provider-circuit';
+import { primaryProvider, fallbackProvider } from '../../lib/books/provider-chain';
 import { primaryAttempts, primaryBackoffMs } from '../../lib/books/books-retry-config';
 import { getBooksProviderAdapter } from '../../lib/books/get-books-provider-adapter';
 import { mapWithConcurrency } from '../../lib/map-with-concurrency';
@@ -189,10 +190,11 @@ function delay(ms: number): Promise<void> {
  * retry them together rather than blocking this row on its own backoff.
  */
 async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
+  const provider = primaryProvider();
   // Already known to be out of capacity: don't spend a request learning it again.
-  if (isCircuitOpen('google_books')) return [];
+  if (isCircuitOpen(provider)) return [];
 
-  const google = getBooksProviderAdapter('google_books');
+  const google = getBooksProviderAdapter(provider);
   const isbn = normalizeIsbn(hint.isbn);
 
   // An ISBN names one edition, so ask for it directly and stop if it lands: no
@@ -213,15 +215,22 @@ async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
 /**
  * The fallback gets a single attempt: if it fails too there is nowhere else to
  * look, so retrying only delays an answer we already have.
+ *
+ * Returns nothing when the chain names no second provider, which leaves a row
+ * Google could not answer unresolved for the reader to pick rather than filled
+ * in from elsewhere.
  */
 async function fallbackLookup(hint: ImportRowHint): Promise<SearchResult[]> {
-  const openLibrary = getBooksProviderAdapter('open_library');
+  const provider = fallbackProvider();
+  if (!provider) return [];
+
+  const adapter = getBooksProviderAdapter(provider);
   const isbn = normalizeIsbn(hint.isbn);
   const query = isbn ? `isbn:${isbn}` : openLibraryQuery(hint);
   try {
-    return await openLibrary.search(query, CANDIDATES_PER_ROW);
+    return await adapter.search(query, CANDIDATES_PER_ROW);
   } catch (error) {
-    console.warn(`[import] open_library failed for "${query}"`, error);
+    console.warn(`[import] ${provider} failed for "${query}"`, error);
     return [];
   }
 }
@@ -274,6 +283,8 @@ function pinnedByAuthor(collected: SearchResult[], hint: ImportRowHint): boolean
  * identically-titled editions apart.
  */
 function needsFallback(collected: SearchResult[], hint: ImportRowHint): boolean {
+  // Nothing to fall back to, so nothing to decide (LOS-389).
+  if (!fallbackProvider()) return false;
   if (collected.length === 0) return true;
   if (pinnedByIsbn(collected, hint)) return false;
   if (pinnedByAuthor(collected, hint)) return false;
@@ -352,13 +363,22 @@ export async function resolveImportRows(
   const catalogMatches = await findCatalogMatches(rows, userId);
   const alreadyOwned = (index: number) => catalogMatches[index]?.inLibrary === true;
 
+  /*
+   * The last provider error each row saw, kept so the summary at the end can
+   * say *why* a row found nothing (LOS-392). The rounds below used to count
+   * failures and discard the errors, which left an import reporting that some
+   * rows did not resolve with no way to tell a rate limit from a network blip
+   * from a book the catalogue genuinely does not have.
+   */
+  const rowErrors = new Map<number, BooksProviderError>();
+
   let pending = rows
     .map((hint, index) => ({ hint, index }))
     .filter(({ index }) => !alreadyOwned(index));
 
   for (let round = 1; round <= attempts && pending.length > 0; round++) {
     // No point retrying into a closed door; fall through to the secondary.
-    if (isCircuitOpen('google_books')) break;
+    if (isCircuitOpen(primaryProvider())) break;
     if (round > 1) await delay(primaryBackoffMs() * (round - 1));
 
     const failed: typeof pending = [];
@@ -371,7 +391,8 @@ export async function resolveImportRows(
         if (!(error instanceof BooksProviderError)) throw error;
         // 429 means the provider is rationing us, not that this row is unlucky.
         // Retrying the batch would spend the rest of the budget on failures.
-        if (error.status === 429) openCircuit('google_books');
+        if (error.status === 429) openCircuit(primaryProvider());
+        rowErrors.set(index, error);
         failed.push({ hint, index });
       }
     });
@@ -397,5 +418,72 @@ export async function resolveImportRows(
     }
   });
 
+  reportUnresolved(rows, collected, rowErrors, alreadyOwned);
+
   return rows.map((hint, index) => assembleRow(hint, collected[index], catalogMatches[index]));
+}
+
+/**
+ * What did not resolve, and why, printed once at the end of an import
+ * (LOS-392).
+ *
+ * Per-row logging during the run is unreadable at 300 rows and scrolls the
+ * useful part off the screen; a count alone ("12 rows failed") says nothing
+ * actionable. This names each book and, where a provider actually errored,
+ * quotes the provider's own message -- which is the difference between "we were
+ * rate limited, run it again" and "the catalogue does not have this book".
+ *
+ * Silent when everything resolved. A clean import should print nothing, so that
+ * output means something went wrong rather than being scrolled past by habit.
+ */
+function reportUnresolved(
+  rows: ImportRowHint[],
+  collected: SearchResult[][],
+  rowErrors: Map<number, BooksProviderError>,
+  alreadyOwned: (index: number) => boolean,
+): void {
+  const unresolved = rows
+    .map((hint, index) => ({ hint, index }))
+    .filter(({ index }) => !alreadyOwned(index) && collected[index].length === 0);
+
+  if (unresolved.length === 0) return;
+
+  const errored = unresolved.filter(({ index }) => rowErrors.has(index));
+  const notFound = unresolved.filter(({ index }) => !rowErrors.has(index));
+
+  console.warn(`\n[import] ${unresolved.length} of ${rows.length} rows did not resolve:`);
+
+  /*
+   * The provider failed on these, so they are worth retrying. Listed first
+   * because they are the ones an operator can do something about.
+   */
+  if (errored.length > 0) {
+    console.warn(`  ${errored.length} because a provider errored:`);
+    for (const { hint, index } of errored) {
+      const error = rowErrors.get(index)!;
+      const status = error.status === null ? 'no response' : `HTTP ${error.status}`;
+      const cause = error.cause instanceof Error ? ` (${error.cause.message})` : '';
+      console.warn(`    ${describeRow(hint)}\n      ${error.provider}: ${status}${cause}`);
+    }
+  }
+
+  /*
+   * The provider answered and had nothing. Not an error, and retrying will not
+   * change it -- these need a different title, an ISBN, or picking by hand.
+   */
+  if (notFound.length > 0) {
+    console.warn(`  ${notFound.length} because no provider had a match:`);
+    for (const { hint } of notFound) {
+      console.warn(`    ${describeRow(hint)}`);
+    }
+  }
+}
+
+/** A row as a person would recognise it, for the summary above. */
+function describeRow(hint: ImportRowHint): string {
+  const parts = [hint.title];
+  if (hint.author) parts.push(`by ${hint.author}`);
+  if (hint.isbn) parts.push(`[${hint.isbn}]`);
+  else if (hint.publisher) parts.push(`(${hint.publisher})`);
+  return parts.join(' ');
 }

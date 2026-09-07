@@ -93,4 +93,30 @@ describe('resolveEditionFields', () => {
 
     expect(result).toEqual({ blurb: undefined, publisher: undefined, pages: undefined });
   });
+
+  /*
+   * A row keeps its Open Library id forever, so without a chain check a
+   * configuration naming Google alone would still call Open Library for every
+   * one of those rows — which is the gap LOS-389 closes.
+   */
+  describe('the provider chain', () => {
+    afterEach(() => {
+      delete process.env.BOOKS_SEARCH_PROVIDERS;
+    });
+
+    it('does not call Open Library for an OL row when the chain excludes it', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books';
+
+      const result = await resolveEditionFields({
+        googleBooksId: null,
+        openLibraryId: 'OL1M',
+        blurb: null,
+        publisher: null,
+        pages: null,
+      } as never);
+
+      expect(mockGetAdapter).not.toHaveBeenCalledWith('open_library');
+      expect(result).toEqual({ blurb: null, publisher: null, pages: null });
+    });
+  });
 });
