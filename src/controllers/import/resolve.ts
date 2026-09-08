@@ -104,6 +104,20 @@ export const MAX_IMPORT_ROWS = 40;
  *                           list is a suggestion, not an identification, and must not be
  *                           preselected.
  *                         example: true
+ *                       failures:
+ *                         type: array
+ *                         description: |
+ *                           Why the row found nothing, present only when it found nothing and a
+ *                           provider actually failed. The client accumulates these across the
+ *                           batches of one import and reports them together -- a batch is not a
+ *                           session, and only the caller knows where a session ends.
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             provider: { type: string, enum: [google_books, open_library] }
+ *                             status: { type: integer, nullable: true, description: "HTTP status, or null when no response arrived" }
+ *                             detail: { type: string, nullable: true, description: "What the provider itself said" }
+ *                             skipped: { type: boolean, description: "The provider was never asked: an earlier 429 opened its circuit" }
  *       400:
  *         description: rows missing, empty, exceeding 40 items, or an entry without a title
  *       401:

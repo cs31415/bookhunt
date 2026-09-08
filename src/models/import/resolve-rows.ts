@@ -54,18 +54,54 @@ export interface ResolvedImportRow {
    * list is that they get to.
    */
   tentative?: boolean;
+  /**
+   * Why this row found nothing, when it found nothing (LOS-393). Absent on a
+   * row that resolved, and on one every provider answered and had nothing for.
+   *
+   * Reported rather than logged because a batch is not an import: the client
+   * sends a file twenty rows at a time and only it knows where the session
+   * starts and ends, so it is the one that can say "47 rows lost to a rate
+   * limit" instead of nineteen separate summaries saying two or three each.
+   */
+  failures?: ResolvedRowFailure[];
+}
+
+/** One provider's account of why it could not answer a row. */
+export interface ResolvedRowFailure {
+  provider: BooksProvider;
+  /** Null when the request never got a response at all. */
+  status: number | null;
+  /** What the provider itself said, where it said anything. */
+  detail: string | null;
+  /** Set when the provider was never asked, because an earlier 429 opened its circuit. */
+  skipped?: boolean;
 }
 
 /**
- * Why a row got no answer from a provider (LOS-393).
+ * Why a row got no answer from a provider, as the resolution rounds record it
+ * (LOS-393).
  *
  * A skip is not an error and not a miss: the provider was never asked, because
- * an earlier 429 opened its circuit. Kept apart from both so the summary can
+ * an earlier 429 opened its circuit. Kept apart from both so the report can
  * tell someone to rerun rather than to go and find the book by hand.
  */
 type RowFailure =
   | { kind: 'error'; error: BooksProviderError }
   | { kind: 'skipped'; provider: BooksProvider };
+
+/** The recorded failure as the client receives it. */
+function toResolvedFailure(failure: RowFailure): ResolvedRowFailure {
+  if (failure.kind === 'skipped') {
+    return { provider: failure.provider, status: null, detail: null, skipped: true };
+  }
+  const { error } = failure;
+  return {
+    provider: error.provider,
+    status: error.status,
+    // The provider's own words where it gave any, our transport error otherwise.
+    detail: error.detail ?? (error.cause instanceof Error ? error.cause.message : null),
+  };
+}
 
 /** Candidates offered per row. Enough to disambiguate, few enough to scan in a dropdown. */
 const CANDIDATES_PER_ROW = 5;
@@ -311,6 +347,7 @@ function assembleRow(
   hint: ImportRowHint,
   collected: SearchResult[],
   catalogMatch: CatalogMatch | null,
+  failures: RowFailure[],
 ): ResolvedImportRow {
   const byIdentity = new Map<string, SearchResult>();
   for (const book of collected) {
@@ -343,6 +380,10 @@ function assembleRow(
     }),
     candidates,
     ...(tentative && { tentative: true }),
+    // Only on a row with nothing to show. A failure that some later provider
+    // recovered from is a retry that worked, not something to report.
+    ...(candidates.length === 0 &&
+      failures.length > 0 && { failures: failures.map(toResolvedFailure) }),
   };
 }
 
@@ -379,8 +420,8 @@ export async function resolveImportRows(
   const alreadyOwned = (index: number) => catalogMatches[index]?.inLibrary === true;
 
   /*
-   * Every provider failure each row saw, kept so the summary at the end can say
-   * *why* a row found nothing (LOS-392). The rounds below used to count
+   * Every provider failure each row saw, kept so the response can say *why* a
+   * row found nothing (LOS-392, LOS-393). The rounds below used to count
    * failures and discard the errors, which left an import reporting that some
    * rows did not resolve with no way to tell a rate limit from a network blip
    * from a book the catalogue genuinely does not have.
@@ -459,107 +500,7 @@ export async function resolveImportRows(
     }
   });
 
-  reportUnresolved(rows, collected, rowFailures, alreadyOwned);
-
-  return rows.map((hint, index) => assembleRow(hint, collected[index], catalogMatches[index]));
-}
-
-/**
- * What did not resolve, and why, printed once at the end of an import
- * (LOS-392, LOS-393).
- *
- * Per-row logging during the run is unreadable at 300 rows and scrolls the
- * useful part off the screen; a count alone ("12 rows failed") says nothing
- * actionable. This names each book and, where a provider actually errored,
- * quotes the provider's own status and message -- which is the difference
- * between "we were rate limited, run it again" and "the catalogue does not have
- * this book".
- *
- * Silent when everything resolved. A clean import should print nothing, so that
- * output means something went wrong rather than being scrolled past by habit.
- */
-function reportUnresolved(
-  rows: ImportRowHint[],
-  collected: SearchResult[][],
-  rowFailures: Map<number, RowFailure[]>,
-  alreadyOwned: (index: number) => boolean,
-): void {
-  const unresolved = rows
-    .map((hint, index) => ({ hint, index, failures: rowFailures.get(index) ?? [] }))
-    .filter(({ index }) => !alreadyOwned(index) && collected[index].length === 0);
-
-  if (unresolved.length === 0) return;
-
-  const errored = unresolved.filter(({ failures }) => failures.some((f) => f.kind === 'error'));
-  const skipped = unresolved.filter(
-    ({ failures }) => failures.length > 0 && failures.every((f) => f.kind === 'skipped'),
+  return rows.map((hint, index) =>
+    assembleRow(hint, collected[index], catalogMatches[index], rowFailures.get(index) ?? []),
   );
-  const notFound = unresolved.filter(({ failures }) => failures.length === 0);
-
-  console.warn(`\n[import] ${unresolved.length} of ${rows.length} rows did not resolve:`);
-
-  /*
-   * The provider failed on these, so they are worth retrying. Listed first
-   * because they are the ones an operator can do something about.
-   */
-  if (errored.length > 0) {
-    console.warn(`  ${errored.length} because a provider errored:`);
-    for (const { hint, failures } of errored) {
-      // Every provider that failed the row, because with a two-provider chain
-      // one may be rationing us while the other is simply down.
-      const reasons = failures.map(describeFailure).join('\n      ');
-      console.warn(`    ${describeRow(hint)}\n      ${reasons}`);
-    }
-  }
-
-  /*
-   * Never asked: an earlier 429 opened the circuit and these rows waited behind
-   * it. Nothing is known about them at all, so rerunning after the cooldown is
-   * the whole of the fix.
-   */
-  if (skipped.length > 0) {
-    const providers = [
-      ...new Set(
-        skipped.flatMap(({ failures }) =>
-          failures.flatMap((f) => (f.kind === 'skipped' ? [f.provider] : [])),
-        ),
-      ),
-    ];
-    console.warn(
-      `  ${skipped.length} because ${providers.join(', ')} was skipped after an earlier 429; rerun to look them up:`,
-    );
-    for (const { hint } of skipped) {
-      console.warn(`    ${describeRow(hint)}`);
-    }
-  }
-
-  /*
-   * The provider answered and had nothing. Not an error, and retrying will not
-   * change it -- these need a different title, an ISBN, or picking by hand.
-   */
-  if (notFound.length > 0) {
-    console.warn(`  ${notFound.length} because no provider had a match:`);
-    for (const { hint } of notFound) {
-      console.warn(`    ${describeRow(hint)}`);
-    }
-  }
-}
-
-/** One provider's account of why it could not answer a row. */
-function describeFailure(failure: RowFailure): string {
-  if (failure.kind === 'skipped') return `${failure.provider}: skipped, circuit open`;
-  const { error } = failure;
-  const status = error.status === null ? 'no response' : `HTTP ${error.status}`;
-  // The provider's own words where it gave any, our transport error otherwise.
-  const said = error.detail ?? (error.cause instanceof Error ? error.cause.message : null);
-  return `${error.provider}: ${status}${said ? ` ${said}` : ''}`;
-}
-
-/** A row as a person would recognise it, for the summary above. */
-function describeRow(hint: ImportRowHint): string {
-  const parts = [hint.title];
-  if (hint.author) parts.push(`by ${hint.author}`);
-  if (hint.isbn) parts.push(`[${hint.isbn}]`);
-  else if (hint.publisher) parts.push(`(${hint.publisher})`);
-  return parts.join(' ');
 }
