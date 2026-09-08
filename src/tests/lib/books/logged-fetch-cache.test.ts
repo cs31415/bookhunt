@@ -3,17 +3,18 @@ import { cacheGet } from '../../../lib/cache/cache-get';
 import { cacheSet } from '../../../lib/cache/cache-set';
 import { isCacheEnabled } from '../../../lib/cache/redis-client';
 import { runWithCallStats } from '../../../lib/stats/run-with-call-stats';
-import { throttleOpenLibrary } from '../../../lib/books/open-library-rate-limiter';
+import { pace } from '../../../lib/books/provider-pacer';
+import { runAsBulkTraffic } from '../../../lib/books/bulk-traffic';
 
 jest.mock('../../../lib/cache/cache-get');
 jest.mock('../../../lib/cache/cache-set');
 jest.mock('../../../lib/cache/redis-client');
-jest.mock('../../../lib/books/open-library-rate-limiter');
+jest.mock('../../../lib/books/provider-pacer');
 
 const mockCacheGet = cacheGet as jest.Mock;
 const mockCacheSet = cacheSet as jest.Mock;
 const mockIsCacheEnabled = isCacheEnabled as jest.Mock;
-const mockThrottleOpenLibrary = throttleOpenLibrary as jest.Mock;
+const mockPace = pace as jest.Mock;
 
 const DAY = 24 * 60 * 60;
 
@@ -129,33 +130,33 @@ describe('loggedFetch caching', () => {
   });
 
   /**
-   * The throttle used to sit in each Open Library adapter, ahead of this
-   * function and therefore ahead of the cache check — so a fully cached lookup
-   * still slept a second to reach a 4ms read, and a book detail view paying for
-   * two lookups slept two (LOS-217). It protects Open Library's 1/sec limit on
-   * outbound requests; a hit sends nothing and owes nothing.
+   * Pacing used to sit in each Open Library adapter, ahead of this function and
+   * therefore ahead of the cache check — so a fully cached lookup still slept a
+   * second to reach a 4ms read, and a book detail view paying for two lookups
+   * slept two (LOS-217). It protects a provider's limit on outbound requests; a
+   * hit sends nothing and owes nothing.
    */
-  describe('Open Library rate limiting', () => {
-    it('does not throttle a cache hit', async () => {
+  describe('provider pacing', () => {
+    it('does not pace a cache hit', async () => {
       mockCacheGet.mockResolvedValue({ status: 200, body: '{}' });
       mockFetch(jsonResponse({}));
 
       await loggedFetch('open_library', 'https://openlibrary.test/books/OL1M.json');
 
-      expect(mockThrottleOpenLibrary).not.toHaveBeenCalled();
+      expect(mockPace).not.toHaveBeenCalled();
     });
 
-    it('throttles a request that actually goes out', async () => {
+    it('paces an Open Library request that actually goes out', async () => {
       mockFetch(jsonResponse({}));
 
       await loggedFetch('open_library', 'https://openlibrary.test/books/OL1M.json');
 
-      expect(mockThrottleOpenLibrary).toHaveBeenCalledTimes(1);
+      expect(mockPace).toHaveBeenCalledWith('open_library', 1000);
     });
 
-    // A retry is another request against the same 1/sec limit. Held per adapter,
-    // the throttle covered the first attempt only.
-    it('throttles each retry, not just the first attempt', async () => {
+    // A retry is another request against the same limit. Held per adapter, the
+    // throttle covered the first attempt only.
+    it('paces each retry, not just the first attempt', async () => {
       global.fetch = jest
         .fn()
         .mockResolvedValueOnce(jsonResponse({}, 503))
@@ -163,15 +164,42 @@ describe('loggedFetch caching', () => {
 
       await loggedFetch('open_library', 'https://openlibrary.test/books/OL1M.json');
 
-      expect(mockThrottleOpenLibrary).toHaveBeenCalledTimes(2);
+      expect(mockPace).toHaveBeenCalledTimes(2);
     });
 
-    it('leaves other providers unthrottled', async () => {
+    // Google rations by the minute rather than by the second, so a reader
+    // waiting on a search is not made to queue behind anything (LOS-395).
+    it('leaves interactive Google requests unpaced', async () => {
       mockFetch(jsonResponse({}));
 
       await loggedFetch('google_books', 'https://example.test/volumes/abc');
 
-      expect(mockThrottleOpenLibrary).not.toHaveBeenCalled();
+      expect(mockPace).not.toHaveBeenCalled();
+    });
+
+    it('paces Google requests made by an import', async () => {
+      mockFetch(jsonResponse({}));
+
+      await runAsBulkTraffic(() =>
+        loggedFetch('google_books', 'https://example.test/volumes/abc'),
+      );
+
+      expect(mockPace).toHaveBeenCalledWith('google_books', 750);
+    });
+
+    it('does not pace an import once the interval is set to zero', async () => {
+      process.env.BOOKS_GOOGLE_IMPORT_INTERVAL_MS = '0';
+      mockFetch(jsonResponse({}));
+
+      try {
+        await runAsBulkTraffic(() =>
+          loggedFetch('google_books', 'https://example.test/volumes/abc'),
+        );
+      } finally {
+        delete process.env.BOOKS_GOOGLE_IMPORT_INTERVAL_MS;
+      }
+
+      expect(mockPace).not.toHaveBeenCalled();
     });
   });
 

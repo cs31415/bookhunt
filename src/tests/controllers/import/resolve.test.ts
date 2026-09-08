@@ -3,6 +3,7 @@ import { resolve, MAX_IMPORT_ROWS } from '../../../controllers/import/resolve';
 import * as resolveModel from '../../../models/import/resolve-rows';
 import { recordProviderCall } from '../../../lib/stats/record-provider-call';
 import { recordDbCall } from '../../../lib/stats/record-db-call';
+import { isBulkTraffic } from '../../../lib/books/bulk-traffic';
 
 jest.mock('../../../models/import/resolve-rows');
 
@@ -162,5 +163,19 @@ describe('import resolve controller', () => {
 
       expect(console.log).not.toHaveBeenCalled();
     });
+  });
+
+  // Provider requests made here are paced; the same requests made by a reader
+  // waiting on a search are not (LOS-395).
+  it('resolves rows as bulk traffic', async () => {
+    let sawScope = false;
+    mockResolveRows.mockImplementation(async () => {
+      sawScope = isBulkTraffic();
+      return [];
+    });
+
+    await resolve(makeReq({ rows: [{ title: 'Dune' }] }), makeRes());
+
+    expect(sawScope).toBe(true);
   });
 });

@@ -1,9 +1,13 @@
 import { fetchOpenLibraryEditionDetails, getOpenLibraryById } from '../../../lib/books/open-library-edition-adapter';
 
-jest.mock('../../../lib/books/open-library-rate-limiter', () => ({
-  throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
+jest.mock('../../../lib/books/open-library-urls', () => ({
   OPENLIBRARY_API_URL: 'https://openlibrary.org',
   OPENLIBRARY_COVERS_URL: 'https://covers.openlibrary.org',
+}));
+
+jest.mock('../../../lib/books/provider-pacer', () => ({
+  pace: jest.fn().mockResolvedValue(undefined),
+  resetPacers: jest.fn(),
 }));
 
 function mockFetch(handlers: Record<string, () => any>) {

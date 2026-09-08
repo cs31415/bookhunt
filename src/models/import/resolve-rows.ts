@@ -311,7 +311,7 @@ function pinnedByAuthor(collected: SearchResult[], hint: ImportRowHint): boolean
  * Whether a row still needs the fallback provider.
  *
  * Open Library is the only one that reliably reports publisher, which is what
- * makes a generic-titled travel guide resolvable — but throttleOpenLibrary() is
+ * makes a generic-titled travel guide resolvable — but Open Library is paced on
  * a process-wide 1 req/sec queue, so every row sent there costs a full second of
  * the import's wall clock. It has to earn that second.
  *

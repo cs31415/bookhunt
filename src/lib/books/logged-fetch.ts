@@ -1,6 +1,11 @@
 import { BooksProvider } from './books-types';
 import { isBooksProviderLoggingEnabled } from './is-books-provider-logging-enabled';
-import { httpAttempts, httpBackoffMs } from './books-retry-config';
+import {
+  googleImportIntervalMs,
+  httpAttempts,
+  httpBackoffMs,
+  openLibraryIntervalMs,
+} from './books-retry-config';
 import { recordProviderCall } from '../stats/record-provider-call';
 import { isCallStatsScopeActive } from '../stats/call-stats-store';
 import { cacheGet } from '../cache/cache-get';
@@ -8,7 +13,8 @@ import { isCacheEnabled } from '../cache/redis-client';
 import { cacheSet } from '../cache/cache-set';
 import { cacheKey } from '../cache/cache-key';
 import { redactUrlSecrets } from './redact-url-secrets';
-import { throttleOpenLibrary } from './open-library-rate-limiter';
+import { pace } from './provider-pacer';
+import { isBulkTraffic } from './bulk-traffic';
 
 // Open Library asks callers to identify themselves and throttles anonymous
 // traffic more aggressively; sending nothing risks being lumped in with bots.
@@ -89,14 +95,24 @@ export async function loggedFetch(provider: BooksProvider, url: string): Promise
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      // Open Library serializes callers at 1/sec, and this is the only place
-      // that knows a request is actually about to leave the process. Held by
-      // each adapter before calling in, it also ran ahead of the cache check
-      // above — so a fully cached lookup slept a second to reach a 4ms read,
-      // and a book detail view paying for two lookups slept two (LOS-217).
-      // Per attempt, not per lookup, for the same reason the counter below is:
-      // a retry is a real request and owes the same second.
-      if (provider === 'open_library') await throttleOpenLibrary();
+      // The one place that knows a request is actually about to leave the
+      // process. Held by each adapter before calling in, pacing also ran ahead
+      // of the cache check above — so a fully cached lookup slept a second to
+      // reach a 4ms read, and a book detail view paying for two lookups slept
+      // two (LOS-217). Per attempt, not per lookup, for the same reason the
+      // counter below is: a retry is a real request and owes the same wait.
+      //
+      // Open Library serializes callers at 1/sec whoever is asking. Google
+      // rations by the minute, so only bulk traffic is paced — an import must
+      // not spend the quota faster than Google grants it, and a search must not
+      // queue behind one (LOS-395).
+      const interval =
+        provider === 'open_library'
+          ? openLibraryIntervalMs()
+          : isBulkTraffic()
+            ? googleImportIntervalMs()
+            : 0;
+      if (interval > 0) await pace(provider, interval);
 
       // Counted per attempt rather than per lookup: a retry is another request
       // against the provider's quota, and hiding it would understate the cost.

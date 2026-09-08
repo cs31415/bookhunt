@@ -1,10 +1,14 @@
 import { searchOpenLibrary } from '../../../lib/books/open-library-search-adapter';
 import { BooksProviderError } from '../../../lib/books/books-provider-error';
 
-jest.mock('../../../lib/books/open-library-rate-limiter', () => ({
-  throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
+jest.mock('../../../lib/books/open-library-urls', () => ({
   OPENLIBRARY_API_URL: 'https://openlibrary.org',
   OPENLIBRARY_COVERS_URL: 'https://covers.openlibrary.org',
+}));
+
+jest.mock('../../../lib/books/provider-pacer', () => ({
+  pace: jest.fn().mockResolvedValue(undefined),
+  resetPacers: jest.fn(),
 }));
 
 function mockFetch(handler: () => any) {
@@ -160,11 +164,11 @@ describe('searchOpenLibrary', () => {
     await expect(searchOpenLibrary('cats', 5)).rejects.toBeInstanceOf(BooksProviderError);
   });
 
-  it('throttles calls via the rate limiter', async () => {
-    const { throttleOpenLibrary } = require('../../../lib/books/open-library-rate-limiter');
+  it('paces calls at one a second', async () => {
+    const { pace } = require('../../../lib/books/provider-pacer');
     mockFetch(() => Promise.resolve({ ok: true, json: async () => ({ docs: [] }) }));
 
     await searchOpenLibrary('q', 5);
-    expect(throttleOpenLibrary).toHaveBeenCalledTimes(1);
+    expect(pace).toHaveBeenCalledWith('open_library', 1000);
   });
 });

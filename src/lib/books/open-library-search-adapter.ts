@@ -1,4 +1,4 @@
-import { OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate-limiter';
+import { OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-urls';
 import { curateSubjects } from './curate-subjects';
 import { loggedFetch } from './logged-fetch';
 import { BooksProviderError } from './books-provider-error';
