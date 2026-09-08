@@ -1,3 +1,8 @@
+/**
+ * How hard we press a books provider: how often a request is retried, and how
+ * fast requests may leave at all.
+ */
+
 function positiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -41,4 +46,28 @@ export function primaryAttempts(): number {
 /** Delay between primary-provider attempts, multiplied by the attempt number. */
 export function primaryBackoffMs(): number {
   return positiveInt('BOOKS_PRIMARY_BACKOFF_MS', 500);
+}
+
+/** Like positiveInt, but 0 is a real value: it switches pacing off. */
+function nonNegativeInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** Open Library asks callers to stay at one request a second, and enforces it. */
+export function openLibraryIntervalMs(): number {
+  return nonNegativeInt('BOOKS_OPEN_LIBRARY_INTERVAL_MS', 1000);
+}
+
+/**
+ * Spacing between Google Books requests made by an import.
+ *
+ * 750ms is 80 requests a minute, deliberately under a 100/minute quota so that
+ * interactive search still has room while an import runs. Raise it if the
+ * project's real per-minute quota is lower; 0 switches the pacing off.
+ */
+export function googleImportIntervalMs(): number {
+  return nonNegativeInt('BOOKS_GOOGLE_IMPORT_INTERVAL_MS', 750);
 }

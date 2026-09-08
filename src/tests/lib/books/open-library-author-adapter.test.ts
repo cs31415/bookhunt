@@ -1,7 +1,6 @@
 import { fetchOpenLibraryAuthorDetails } from '../../../lib/books/open-library-author-adapter';
 
-jest.mock('../../../lib/books/open-library-rate-limiter', () => ({
-  throttleOpenLibrary: jest.fn().mockResolvedValue(undefined),
+jest.mock('../../../lib/books/open-library-urls', () => ({
   OPENLIBRARY_API_URL: 'https://openlibrary.org',
 }));
 

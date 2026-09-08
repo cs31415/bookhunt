@@ -3,6 +3,7 @@ import { resolveImportRows } from '../../models/import/resolve-rows';
 import type { ImportRowHint } from '../../models/import/resolve-rows';
 import { runWithCallStats } from '../../lib/stats/run-with-call-stats';
 import { formatCallStats } from '../../lib/stats/format-call-stats';
+import { runAsBulkTraffic } from '../../lib/books/bulk-traffic';
 
 /** Rows per request. Each fans out to up to two provider calls, so this bounds the work. */
 export const MAX_IMPORT_ROWS = 40;
@@ -156,7 +157,13 @@ export async function resolve(req: Request, res: Response) {
     // already owns, carry an ISBN, or need the fallback provider — none of which
     // is visible from the request or the response. The summary is logged in a
     // finally so a batch that fails halfway still reports what it spent.
-    const { stats, result } = runWithCallStats(() => resolveImportRows(hints, req.user!.id));
+    //
+    // Marked as bulk traffic so the provider requests below are paced: a large
+    // file must not spend a per-minute quota in seconds and lose the rest of
+    // its rows to an open circuit (LOS-395).
+    const { stats, result } = runWithCallStats(() =>
+      runAsBulkTraffic(() => resolveImportRows(hints, req.user!.id)),
+    );
     try {
       res.json({ rows: await result });
     } finally {

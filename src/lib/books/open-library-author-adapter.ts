@@ -1,4 +1,4 @@
-import { OPENLIBRARY_API_URL } from './open-library-rate-limiter';
+import { OPENLIBRARY_API_URL } from './open-library-urls';
 import { extractOpenLibraryTextField } from './extract-open-library-text-field';
 import { loggedFetch } from './logged-fetch';
 import { AuthorDetails } from './books-types';
