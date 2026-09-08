@@ -2,6 +2,7 @@ import { OPENLIBRARY_API_URL, OPENLIBRARY_COVERS_URL } from './open-library-rate
 import { curateSubjects } from './curate-subjects';
 import { loggedFetch } from './logged-fetch';
 import { BooksProviderError } from './books-provider-error';
+import { readProviderErrorDetail } from './read-provider-error-detail';
 import { SearchResult } from './books-types';
 
 export async function searchOpenLibrary(query: string, limit: number): Promise<SearchResult[]> {
@@ -21,7 +22,12 @@ export async function searchOpenLibrary(query: string, limit: number): Promise<S
   }
 
   if (!response.ok) {
-    throw new BooksProviderError('open_library', response.status);
+    throw new BooksProviderError(
+      'open_library',
+      response.status,
+      undefined,
+      await readProviderErrorDetail(response),
+    );
   }
 
   let data: any;

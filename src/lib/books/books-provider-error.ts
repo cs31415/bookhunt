@@ -14,11 +14,16 @@ export class BooksProviderError extends Error {
     public readonly provider: BooksProvider,
     public readonly status: number | null,
     cause?: unknown,
+    /**
+     * What the provider itself said, where it said anything (LOS-393). Last in
+     * the list because every existing caller passes the first three.
+     */
+    public readonly detail?: string | null,
   ) {
     super(
-      status === null
+      (status === null
         ? `${provider} search request failed`
-        : `${provider} search failed with ${status}`,
+        : `${provider} search failed with ${status}`) + (detail ? `: ${detail}` : ''),
     );
     this.name = 'BooksProviderError';
     this.cause = cause;

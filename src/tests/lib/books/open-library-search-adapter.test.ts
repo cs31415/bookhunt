@@ -129,6 +129,19 @@ describe('searchOpenLibrary', () => {
     await expect(searchOpenLibrary('cats', 5)).rejects.toBeInstanceOf(BooksProviderError);
   });
 
+  // Open Library answers HTML or plain text rather than Google's JSON shape,
+  // so the body itself is the message (LOS-393).
+  it("carries the provider's own message from the error body", async () => {
+    mockFetch(() =>
+      Promise.resolve({ ok: false, status: 429, text: async () => 'Too many requests' }),
+    );
+
+    await expect(searchOpenLibrary('cats', 5)).rejects.toMatchObject({
+      status: 429,
+      detail: 'Too many requests',
+    });
+  });
+
   it('throws BooksProviderError when response is non-ok', async () => {
     mockFetch(() => Promise.resolve({ ok: false, status: 400 }));
     await expect(searchOpenLibrary('cats', 5)).rejects.toMatchObject({ provider: 'open_library' });

@@ -111,6 +111,48 @@ describe('searchGoogleBooks', () => {
     });
   });
 
+  /*
+   * The status alone cannot tell a burst limit from a spent daily quota, and
+   * only one of the two is worth rerunning today (LOS-393).
+   */
+  it("carries the provider's own message from a JSON error body", async () => {
+    mockFetch(() =>
+      Promise.resolve({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({ error: { code: 429, message: 'Rate Limit Exceeded' } }),
+      }),
+    );
+
+    await expect(searchGoogleBooks('cats', 5)).rejects.toMatchObject({
+      status: 429,
+      detail: 'Rate Limit Exceeded',
+      message: 'google_books search failed with 429: Rate Limit Exceeded',
+    });
+  });
+
+  it('falls back to the raw body when it is not JSON', async () => {
+    mockFetch(() =>
+      Promise.resolve({ ok: false, status: 503, text: async () => '<html>Backend Error</html>' }),
+    );
+
+    await expect(searchGoogleBooks('cats', 5)).rejects.toMatchObject({
+      detail: '<html>Backend Error</html>',
+    });
+  });
+
+  // A body that cannot be read must not replace the status we came here with.
+  it('still throws with the status when the body is unreadable', async () => {
+    mockFetch(() =>
+      Promise.resolve({ ok: false, status: 500, text: async () => { throw new Error('aborted'); } }),
+    );
+
+    await expect(searchGoogleBooks('cats', 5)).rejects.toMatchObject({
+      status: 500,
+      detail: null,
+    });
+  });
+
   it('returns empty array when items are missing', async () => {
     mockFetch(() => Promise.resolve({ ok: true, json: async () => ({}) }));
     expect(await searchGoogleBooks('cats', 5)).toEqual([]);

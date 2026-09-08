@@ -871,64 +871,124 @@ describe('resolveImportRows', () => {
   });
 
   /*
-   * A summary at the end, because per-row logging is unreadable at 300 rows and
-   * a bare count says nothing actionable (LOS-392). The rounds used to discard
-   * the error objects entirely, so an import could report that rows failed with
-   * no way to tell a rate limit from a book the catalogue does not have.
+   * Why a row found nothing, carried on the row itself (LOS-392, LOS-393).
+   *
+   * Reported rather than logged: a batch is not an import. The client sends a
+   * file twenty rows at a time and only it knows where the session begins and
+   * ends, so it is the one that can say "47 rows lost to a rate limit" instead
+   * of nineteen separate summaries saying two or three each.
    */
-  describe('the unresolved summary', () => {
-    let warn: jest.SpyInstance;
-
+  describe('failures on an unresolved row', () => {
     beforeEach(() => {
-      warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       process.env.BOOKS_SEARCH_PROVIDERS = 'google_books';
       process.env.BOOKS_PRIMARY_ATTEMPTS = '1';
     });
 
     afterEach(() => {
-      warn.mockRestore();
       delete process.env.BOOKS_SEARCH_PROVIDERS;
       delete process.env.BOOKS_PRIMARY_ATTEMPTS;
     });
 
-    const output = () => warn.mock.calls.map((c) => c.join(' ')).join('\n');
+    // The status alone cannot separate a burst limit from a spent daily quota,
+    // and only one of the two is worth rerunning today.
+    it("carries the provider, the status and the provider's own message", async () => {
+      googleSearch.mockRejectedValue(
+        new BooksProviderError('google_books', 429, undefined, 'Rate Limit Exceeded'),
+      );
 
-    it('names the book and quotes the provider error', async () => {
-      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 503));
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
 
-      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
-
-      expect(output()).toContain('Dune by Frank Herbert');
-      expect(output()).toContain('google_books: HTTP 503');
+      expect(row.failures).toEqual([
+        { provider: 'google_books', status: 429, detail: 'Rate Limit Exceeded' },
+      ]);
     });
 
-    // A provider that answered and had nothing is a different problem from one
-    // that errored: retrying will not change it.
-    it('separates a genuine miss from a provider failure', async () => {
+    // A request that never got a response has no status to report, but the
+    // transport error says what happened.
+    it('falls back to the transport error when there was no response', async () => {
+      googleSearch.mockRejectedValue(
+        new BooksProviderError('google_books', null, new Error('socket hang up')),
+      );
+
+      const [row] = await resolveImportRows([{ title: 'Dune' }], null);
+
+      expect(row.failures).toEqual([
+        { provider: 'google_books', status: null, detail: 'socket hang up' },
+      ]);
+    });
+
+    /*
+     * The bug that prompted LOS-393: one 429 opened the circuit, every later
+     * row was skipped without being looked up, and all of them came back
+     * indistinguishable from books no provider had -- which reads as "these do
+     * not exist".
+     */
+    it('marks a row skipped behind an open circuit as skipped, not as a miss', async () => {
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 429));
+      // An earlier batch of the same import spends the quota and opens the
+      // circuit. Its own rows errored; the next batch is never looked up.
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      const [row] = await resolveImportRows([{ title: 'Early India', author: 'Romila Thapar' }], null);
+
+      expect(row.failures).toEqual([
+        { provider: 'google_books', status: null, detail: null, skipped: true },
+      ]);
+    });
+
+    it('attributes a fallback failure to the row it failed on', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books,open_library';
+      googleSearch.mockResolvedValue([]);
+      openLibrarySearch.mockRejectedValue(
+        new BooksProviderError('open_library', 503, undefined, 'Service Unavailable'),
+      );
+
+      const [row] = await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(row.failures).toEqual([
+        { provider: 'open_library', status: 503, detail: 'Service Unavailable' },
+      ]);
+    });
+
+    // Both halves of the chain have something different to say about the row.
+    it('lists every provider that failed the row', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books,open_library';
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 500));
+      openLibrarySearch.mockRejectedValue(new BooksProviderError('open_library', 503));
+
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      expect(row.failures?.map((f) => `${f.provider}:${f.status}`)).toEqual([
+        'google_books:500',
+        'open_library:503',
+      ]);
+    });
+
+    // A provider that answered and had nothing has not failed. Saying otherwise
+    // is what made a rate limit look like a book that does not exist.
+    it('says nothing about a row no provider had a match for', async () => {
       googleSearch.mockResolvedValue([]);
 
-      await resolveImportRows([{ title: 'Nonexistent Book' }], null);
+      const [row] = await resolveImportRows([{ title: 'Nonexistent Book' }], null);
 
-      expect(output()).toContain('no provider had a match');
-      expect(output()).not.toContain('a provider errored');
+      expect(row.candidates).toEqual([]);
+      expect(row.failures).toBeUndefined();
     });
 
-    it('reports a rate limit as such, so it reads as worth retrying', async () => {
-      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 429));
+    // A failure a retry recovered from is a retry that worked, not something to
+    // put in front of the reader.
+    it('says nothing about a row that resolved in the end', async () => {
+      googleSearch
+        .mockRejectedValueOnce(new BooksProviderError('google_books', 503))
+        .mockResolvedValue([result({ googleBooksId: 'g1', title: 'Dune' })]);
+      process.env.BOOKS_PRIMARY_ATTEMPTS = '2';
+      process.env.BOOKS_PRIMARY_BACKOFF_MS = '1';
 
-      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+      const [row] = await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
 
-      expect(output()).toContain('HTTP 429');
-    });
-
-    // A clean import prints nothing, so output means something went wrong
-    // rather than being scrolled past by habit.
-    it('says nothing when every row resolved', async () => {
-      googleSearch.mockResolvedValue([result({ googleBooksId: 'g1', title: 'Dune' })]);
-
-      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
-
-      expect(output()).not.toContain('did not resolve');
+      expect(row.candidates).toHaveLength(1);
+      expect(row.failures).toBeUndefined();
+      delete process.env.BOOKS_PRIMARY_BACKOFF_MS;
     });
   });
 });
