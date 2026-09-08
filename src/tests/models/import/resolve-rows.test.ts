@@ -921,6 +921,61 @@ describe('resolveImportRows', () => {
       expect(output()).toContain('HTTP 429');
     });
 
+    // The message is what separates a burst limit from a spent daily quota,
+    // and only one of those is worth rerunning today (LOS-393).
+    it("quotes the provider's own message alongside the status", async () => {
+      googleSearch.mockRejectedValue(
+        new BooksProviderError('google_books', 429, undefined, 'Rate Limit Exceeded'),
+      );
+
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      expect(output()).toContain('google_books: HTTP 429 Rate Limit Exceeded');
+    });
+
+    /*
+     * The bug that prompted LOS-393: one 429 opened the circuit, every later
+     * row was skipped without being looked up, and all of them were reported as
+     * books no provider had -- which reads as "these do not exist".
+     */
+    it('reports a row skipped behind an open circuit as skipped, not as a miss', async () => {
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 429));
+      // An earlier batch of the same import spends the quota and opens the
+      // circuit. Its own rows errored; the next batch is never looked up.
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+      warn.mockClear();
+
+      await resolveImportRows([{ title: 'Early India', author: 'Romila Thapar' }], null);
+
+      expect(output()).toContain('skipped after an earlier 429');
+      expect(output()).not.toContain('no provider had a match');
+    });
+
+    it('attributes a fallback failure to the title it failed on', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books,open_library';
+      googleSearch.mockResolvedValue([]);
+      openLibrarySearch.mockRejectedValue(
+        new BooksProviderError('open_library', 503, undefined, 'Service Unavailable'),
+      );
+
+      await resolveImportRows([{ title: 'Hong Kong', publisher: "Frommer's" }], null);
+
+      expect(output()).toContain('Hong Kong');
+      expect(output()).toContain('open_library: HTTP 503 Service Unavailable');
+    });
+
+    // Both halves of the chain have something different to say about the row.
+    it('lists every provider that failed a row', async () => {
+      process.env.BOOKS_SEARCH_PROVIDERS = 'google_books,open_library';
+      googleSearch.mockRejectedValue(new BooksProviderError('google_books', 500));
+      openLibrarySearch.mockRejectedValue(new BooksProviderError('open_library', 503));
+
+      await resolveImportRows([{ title: 'Dune', author: 'Frank Herbert' }], null);
+
+      expect(output()).toContain('google_books: HTTP 500');
+      expect(output()).toContain('open_library: HTTP 503');
+    });
+
     // A clean import prints nothing, so output means something went wrong
     // rather than being scrolled past by habit.
     it('says nothing when every row resolved', async () => {

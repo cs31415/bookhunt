@@ -2,6 +2,7 @@ import { EditionDetails, SearchResult } from './books-types';
 import { curateSubjects } from './curate-subjects';
 import { loggedFetch } from './logged-fetch';
 import { BooksProviderError } from './books-provider-error';
+import { readProviderErrorDetail } from './read-provider-error-detail';
 import { stripHtml } from '../text/strip-html';
 
 function withApiKey(url: string): string {
@@ -23,7 +24,12 @@ export async function searchGoogleBooks(query: string, limit: number): Promise<S
   }
 
   if (!response.ok) {
-    throw new BooksProviderError('google_books', response.status);
+    throw new BooksProviderError(
+      'google_books',
+      response.status,
+      undefined,
+      await readProviderErrorDetail(response),
+    );
   }
 
   const data: any = await response.json();

@@ -1,4 +1,4 @@
-import { SearchResult } from '../../lib/books/books-types';
+import { BooksProvider, SearchResult } from '../../lib/books/books-types';
 import { BooksProviderError } from '../../lib/books/books-provider-error';
 import { isCircuitOpen, openCircuit } from '../../lib/books/provider-circuit';
 import { primaryProvider, fallbackProvider } from '../../lib/books/provider-chain';
@@ -55,6 +55,17 @@ export interface ResolvedImportRow {
    */
   tentative?: boolean;
 }
+
+/**
+ * Why a row got no answer from a provider (LOS-393).
+ *
+ * A skip is not an error and not a miss: the provider was never asked, because
+ * an earlier 429 opened its circuit. Kept apart from both so the summary can
+ * tell someone to rerun rather than to go and find the book by hand.
+ */
+type RowFailure =
+  | { kind: 'error'; error: BooksProviderError }
+  | { kind: 'skipped'; provider: BooksProvider };
 
 /** Candidates offered per row. Enough to disambiguate, few enough to scan in a dropdown. */
 const CANDIDATES_PER_ROW = 5;
@@ -188,11 +199,16 @@ function delay(ms: number): Promise<void> {
  *
  * Lets BooksProviderError escape, so the caller can gather every failed row and
  * retry them together rather than blocking this row on its own backoff.
+ *
+ * Returns null when the provider was never asked because its circuit is open.
+ * Distinct from an empty array, which is the provider answering that it has
+ * nothing -- reporting a row that was skipped as one the catalogue does not
+ * hold is exactly the confusion this whole path exists to remove (LOS-393).
  */
-async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
+async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[] | null> {
   const provider = primaryProvider();
   // Already known to be out of capacity: don't spend a request learning it again.
-  if (isCircuitOpen(provider)) return [];
+  if (isCircuitOpen(provider)) return null;
 
   const google = getBooksProviderAdapter(provider);
   const isbn = normalizeIsbn(hint.isbn);
@@ -219,6 +235,10 @@ async function primaryLookup(hint: ImportRowHint): Promise<SearchResult[]> {
  * Returns nothing when the chain names no second provider, which leaves a row
  * Google could not answer unresolved for the reader to pick rather than filled
  * in from elsewhere.
+ *
+ * Lets BooksProviderError escape, like the primary. It used to warn inline and
+ * return [], which named a query but not a book and left the row itself
+ * reported as a miss; the caller now records it against the title (LOS-393).
  */
 async function fallbackLookup(hint: ImportRowHint): Promise<SearchResult[]> {
   const provider = fallbackProvider();
@@ -227,12 +247,7 @@ async function fallbackLookup(hint: ImportRowHint): Promise<SearchResult[]> {
   const adapter = getBooksProviderAdapter(provider);
   const isbn = normalizeIsbn(hint.isbn);
   const query = isbn ? `isbn:${isbn}` : openLibraryQuery(hint);
-  try {
-    return await adapter.search(query, CANDIDATES_PER_ROW);
-  } catch (error) {
-    console.warn(`[import] ${provider} failed for "${query}"`, error);
-    return [];
-  }
+  return adapter.search(query, CANDIDATES_PER_ROW);
 }
 
 /** Whether the supplied ISBN is already answered by one of the candidates. */
@@ -364,27 +379,48 @@ export async function resolveImportRows(
   const alreadyOwned = (index: number) => catalogMatches[index]?.inLibrary === true;
 
   /*
-   * The last provider error each row saw, kept so the summary at the end can
-   * say *why* a row found nothing (LOS-392). The rounds below used to count
+   * Every provider failure each row saw, kept so the summary at the end can say
+   * *why* a row found nothing (LOS-392). The rounds below used to count
    * failures and discard the errors, which left an import reporting that some
    * rows did not resolve with no way to tell a rate limit from a network blip
    * from a book the catalogue genuinely does not have.
+   *
+   * A list per row, not one entry: with a two-provider chain both can fail the
+   * same row, and each has something different to say about it (LOS-393).
    */
-  const rowErrors = new Map<number, BooksProviderError>();
+  const rowFailures = new Map<number, RowFailure[]>();
+  const recordFailure = (index: number, failure: RowFailure) => {
+    const failures = rowFailures.get(index) ?? [];
+    failures.push(failure);
+    rowFailures.set(index, failures);
+  };
 
   let pending = rows
     .map((hint, index) => ({ hint, index }))
     .filter(({ index }) => !alreadyOwned(index));
 
   for (let round = 1; round <= attempts && pending.length > 0; round++) {
-    // No point retrying into a closed door; fall through to the secondary.
-    if (isCircuitOpen(primaryProvider())) break;
+    // No point retrying into a closed door; fall through to the secondary. The
+    // rows waiting behind it are marked skipped, because a row nobody asked
+    // about must not be reported as a book nobody has (LOS-393).
+    if (isCircuitOpen(primaryProvider())) {
+      for (const { index } of pending) {
+        recordFailure(index, { kind: 'skipped', provider: primaryProvider() });
+      }
+      break;
+    }
     if (round > 1) await delay(primaryBackoffMs() * (round - 1));
 
     const failed: typeof pending = [];
     await mapWithConcurrency(pending, RESOLUTION_CONCURRENCY, async ({ hint, index }) => {
       try {
-        collected[index] = await primaryLookup(hint);
+        const found = await primaryLookup(hint);
+        // Null means the circuit opened under us, part-way through this round.
+        if (found === null) {
+          recordFailure(index, { kind: 'skipped', provider: primaryProvider() });
+          return;
+        }
+        collected[index] = found;
       } catch (error) {
         // Anything else is a bug in our own code, not a flaky network, and
         // swallowing it would hide it.
@@ -392,7 +428,7 @@ export async function resolveImportRows(
         // 429 means the provider is rationing us, not that this row is unlucky.
         // Retrying the batch would spend the rest of the budget on failures.
         if (error.status === 429) openCircuit(primaryProvider());
-        rowErrors.set(index, error);
+        recordFailure(index, { kind: 'error', error });
         failed.push({ hint, index });
       }
     });
@@ -413,25 +449,31 @@ export async function resolveImportRows(
   // owned row has no empty result to explain, it was never looked up at all.
   await mapWithConcurrency(rows, RESOLUTION_CONCURRENCY, async (hint, index) => {
     if (alreadyOwned(index)) return;
-    if (needsFallback(collected[index], hint)) {
+    if (!needsFallback(collected[index], hint)) return;
+    try {
       collected[index] = [...collected[index], ...(await fallbackLookup(hint))];
+    } catch (error) {
+      // As above: anything that isn't a provider failure is our own bug.
+      if (!(error instanceof BooksProviderError)) throw error;
+      recordFailure(index, { kind: 'error', error });
     }
   });
 
-  reportUnresolved(rows, collected, rowErrors, alreadyOwned);
+  reportUnresolved(rows, collected, rowFailures, alreadyOwned);
 
   return rows.map((hint, index) => assembleRow(hint, collected[index], catalogMatches[index]));
 }
 
 /**
  * What did not resolve, and why, printed once at the end of an import
- * (LOS-392).
+ * (LOS-392, LOS-393).
  *
  * Per-row logging during the run is unreadable at 300 rows and scrolls the
  * useful part off the screen; a count alone ("12 rows failed") says nothing
  * actionable. This names each book and, where a provider actually errored,
- * quotes the provider's own message -- which is the difference between "we were
- * rate limited, run it again" and "the catalogue does not have this book".
+ * quotes the provider's own status and message -- which is the difference
+ * between "we were rate limited, run it again" and "the catalogue does not have
+ * this book".
  *
  * Silent when everything resolved. A clean import should print nothing, so that
  * output means something went wrong rather than being scrolled past by habit.
@@ -439,17 +481,20 @@ export async function resolveImportRows(
 function reportUnresolved(
   rows: ImportRowHint[],
   collected: SearchResult[][],
-  rowErrors: Map<number, BooksProviderError>,
+  rowFailures: Map<number, RowFailure[]>,
   alreadyOwned: (index: number) => boolean,
 ): void {
   const unresolved = rows
-    .map((hint, index) => ({ hint, index }))
+    .map((hint, index) => ({ hint, index, failures: rowFailures.get(index) ?? [] }))
     .filter(({ index }) => !alreadyOwned(index) && collected[index].length === 0);
 
   if (unresolved.length === 0) return;
 
-  const errored = unresolved.filter(({ index }) => rowErrors.has(index));
-  const notFound = unresolved.filter(({ index }) => !rowErrors.has(index));
+  const errored = unresolved.filter(({ failures }) => failures.some((f) => f.kind === 'error'));
+  const skipped = unresolved.filter(
+    ({ failures }) => failures.length > 0 && failures.every((f) => f.kind === 'skipped'),
+  );
+  const notFound = unresolved.filter(({ failures }) => failures.length === 0);
 
   console.warn(`\n[import] ${unresolved.length} of ${rows.length} rows did not resolve:`);
 
@@ -459,11 +504,32 @@ function reportUnresolved(
    */
   if (errored.length > 0) {
     console.warn(`  ${errored.length} because a provider errored:`);
-    for (const { hint, index } of errored) {
-      const error = rowErrors.get(index)!;
-      const status = error.status === null ? 'no response' : `HTTP ${error.status}`;
-      const cause = error.cause instanceof Error ? ` (${error.cause.message})` : '';
-      console.warn(`    ${describeRow(hint)}\n      ${error.provider}: ${status}${cause}`);
+    for (const { hint, failures } of errored) {
+      // Every provider that failed the row, because with a two-provider chain
+      // one may be rationing us while the other is simply down.
+      const reasons = failures.map(describeFailure).join('\n      ');
+      console.warn(`    ${describeRow(hint)}\n      ${reasons}`);
+    }
+  }
+
+  /*
+   * Never asked: an earlier 429 opened the circuit and these rows waited behind
+   * it. Nothing is known about them at all, so rerunning after the cooldown is
+   * the whole of the fix.
+   */
+  if (skipped.length > 0) {
+    const providers = [
+      ...new Set(
+        skipped.flatMap(({ failures }) =>
+          failures.flatMap((f) => (f.kind === 'skipped' ? [f.provider] : [])),
+        ),
+      ),
+    ];
+    console.warn(
+      `  ${skipped.length} because ${providers.join(', ')} was skipped after an earlier 429; rerun to look them up:`,
+    );
+    for (const { hint } of skipped) {
+      console.warn(`    ${describeRow(hint)}`);
     }
   }
 
@@ -477,6 +543,16 @@ function reportUnresolved(
       console.warn(`    ${describeRow(hint)}`);
     }
   }
+}
+
+/** One provider's account of why it could not answer a row. */
+function describeFailure(failure: RowFailure): string {
+  if (failure.kind === 'skipped') return `${failure.provider}: skipped, circuit open`;
+  const { error } = failure;
+  const status = error.status === null ? 'no response' : `HTTP ${error.status}`;
+  // The provider's own words where it gave any, our transport error otherwise.
+  const said = error.detail ?? (error.cause instanceof Error ? error.cause.message : null);
+  return `${error.provider}: ${status}${said ? ` ${said}` : ''}`;
 }
 
 /** A row as a person would recognise it, for the summary above. */
